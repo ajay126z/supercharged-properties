@@ -24,6 +24,7 @@ These guides describe **1.2.1**, including mobile saved-view layout and protecti
 
 - [Project overview](../README.md)
 - [Contributing](../CONTRIBUTING.md)
+- [Release runbook](RELEASING.md)
 - [Publishing](PUBLISHING.md)
 - [Release QA](RELEASE-QA.md)
 - [Changelog](../CHANGELOG.md)

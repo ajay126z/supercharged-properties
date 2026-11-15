@@ -127,6 +127,7 @@ If a release is broken:
 
 ## Related documents
 
+- [RELEASING.md](RELEASING.md) - command-by-command release runbook
 - [README.md](../README.md)
 - [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [RELEASE-QA.md](RELEASE-QA.md)

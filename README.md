@@ -109,7 +109,7 @@ Your notes stay in your vault. The plugin does not send vault data to external s
 
 ## Contributing and license
 
-For source builds and development instructions, see [Contributing](CONTRIBUTING.md). Release maintainers can refer to [Publishing](docs/PUBLISHING.md) and [Release QA](docs/RELEASE-QA.md).
+For source builds and development instructions, see [Contributing](CONTRIBUTING.md). Release maintainers can refer to the [release runbook](docs/RELEASING.md), [Publishing](docs/PUBLISHING.md), and [Release QA](docs/RELEASE-QA.md).
 
 Copyright (c) 2026 Ajay Zapadiya. Released under the [MIT License](LICENSE). See [NOTICE.md](NOTICE.md) for third-party notices.
 

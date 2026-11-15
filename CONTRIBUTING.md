@@ -82,7 +82,7 @@ Update the relevant documentation when behavior, settings, or commands change:
 
 - [README.md](README.md) for user-facing features and installation.
 - [CHANGELOG.md](CHANGELOG.md) for notable changes.
-- [docs/PUBLISHING.md](docs/PUBLISHING.md) and [docs/RELEASE-QA.md](docs/RELEASE-QA.md) for release steps.
+- [docs/RELEASING.md](docs/RELEASING.md) for the release runbook, [docs/PUBLISHING.md](docs/PUBLISHING.md) for the workflow and attestations, and [docs/RELEASE-QA.md](docs/RELEASE-QA.md) for manual checks.
 - `docs/releases/<version>.md` for release notes.
 
 Release validation checks relative Markdown links, so renaming a document requires updating every reference.
