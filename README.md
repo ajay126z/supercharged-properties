@@ -6,6 +6,8 @@ Browsing remains read-only. Explicit bulk value actions can now modify frontmatt
 
 ## Features
 
+- **Property-name renaming (development build)** — rename a property across the vault with a complete preview, conflict skipping, and shared one-step undo.
+
 - **Full property tree** — every property, its values, and the notes that use them.
 - **Typed value rows** — strings, numbers, booleans, empty values, and nested lists are kept distinct. Repeated values are deduplicated per note.
 - **Property type icons** — rows show the icon for the type configured in Obsidian, such as text, list, tags, number, checkbox, date, or date & time. The plugin reads `.obsidian/types.json` through public APIs and falls back to built-in names and text.
@@ -95,7 +97,7 @@ The dialog lists every affected path and its before/after value. Actions cover m
 
 Click **Apply to N notes** to confirm. Notes whose property changed since preview are skipped. Failures are reported individually; successful notes can still be undone. Obsidian's frontmatter writer may reformat YAML, including comments and quoting; note bodies are not edited.
 
-Use **Supercharged Properties: Undo last value edit** in the command palette to restore the previous property values in one step. Undo preserves other properties and skips values edited since the batch. Failed or skipped undo entries can be retried. Undo is held in memory: another successful batch replaces it, and restarting or disabling the plugin clears it. Renamed or deleted notes cannot be restored through their old paths. This is a property-value undo, not a byte-for-byte YAML formatting restore.
+Use **Supercharged Properties: Undo last property edit** in the command palette to restore the previous property values in one step. Undo preserves other properties and skips values edited since the batch. Failed or skipped undo entries can be retried. Undo is held in memory: another successful batch replaces it, and restarting or disabling the plugin clears it. Renamed or deleted notes cannot be restored through their old paths. This is a property-value undo, not a byte-for-byte YAML formatting restore.
 
 ### Search scopes
 
@@ -149,6 +151,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture, testing, and review con
 
 - [User guide](docs/USER-GUIDE.md)
 - [Bulk value editing and undo](docs/BULK-EDITING.md)
+- [Property-name renaming](docs/PROPERTY-RENAMING.md)
 - [Documentation index](docs/README.md)
 
 - [Contributing](CONTRIBUTING.md)

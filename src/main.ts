@@ -6,6 +6,8 @@ import { propertyQuery } from './search';
 import { loadProfiles, sameKeys, PropertyProfile } from './profiles';
 import { PropertyTypeResolver } from './property-types';
 import { ValueEditor, type ValueEditPreview, type ValueEditResult } from './value-editor';
+import { PropertyRenameModal } from './property-rename-dialog';
+import { includeRenamedProperty } from './property-rename';
 import { ValueEditModal } from './value-dialog';
 import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-operations';
 import type { PropertyValueKind } from './frontmatter-values';
@@ -47,7 +49,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     this.addCommand({ id: 'rebuild', name: 'Refresh property index', callback: () => this.rebuild() });
     this.addCommand({
       id: 'undo-value-edit',
-      name: 'Undo last value edit',
+      name: 'Undo last property edit',
       checkCallback: checking => {
         if (!this.valueEditor.canUndo()) return false;
         if (!checking) void this.undoValueEdit();
@@ -122,7 +124,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
 
   async applyValueEdit(preview: ValueEditPreview): Promise<void> {
     const result: ValueEditResult = await this.valueEditor.apply(preview);
-    new Notice(`Updated ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last value edit is available in the command palette.`, 10000);
+    new Notice(`Updated ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 10000);
     for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
     this.rebuild();
   }
@@ -132,6 +134,23 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     new Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 10000);
     for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
     this.rebuild();
+  }
+
+  renameProperty(property: PropertyNode): void {
+    new PropertyRenameModal(this.app, {
+      property: property.label,
+      preview: target => this.valueEditor.previewPropertyRename(property.id, target, this.index.properties.get(property.id)?.paths ?? []),
+      apply: async preview => {
+        const result = await this.valueEditor.apply(preview);
+        if (result.updated) {
+          includeRenamedProperty(this.prefs, preview.source, preview.target);
+          await this.save();
+        }
+        new Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 10000);
+        for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
+        this.rebuild();
+      }
+    }).open();
   }
 
   editValue(property: PropertyNode, node: ValueNode, mode: ValueEditMode): void {
@@ -560,6 +579,7 @@ export class PropertiesView extends ItemView {
       void this.copy([...node.paths].sort(natural).map(path => `[[${path.replace(/\.md$/, '')}]]`).join('\n'));
     }));
     if (node === property) {
+      menu.addItem(item => item.setTitle('Rename property…').setIcon('pencil').onClick(() => this.plugin.renameProperty(property)));
       const pinned = this.plugin.prefs.pinned.includes(property.id);
       menu.addItem(item => item.setTitle(pinned ? 'Unpin property' : 'Pin property').setIcon('pin').onClick(() => {
         this.plugin.prefs.pinned = pinned ? this.plugin.prefs.pinned.filter(key => key !== property.id) : [...this.plugin.prefs.pinned, property.id];

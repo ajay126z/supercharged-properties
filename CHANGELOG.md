@@ -13,6 +13,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Property-name renaming with complete previews, destination and ambiguity conflict skipping, guarded writes, and shared one-step undo.
+- Saved views and display preferences retain the old key and include the renamed key. Configured Obsidian property types are not changed.
+
 - GitHub Actions builds and cryptographically attests release assets before publication. Manual runs attest an existing release only when rebuilt assets match exactly.
 - Document Markdown-only vault enumeration and explicit, write-only clipboard actions.
 

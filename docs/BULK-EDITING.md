@@ -4,6 +4,8 @@ Bulk edits let you standardize a property's values across notes. They are explic
 
 [Back to the user guide](USER-GUIDE.md)
 
+In development builds, value edits share one undo slot with [property-name renames](PROPERTY-RENAMING.md). The command is **Undo last property edit**; in 1.1.0 it is named **Undo last value edit**.
+
 ## Preview and confirm every batch
 
 1. Expand a property in Supercharged Properties.
@@ -137,7 +139,7 @@ A preview may therefore contain fewer notes than the tree row's count: some note
 
 ## Undo the last batch
 
-Open the command palette and run **Supercharged Properties: Undo last value edit**. One invocation attempts to restore the previous property value in every successfully edited note from the last batch. Undo runs immediately; there is no second preview dialog.
+Open the command palette and run **Supercharged Properties: Undo last property edit**. One invocation attempts to restore the previous property value in every successfully edited note from the last batch. Undo runs immediately; there is no second preview dialog.
 
 Undo restores a note only if its edited property still equals the value written by the batch. Later changes to that property are skipped; changes to other properties are preserved. A skipped or failed undo entry remains available for retry, and the notice reports restored, skipped, and failed counts. Retrying does not force an overwrite of a conflicting value.
 

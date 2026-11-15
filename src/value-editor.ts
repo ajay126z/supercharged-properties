@@ -2,6 +2,7 @@
 // Supercharged Properties: preview and apply frontmatter value edits.
 
 import { App, TFile } from 'obsidian';
+import { canRename, matchingKeys, propertyNameError, setOwnValue } from './property-rename';
 import {
   cloneValue,
   getPropertyValue,
@@ -11,13 +12,14 @@ import {
   type ValueEditRequest
 } from './value-operations';
 
-export interface ValueEditChange { readonly path: string; readonly before: string; readonly after: string; readonly key: string; readonly original: unknown; readonly replacement: unknown }
+export interface ValueEditChange { readonly path: string; readonly before: string; readonly after: string; readonly key: string; readonly original: unknown; readonly replacement: unknown; readonly targetKey?: string }
 export interface ValueEditPreview { readonly total: number; readonly changes: ValueEditChange[] }
+export interface PropertyRenamePreview extends ValueEditPreview { readonly source: string; readonly target: string; readonly conflicts: ValueEditFailure[]; readonly error?: string }
 export interface ValueEditFailure { readonly path: string; readonly message: string }
 export interface ValueEditResult { readonly updated: number; readonly unchanged: number; readonly failures: ValueEditFailure[] }
 export interface ValueUndoResult { readonly restored: number; readonly skipped: number; readonly failures: ValueEditFailure[] }
 
-interface Snapshot { readonly path: string; readonly key: string; readonly before: unknown; readonly after: unknown }
+interface Snapshot { readonly path: string; readonly key: string; readonly before: unknown; readonly after: unknown; readonly targetKey?: string }
 interface LastEdit { readonly snapshots: Snapshot[] }
 
 export class ValueEditor {
@@ -44,6 +46,26 @@ export class ValueEditor {
     return { total: changes.length, changes };
   }
 
+  previewPropertyRename(source: string, name: string, paths: Iterable<string>): PropertyRenamePreview {
+    const target = name.trim();
+    const error = propertyNameError(name);
+    const changes: ValueEditChange[] = [], conflicts: ValueEditFailure[] = [];
+    if (error) return { source, target, total: 0, changes, conflicts, error };
+    for (const path of new Set(paths)) {
+      const file = this.file(path);
+      const frontmatter = file ? this.frontmatter(file) : undefined;
+      if (!frontmatter) { conflicts.push({ path, message: 'Note or metadata unavailable.' }); continue; }
+      const keys = matchingKeys(frontmatter, source);
+      if (keys.length !== 1) { conflicts.push({ path, message: keys.length ? 'Ambiguous source keys.' : 'Source property is missing.' }); continue; }
+      const key = keys[0];
+      if (key === target) continue;
+      if (!canRename(frontmatter, key, target)) { conflicts.push({ path, message: 'Destination property already exists.' }); continue; }
+      const original = cloneValue(frontmatter[key]);
+      changes.push({ path, key, targetKey: target, original, replacement: cloneValue(original), before: JSON.stringify(original), after: JSON.stringify(original) });
+    }
+    return { source, target, total: changes.length, changes, conflicts };
+  }
+
   async apply(preview: ValueEditPreview): Promise<ValueEditResult> {
     if (this.busy) throw new Error('Another value edit is running.');
     this.busy = true;
@@ -57,9 +79,11 @@ export class ValueEditor {
         let snapshot: Snapshot | undefined;
         try {
           await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-            if (!sameValue(frontmatter[change.key], change.original)) return;
-            snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: cloneValue(change.replacement) };
-            frontmatter[change.key] = cloneValue(change.replacement);
+            if (!Object.prototype.hasOwnProperty.call(frontmatter, change.key) || !sameValue(frontmatter[change.key], change.original)) return;
+            if (change.targetKey !== undefined && !canRename(frontmatter, change.key, change.targetKey)) return;
+            snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: cloneValue(change.replacement), targetKey: change.targetKey };
+            setOwnValue(frontmatter, change.targetKey ?? change.key, cloneValue(change.replacement));
+            if (change.targetKey !== undefined) delete frontmatter[change.key];
           });
           if (snapshot) snapshots.push(snapshot);
           else unchanged++;
@@ -85,9 +109,12 @@ export class ValueEditor {
       let matched = false;
       try {
         await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-          if (!sameValue(frontmatter[snapshot.key], snapshot.after)) { skipped++; remaining.push(snapshot); return; }
+          const currentKey = snapshot.targetKey ?? snapshot.key;
+          const safeKey = snapshot.targetKey === undefined || canRename(frontmatter, currentKey, snapshot.key);
+          if (!safeKey || !Object.prototype.hasOwnProperty.call(frontmatter, currentKey) || !sameValue(frontmatter[currentKey], snapshot.after)) { skipped++; remaining.push(snapshot); return; }
           matched = true;
-          frontmatter[snapshot.key] = cloneValue(snapshot.before);
+          setOwnValue(frontmatter, snapshot.key, cloneValue(snapshot.before));
+          if (snapshot.targetKey !== undefined) delete frontmatter[snapshot.targetKey];
         });
         if (matched) restored++;
       } catch (error) {

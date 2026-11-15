@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. The bulk value actions write frontmatter only after you review a preview and click Apply.
 
-This guide describes version 1.1.0, including bulk editing. Earlier releases may not offer the edit actions.
+This guide covers 1.1.0 and the property-name rename feature in the current development build. The shared undo command is called **Undo last property edit** in development builds and **Undo last value edit** in 1.1.0. Earlier releases may not offer the edit actions.
 
 ## Contents
 
@@ -170,6 +170,10 @@ A property row generates a query such as `["status"]`; a value row generates `["
 
 Obsidian Search applies its own matching and type rules, so results may differ from the local tree. In particular, an empty-row query uses `null`, while the tree's `(empty)` group also includes empty text and empty lists. Enable the **Search** core plugin if Open in Search asks you to do so. Copy actions do not require Search to be enabled.
 
+## Rename property names
+
+In development builds after 1.1.0, right-click a property row and choose **Rename property…**. Review all affected and skipped notes before confirming. Values keep their stored types; destination conflicts are skipped. Read the [property-name renaming guide](PROPERTY-RENAMING.md) for case-only renames, preference updates, configured-type limitations, and shared undo.
+
 ## Edit values across notes
 
 Value-row menus offer **Rename value…**, **Merge value…**, **Convert to wikilink…**, and **Split into list…** when applicable. These actions change values, not property names.
@@ -203,7 +207,7 @@ Available command-palette commands use the prefix **Supercharged Properties:**.
 | Open sidebar | Opens or reveals the properties view. |
 | Open in tab | Opens a properties view in a tab. |
 | Refresh property index | Rebuilds metadata and type-icon information. |
-| Undo last value edit | Restores the last eligible edit batch; available only while an undo batch exists and no edit is running. |
+| Undo last property edit | Restores the last eligible property-name or value edit batch; available only while an undo batch exists and no edit is running. |
 
 ## Keyboard and mobile use
 

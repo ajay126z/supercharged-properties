@@ -301,3 +301,10 @@ it('writes only generated text on explicit Copy actions and never reads the clip
   expect(readText).not.toHaveBeenCalled();
   Reflect.deleteProperty(navigator, 'clipboard');
 });
+it('offers property-name renaming from the property row keyboard menu', () => {
+  plugin.renameProperty = vi.fn();
+  const row = document.querySelector('[aria-label="Toggle status (2)"]')!;
+  row.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+  (Menu as any).items.find((item: any) => item.title === 'Rename property…').run();
+  expect(plugin.renameProperty).toHaveBeenCalledWith(plugin.index.properties.get('status'));
+});

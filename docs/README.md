@@ -7,6 +7,8 @@
 
 These guides describe version 1.1.0. Consult the release notes for the features included in a particular published version.
 
+- [Property-name renaming](PROPERTY-RENAMING.md): development feature for guarded key renaming, conflicts, and shared undo.
+
 ## For contributors and maintainers
 
 - [Project overview](../README.md)

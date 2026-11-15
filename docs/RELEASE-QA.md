@@ -110,6 +110,19 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] **Copy matching note links** copies wiki links for every matching note.
 - [ ] Empty-value searches explain the local empty-row approximation.
 
+## Property-name renaming
+
+- [ ] Property-row menus offer Rename property via mouse and keyboard.
+- [ ] Preview shows every eligible note and every conflict separately.
+- [ ] Blank names and reserved metadata names cannot be applied; exact no-ops do not write.
+- [ ] Case-only renames restore original spelling on undo.
+- [ ] Lists, maps, null, boolean, numeric, and text values retain their types.
+- [ ] Destination collisions and ambiguous source keys are skipped, including collisions introduced after preview.
+- [ ] Later edits survive undo; failed and skipped entries can be retried.
+- [ ] Value edits and property-name renames share a single undo slot.
+- [ ] Saved views, selections, pins, expansion, and hiding carry to the new key while retaining the old key.
+- [ ] Configured property types remain unchanged; the dialog explains the limitation.
+
 ## Accessibility
 
 - [ ] Every icon-only control has a meaningful accessible name.
