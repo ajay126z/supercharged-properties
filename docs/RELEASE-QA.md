@@ -69,7 +69,10 @@ Run this checklist against a build candidate before publishing. Automated checks
 
 ## Property picker and saved views
 
-- [ ] **All** and **None** update the selection.
+- [ ] **All** and **None** update the selection without clearing the typed view name on desktop or mobile.
+- [ ] All → Save new shows “All properties View already exists.”; None → Save new shows “Please select at least one property.” The name remains available for retry.
+- [ ] Update rejects empty/all selections without modifying the saved view; Enter uses the same Save new validation.
+- [ ] All switches to the default view and disables Update/Rename/Delete without deleting any existing saved views.
 - [ ] The picker filter narrows the list without changing the tree query.
 - [ ] The picker keeps its filter and focus during live index updates.
 - [ ] Saving a new view records the current selection.
@@ -165,6 +168,13 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] Disabling the plugin removes its listeners and pending timers.
 
 ## Mobile
+
+- [ ] At widths 320, 390, and 430 pixels, open the picker without automatically opening the keyboard.
+- [ ] Focus Profile name with the keyboard open; scroll to reach every action without horizontal overflow.
+- [ ] Save a new view using Save new and Done/Enter; verify Rename and Update still act on the active view.
+- [ ] Blank/duplicate names preserve the input; IME composition does not submit prematurely.
+- [ ] Verify on actual iOS and Android: keyboard open/close, rotation, viewport panning, and sidebar versus tab presentation.
+- [ ] Dismissing the keyboard restores available height; closing the view removes viewport listeners.
 
 - [ ] The view opens and scrolls correctly.
 - [ ] Search, picker, profile, and sort controls are reachable.

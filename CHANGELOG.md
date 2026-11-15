@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-15
+
+### Fixed
+
+- Preserve the typed view name when choosing All or None on desktop and mobile.
+- Prevent saving empty or all-property selections, reserve the default All properties name, and keep the default view protected from deletion and renaming.
+- Keep the property picker and saved-view actions reachable above the mobile keyboard using a scrollable panel and visible-viewport sizing.
+- Show saved-view controls first on touch/narrow screens, enlarge touch controls, and avoid automatically opening the keyboard when the picker opens.
+
+### Added
+
+- Done/Enter saves a new view from the name field, without submitting during IME composition. Successful mobile actions release name-field focus.
+
 ## [1.2.0] - 2026-11-15
 
 ### Fixed
@@ -95,7 +108,10 @@ Initial public release.
 
 - Released under the MIT License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
 
-[Unreleased]: https://github.com/ajay126z/supercharged-properties/compare/1.0.3...HEAD
+[Unreleased]: https://github.com/ajay126z/supercharged-properties/compare/1.2.1...HEAD
+[1.2.1]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.2.1
+[1.2.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.2.0
+[1.1.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.1.0
 [1.0.3]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.0.3
 [1.0.2]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.0.2
 [1.0.1]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.0.1

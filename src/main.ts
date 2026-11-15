@@ -1,6 +1,7 @@
 import { ItemView, Menu, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import { fold, natural, PropertyIndex, PropertyNode, ValueNode } from './index';
 
+import { fitVisibleViewport, usesTouchLayout } from './mobile-layout';
 import { excludedFolders, isFolderExcluded } from './folder-exclusions';
 import { SortOrder, sortOptions, sortOrder, sortNodes } from './sorting';
 import { propertyQuery } from './search';
@@ -211,6 +212,7 @@ function el<K extends keyof HTMLElementTagNameMap>(parent: HTMLElement, tag: K, 
 }
 
 export class PropertiesView extends ItemView {
+  private disposeViewport: (() => void) | undefined;
   private query = '';
   private searchScope = 'any';
   private searchHeader!: HTMLElement;
@@ -243,6 +245,8 @@ export class PropertiesView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.replaceChildren();
     this.contentEl.classList.add('pv-view');
+    this.disposeViewport?.();
+    this.disposeViewport = fitVisibleViewport(this.contentEl);
     const toolbar = el(this.contentEl, 'div', 'pv-toolbar');
     this.searchHeader = el(toolbar, 'div', 'pv-search-header');
     this.searchHeader.hidden = true;
@@ -261,7 +265,10 @@ export class PropertiesView extends ItemView {
     this.scopeButton = this.iconButton(profileRow, 'Choose properties to show', 'panels-top-left', () => {
       this.scopePanel.hidden = !this.scopePanel.hidden;
       this.scopeButton.setAttribute('aria-expanded', String(!this.scopePanel.hidden));
-      if (!this.scopePanel.hidden) { this.renderScope(); this.scopePanel.querySelector('input')?.focus(); }
+      if (!this.scopePanel.hidden) {
+        this.renderScope();
+        if (!usesTouchLayout(this.contentEl)) this.scopePanel.querySelector('input')?.focus();
+      }
     });
     this.scopeButton.setAttribute('aria-expanded', 'false');
     this.profileSelect = el(profileRow, 'select', 'pv-profile-select');
@@ -298,6 +305,11 @@ export class PropertiesView extends ItemView {
     this.body.setAttribute('aria-label', 'Properties, values and notes');
     this.contentEl.appendChild(this.summary);
     this.render();
+  }
+
+  async onClose(): Promise<void> {
+    this.disposeViewport?.();
+    this.disposeViewport = undefined;
   }
 
   private toggleSearch(show: boolean): void {
@@ -353,8 +365,8 @@ export class PropertiesView extends ItemView {
   private renderScope(): void {
     this.scopePanel.replaceChildren();
     const actions = el(this.scopePanel, 'div', 'pv-actions');
-    this.button(actions, 'All', 'Show all properties', () => { this.plugin.prefs.scope = null; void this.plugin.save(); this.renderScope(); this.render(); });
-    this.button(actions, 'None', 'Clear property selection', () => { this.plugin.prefs.scope = []; void this.plugin.save(); this.renderScope(); this.render(); });
+    this.button(actions, 'All', 'Show all properties', () => { this.plugin.prefs.scope = null; this.plugin.prefs.activeProfile = null; void this.plugin.save(); this.render(); });
+    this.button(actions, 'None', 'Clear property selection', () => { this.plugin.prefs.scope = []; void this.plugin.save(); this.render(); });
     const search = el(this.scopePanel, 'div', 'pv-search pv-picker-search');
     setIcon(el(search, 'span', 'pv-icon'), 'search');
     const input = el(search, 'input', 'pv-filter'); input.type = 'search';
@@ -369,6 +381,13 @@ export class PropertiesView extends ItemView {
     this.profileName = el(manager, 'input', 'pv-profile-name'); this.profileName.type = 'text';
     this.profileName.placeholder = 'View name, e.g. Writing'; this.profileName.maxLength = 80;
     this.profileName.setAttribute('aria-label', 'Profile name');
+    this.profileName.enterKeyHint = 'done';
+    this.profileName.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        this.manageProfile('new');
+      }
+    });
     const buttons = el(manager, 'div', 'pv-profile-actions');
     this.button(buttons, 'Save new', 'Save selection as new profile', () => this.manageProfile('new'));
     this.profileUpdate = this.button(buttons, 'Update', 'Update active profile selection', () => this.manageProfile('update'));
@@ -399,13 +418,20 @@ export class PropertiesView extends ItemView {
     const prefs = this.plugin.prefs;
     const active = prefs.profiles.find(profile => profile.id === prefs.activeProfile);
     const name = this.profileName.value.trim();
+    const keys = [...(prefs.scope ?? this.plugin.index.properties.keys())];
+    if (action === 'new' || action === 'update') {
+      if (!keys.length) { new Notice('Please select at least one property.'); return; }
+      if (prefs.scope === null || sameKeys(keys, [...this.plugin.index.properties.keys()])) {
+        new Notice('All properties View already exists.'); return;
+      }
+    }
     if (action === 'new' || action === 'rename') {
       if (!name) { new Notice('Enter a name for this view.'); this.profileName.focus(); return; }
+      if (fold(name) === 'all properties') { new Notice('All properties View already exists.'); return; }
       if (prefs.profiles.some(profile => fold(profile.name) === fold(name) && (action === 'new' || profile !== active))) {
         new Notice('A view with that name already exists.'); return;
       }
     }
-    const keys = [...(prefs.scope ?? this.plugin.index.properties.keys())];
     if (action === 'new') {
       const id = this.contentEl.ownerDocument.defaultView!.crypto.randomUUID();
       prefs.profiles.push({ id, name, keys }); prefs.activeProfile = id; prefs.scope = [...keys];
@@ -414,6 +440,10 @@ export class PropertiesView extends ItemView {
     else if (action === 'rename') active.name = name;
     else { prefs.profiles = prefs.profiles.filter(profile => profile !== active); prefs.activeProfile = null; }
     this.profileName.value = '';
+    if (usesTouchLayout(this.contentEl) && this.contentEl.ownerDocument.activeElement === this.profileName) {
+      this.profileName.blur();
+      this.scopeButton.focus({ preventScroll: true });
+    }
     void this.plugin.save(); this.plugin.refresh(); this.render();
   }
   private renderScopeChoices(): void {

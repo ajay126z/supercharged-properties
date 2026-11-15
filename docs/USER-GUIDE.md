@@ -158,7 +158,26 @@ Saved views, also called profiles, store a **property selection**. They do not s
 3. Enter a name such as `Writing` in **View name**.
 4. Click **Save new**.
 
-Choose a saved view from the **Property view** dropdown to restore its selection. Use **All properties** to return to every non-hidden property, including properties added later. A saved view records the selected keys at save time; saving while All is selected captures the properties currently indexed.
+Choose a saved view from the **Property view** dropdown to restore its selection. Use **All properties** to return to every non-hidden property, including properties added later. A saved view records the selected keys at save time. In 1.2.1, new views must contain at least one property and cannot duplicate the all-properties selection.
+
+### All, None, and the default view
+
+In 1.2.1, **All** and **None** preserve any view name you have typed on both desktop and mobile. You can adjust the selection and then save without retyping the name.
+
+- **All → Save new:** shows **All properties View already exists.** No duplicate view is created, and your typed name stays in the field.
+- **None → Save new:** shows **Please select at least one property.** Select one or more properties and retry with the same name.
+- Selecting every indexed property manually produces the same All-properties message.
+- **Update** also rejects empty or all-property selections and preserves the existing saved view.
+- **All properties** is the built-in default and cannot be renamed or deleted. Choosing All clears the active saved-view selection, disables its Update/Rename/Delete controls, and keeps your saved views intact.
+- The name **All properties** is reserved for the default view. Done/Enter uses the same validation as Save new.
+
+### Save a view on mobile
+
+In 1.2.1, the saved-view name field and buttons appear above the property choices on touch and narrow screens. Opening **Choose properties to show** leaves the keyboard closed until you tap a text field. The panel scrolls within the space above the keyboard, so **Save new**, **Update**, **Rename**, and **Delete** remain reachable even on a short screen.
+
+Type a name and tap **Save new**, or press the keyboard's **Done/Enter** action to save a new view. Enter always creates a new view; use **Rename** to rename the active one. Successful actions dismiss the name-field keyboard when it still has focus. Blank or duplicate names keep the input available for correction. Composing characters with an input method does not prematurely submit the name.
+
+These changes have automated and simulated mobile-browser coverage; verify keyboard behavior on your device's Obsidian app.
 
 ### Change or remove a view
 

@@ -22,7 +22,7 @@ export PATH="$HOME/.nvm/versions/node/v24.22.2/bin:$PATH"
 ```sh
 npm run lint       # ESLint with eslint-plugin-obsidianmd, zero warnings allowed
 npm run build      # tsc --noEmit, then esbuild -> main.js
-npm test           # Vitest, 13 files / 103 tests
+npm test           # Vitest, 14 files / 115 tests
 npm test -- tests/view.test.ts             # one suite
 npm test -- tests/search.test.ts -t quotes # one test by name
 npm run validate   # lint -> build -> test -> release validation
@@ -44,6 +44,7 @@ Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply(
 
 Supporting modules:
 
+- `src/mobile-layout.ts` - fits touch views to the visual viewport while the keyboard is open, with listener cleanup on view close.
 - `src/sorting.ts` - sort modes and natural ordering with deterministic ID tie-breaks.
 - `src/search.ts` - quotes Obsidian property queries; null/empty uses the `null` operator.
 - `src/profiles.ts` - validates and normalizes saved profiles; rejects malformed or duplicate entries.
@@ -65,6 +66,7 @@ Supporting modules:
 - Settings writes are snapshotted and serialized through `saveQueue`; do not call `saveData` directly elsewhere.
 - Keep code under `src/` strict TypeScript, no runtime dependencies beyond `obsidian`. The release validator asserts the production bundle imports only `obsidian`.
 - Use SPDX-style comments in new source files where the surrounding file already does; `src/frontmatter-values.ts` carries the MIT header.
+- Saved views are managed in `PropertiesView`, not `profiles.ts`. The built-in **All properties** view cannot be renamed or deleted; new or updated views require a non-empty, non-All selection, and **All properties** is a reserved name.
 - User-visible changes also update `README.md`, `CHANGELOG.md`, and the relevant `docs/` guide. Release validation fails on dead relative Markdown links, so renamed docs need every reference updated.
 
 ## Tests
@@ -74,6 +76,7 @@ Vitest aliases `obsidian` to the empty `tests/obsidian-stub.ts`; each suite that
 - Pure logic: `index`, `frontmatter-values`, `sorting`, `search`, `profiles`, `property-types`, `folder-exclusions`.
 - Edit behavior: `value-editor.test.ts` and `property-rename.test.ts` exercise previews, conflict skips, and undo with fake app/file doubles.
 - Host lifecycle: `refresh.test.ts` (fake timers, event emitters, save queue).
+- Mobile viewport: `mobile-layout.test.ts` (jsdom, fake `visualViewport`, resize/scroll/focus events, cleanup).
 - UI behavior: `view.test.ts`, `value-dialog.test.ts`, `property-rename-dialog.test.ts` (jsdom, accessible labels, menus, profiles, CSS fixture). Set `PV_PREVIEW=/path/out.html` to emit a standalone layout fixture for CSS QA.
 
 When changing accessible labels, menu titles, or DOM classes, update the tests that select by them.

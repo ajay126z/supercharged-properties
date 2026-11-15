@@ -71,6 +71,12 @@ Resources/Templates
 
 Use paths relative to your vault, with matching capitalization. `Templates` excludes its subfolders but does not exclude `Templates Archive`. Changes take effect immediately. Obsidian's core Search is separate and can still return excluded notes.
 
+## Mobile use
+
+Version 1.2.1 improves saved-view controls on small screens: the name field and action buttons appear above the property list, the picker scrolls when space is limited, and it adjusts to the visible area above the keyboard. Opening the picker does not automatically open the keyboard. After typing a new view name, tap **Save new** or use **Done/Enter** to save; a successful save dismisses the name-field keyboard.
+
+When choosing properties, **All** and **None** keep the view name you have typed on both desktop and mobile. Saving All reports that the default view already exists; saving None asks you to select at least one property. The built-in **All properties** view cannot be deleted or renamed. These saved-view improvements are included in 1.2.1.
+
 ## Settings
 
 | Setting | What it does |

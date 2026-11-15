@@ -152,6 +152,50 @@ var PropertyIndex = class {
   }
 };
 
+// src/mobile-layout.ts
+function usesTouchLayout(element) {
+  return element.ownerDocument.body.classList.contains("is-mobile") || !!element.ownerDocument.defaultView?.matchMedia?.("(pointer: coarse)").matches;
+}
+function fitVisibleViewport(element) {
+  const win = element.ownerDocument.defaultView;
+  if (!win) return () => {
+  };
+  let frame;
+  const viewport = win.visualViewport;
+  const update = () => {
+    frame = void 0;
+    if (!usesTouchLayout(element) || viewport && viewport.scale !== 1) {
+      element.style.removeProperty("--pv-visible-height");
+      return;
+    }
+    const bottom = viewport ? viewport.offsetTop + viewport.height : win.innerHeight;
+    const height = Math.max(0, Math.floor(bottom - element.getBoundingClientRect().top));
+    element.style.setProperty("--pv-visible-height", `${height}px`);
+  };
+  const schedule = () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    frame = win.requestAnimationFrame(update);
+  };
+  win.addEventListener("resize", schedule);
+  viewport?.addEventListener("resize", schedule);
+  viewport?.addEventListener("scroll", schedule);
+  element.addEventListener("focusin", schedule);
+  element.addEventListener("focusout", schedule);
+  const observer = typeof ResizeObserver === "undefined" ? void 0 : new ResizeObserver(schedule);
+  if (element.parentElement) observer?.observe(element.parentElement);
+  schedule();
+  return () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    win.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("scroll", schedule);
+    element.removeEventListener("focusin", schedule);
+    element.removeEventListener("focusout", schedule);
+    observer?.disconnect();
+    element.style.removeProperty("--pv-visible-height");
+  };
+}
+
 // src/folder-exclusions.ts
 function excludedFolders(text) {
   return [...new Set(text.split("\n").map((line) => line.trim().replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/")).filter((path) => path && !path.split("/").includes("..")))];
@@ -958,6 +1002,8 @@ var PropertiesView = class extends import_obsidian5.ItemView {
   async onOpen() {
     this.contentEl.replaceChildren();
     this.contentEl.classList.add("pv-view");
+    this.disposeViewport?.();
+    this.disposeViewport = fitVisibleViewport(this.contentEl);
     const toolbar = el2(this.contentEl, "div", "pv-toolbar");
     this.searchHeader = el2(toolbar, "div", "pv-search-header");
     this.searchHeader.hidden = true;
@@ -985,7 +1031,7 @@ var PropertiesView = class extends import_obsidian5.ItemView {
       this.scopeButton.setAttribute("aria-expanded", String(!this.scopePanel.hidden));
       if (!this.scopePanel.hidden) {
         this.renderScope();
-        this.scopePanel.querySelector("input")?.focus();
+        if (!usesTouchLayout(this.contentEl)) this.scopePanel.querySelector("input")?.focus();
       }
     });
     this.scopeButton.setAttribute("aria-expanded", "false");
@@ -1037,6 +1083,10 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     this.body.setAttribute("aria-label", "Properties, values and notes");
     this.contentEl.appendChild(this.summary);
     this.render();
+  }
+  async onClose() {
+    this.disposeViewport?.();
+    this.disposeViewport = void 0;
   }
   toggleSearch(show) {
     this.searchHeader.hidden = !show;
@@ -1108,14 +1158,13 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     const actions = el2(this.scopePanel, "div", "pv-actions");
     this.button(actions, "All", "Show all properties", () => {
       this.plugin.prefs.scope = null;
+      this.plugin.prefs.activeProfile = null;
       void this.plugin.save();
-      this.renderScope();
       this.render();
     });
     this.button(actions, "None", "Clear property selection", () => {
       this.plugin.prefs.scope = [];
       void this.plugin.save();
-      this.renderScope();
       this.render();
     });
     const search = el2(this.scopePanel, "div", "pv-search pv-picker-search");
@@ -1139,6 +1188,13 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     this.profileName.placeholder = "View name, e.g. Writing";
     this.profileName.maxLength = 80;
     this.profileName.setAttribute("aria-label", "Profile name");
+    this.profileName.enterKeyHint = "done";
+    this.profileName.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        this.manageProfile("new");
+      }
+    });
     const buttons = el2(manager, "div", "pv-profile-actions");
     this.button(buttons, "Save new", "Save selection as new profile", () => this.manageProfile("new"));
     this.profileUpdate = this.button(buttons, "Update", "Update active profile selection", () => this.manageProfile("update"));
@@ -1169,10 +1225,25 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     const prefs = this.plugin.prefs;
     const active = prefs.profiles.find((profile) => profile.id === prefs.activeProfile);
     const name = this.profileName.value.trim();
+    const keys = [...prefs.scope ?? this.plugin.index.properties.keys()];
+    if (action === "new" || action === "update") {
+      if (!keys.length) {
+        new import_obsidian5.Notice("Please select at least one property.");
+        return;
+      }
+      if (prefs.scope === null || sameKeys(keys, [...this.plugin.index.properties.keys()])) {
+        new import_obsidian5.Notice("All properties View already exists.");
+        return;
+      }
+    }
     if (action === "new" || action === "rename") {
       if (!name) {
         new import_obsidian5.Notice("Enter a name for this view.");
         this.profileName.focus();
+        return;
+      }
+      if (fold(name) === "all properties") {
+        new import_obsidian5.Notice("All properties View already exists.");
         return;
       }
       if (prefs.profiles.some((profile) => fold(profile.name) === fold(name) && (action === "new" || profile !== active))) {
@@ -1180,7 +1251,6 @@ var PropertiesView = class extends import_obsidian5.ItemView {
         return;
       }
     }
-    const keys = [...prefs.scope ?? this.plugin.index.properties.keys()];
     if (action === "new") {
       const id = this.contentEl.ownerDocument.defaultView.crypto.randomUUID();
       prefs.profiles.push({ id, name, keys });
@@ -1196,6 +1266,10 @@ var PropertiesView = class extends import_obsidian5.ItemView {
       prefs.activeProfile = null;
     }
     this.profileName.value = "";
+    if (usesTouchLayout(this.contentEl) && this.contentEl.ownerDocument.activeElement === this.profileName) {
+      this.profileName.blur();
+      this.scopeButton.focus({ preventScroll: true });
+    }
     void this.plugin.save();
     this.plugin.refresh();
     this.render();

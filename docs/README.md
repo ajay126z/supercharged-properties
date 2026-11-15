@@ -2,7 +2,7 @@
 
 ## For users
 
-These guides describe **1.2.0**, including property-name renaming, excluded folders, and text-property-only Split eligibility. See the release notes below for version-specific behavior.
+These guides describe **1.2.1**, including mobile saved-view layout and protections. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
@@ -30,6 +30,7 @@ These guides describe **1.2.0**, including property-name renaming, excluded fold
 
 ## Release notes
 
+- [1.2.1](releases/1.2.1.md)
 - [1.2.0](releases/1.2.0.md)
 - [1.1.0](releases/1.1.0.md)
 - [1.0.3](releases/1.0.3.md)

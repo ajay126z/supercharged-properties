@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('obsidian', () => ({
   Modal: class {},
   ItemView: class { contentEl = document.createElement('div'); app: unknown; constructor(leaf: any) { this.app = leaf.app; } },
@@ -46,6 +46,7 @@ beforeEach(async () => {
   document.body.appendChild(view.contentEl);
   await view.onOpen();
 });
+afterEach(async () => { await view.onClose(); document.body.classList.remove('is-mobile'); });
 const click = (label: string) => (document.querySelector(`[aria-label="${label}"]`) as HTMLElement).click();
 it('uses a single property tree and expands notes inline', () => {
   expect(document.querySelector('.pv-results')).toBeNull();
@@ -208,6 +209,7 @@ it('creates and switches named selections without overwriting saved profiles', (
   click('Include tags');
   expect(writing.keys).toEqual(['status']);
   expect(document.querySelector('[aria-label="Property view"]')!.textContent).toContain('Writing (modified)');
+  click('Include status');
   nameProfile('Publishing'); click('Save selection as new profile');
   const publishing = plugin.prefs.profiles[1];
   chooseView(`profile:${writing.id}`);
@@ -218,6 +220,7 @@ it('creates and switches named selections without overwriting saved profiles', (
   expect(plugin.save).toHaveBeenCalled();
 });
 it('updates, renames and deletes a profile without touching notes', () => {
+  plugin.index.update('Three.md', { priority: 'High' }); view.render();
   click('Choose properties to show'); click('Clear property selection'); click('Include status');
   nameProfile('Writing'); click('Save selection as new profile');
   click('Include tags'); click('Update active profile selection');
@@ -227,10 +230,10 @@ it('updates, renames and deletes a profile without touching notes', () => {
   click('Delete active profile');
   expect(plugin.prefs.profiles).toEqual([]); expect(plugin.prefs.activeProfile).toBeNull();
   expect(plugin.prefs.scope).toEqual(['status', 'tags']);
-  expect(plugin.index.properties.size).toBe(2);
+  expect(plugin.index.properties.size).toBe(3);
 });
 it('rejects empty/duplicate names and preserves currently absent property keys', () => {
-  click('Choose properties to show'); nameProfile(' '); click('Save selection as new profile');
+  click('Choose properties to show'); click('Clear property selection'); click('Include status'); nameProfile(' '); click('Save selection as new profile');
   expect(plugin.prefs.profiles).toEqual([]);
   plugin.prefs.scope = ['future_property']; view.render();
   nameProfile('Writing'); click('Save selection as new profile');
@@ -329,4 +332,91 @@ it.each([12, true, null])('does not offer split for non-text values stored under
   const row = Array.from(document.querySelectorAll('[aria-label]')).find(el => el.getAttribute('aria-label')?.startsWith('Show notes with example:'))!;
   row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
   expect((Menu as any).items.some((item: any) => item.title === 'Split into list…')).toBe(false);
+});
+
+it('does not summon the mobile keyboard when opening the property picker', () => {
+  document.body.classList.add('is-mobile');
+  click('Choose properties to show');
+  expect(document.activeElement).not.toBe(document.querySelector('[aria-label="Search properties to select"]'));
+});
+it('saves a new view with Enter and dismisses the mobile name keyboard after success', () => {
+  document.body.classList.add('is-mobile'); click('Choose properties to show');
+  click('Clear property selection'); click('Include status');
+  const input = document.querySelector('[aria-label="Profile name"]') as HTMLInputElement;
+  input.value = 'Mobile view'; input.focus();
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  expect(plugin.prefs.profiles[0].name).toBe('Mobile view');
+  expect(input.value).toBe(''); expect(document.activeElement).not.toBe(input);
+});
+it('does not save on IME composition or dismiss invalid name input', () => {
+  document.body.classList.add('is-mobile'); click('Choose properties to show');
+  click('Clear property selection'); click('Include status');
+  const input = document.querySelector('[aria-label="Profile name"]') as HTMLInputElement;
+  input.value = '名前'; input.focus();
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true }));
+  expect(plugin.prefs.profiles).toHaveLength(0);
+  input.value = ' '; input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect(plugin.prefs.profiles).toHaveLength(0); expect(document.activeElement).toBe(input);
+});
+
+it.each(['mobile', 'desktop'])('preserves the same draft input across All/None and rejected saves on %s', (platform) => {
+  if (platform === 'mobile') document.body.classList.add('is-mobile');
+  click('Choose properties to show'); nameProfile('My project');
+  const input = document.querySelector('[aria-label="Profile name"]') as HTMLInputElement;
+  click('Clear property selection');
+  expect(document.querySelector('[aria-label="Profile name"]')).toBe(input);
+  expect(input.value).toBe('My project');
+  click('Save selection as new profile');
+  expect((Notice as any).messages.at(-1)).toBe('Please select at least one property.');
+  expect(plugin.prefs.profiles).toHaveLength(0); expect(input.value).toBe('My project');
+  click('Show all properties');
+  expect(document.querySelector('[aria-label="Profile name"]')).toBe(input);
+  expect(input.value).toBe('My project');
+  click('Save selection as new profile');
+  expect((Notice as any).messages.at(-1)).toBe('All properties View already exists.');
+  expect(plugin.prefs.profiles).toHaveLength(0); expect(input.value).toBe('My project');
+  click('Clear property selection'); click('Include status'); click('Save selection as new profile');
+  expect(plugin.prefs.profiles[0]).toMatchObject({ name: 'My project', keys: ['status'] });
+  expect(input.value).toBe('');
+});
+it('switches All to the protected default without deleting the previously active saved view', () => {
+  click('Choose properties to show'); click('Clear property selection'); click('Include status');
+  nameProfile('Writing'); click('Save selection as new profile');
+  const saved = structuredClone(plugin.prefs.profiles);
+  click('Show all properties');
+  expect(plugin.prefs.activeProfile).toBeNull();
+  expect((document.querySelector('[aria-label="Property view"]') as HTMLSelectElement).value).toBe('all');
+  for (const label of ['Delete active profile','Rename active profile','Update active profile selection']) {
+    expect((document.querySelector(`[aria-label="${label}"]`) as HTMLButtonElement).disabled).toBe(true);
+    click(label);
+  }
+  expect(plugin.prefs.profiles).toEqual(saved);
+});
+it('rejects selecting every property manually and reserves the default view name', () => {
+  click('Choose properties to show'); click('Clear property selection'); click('Include status'); click('Include tags');
+  nameProfile('Everything'); click('Save selection as new profile');
+  expect((Notice as any).messages.at(-1)).toBe('All properties View already exists.');
+  click('Include tags'); nameProfile(' All Properties '); click('Save selection as new profile');
+  expect((Notice as any).messages.at(-1)).toBe('All properties View already exists.');
+  expect(plugin.prefs.profiles).toHaveLength(0);
+});
+it('rejects empty and all-property updates without changing an existing saved selection', () => {
+  click('Choose properties to show'); click('Clear property selection'); click('Include status');
+  nameProfile('Writing'); click('Save selection as new profile');
+  click('Clear property selection'); click('Update active profile selection');
+  expect((Notice as any).messages.at(-1)).toBe('Please select at least one property.');
+  expect(plugin.prefs.profiles[0].keys).toEqual(['status']);
+  click('Include status'); click('Include tags'); click('Update active profile selection');
+  expect((Notice as any).messages.at(-1)).toBe('All properties View already exists.');
+  expect(plugin.prefs.profiles[0].keys).toEqual(['status']);
+});
+it('uses the same selection validation for Done/Enter', () => {
+  click('Choose properties to show'); nameProfile('Draft');
+  const input = document.querySelector('[aria-label="Profile name"]') as HTMLInputElement;
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect((Notice as any).messages.at(-1)).toBe('All properties View already exists.');
+  click('Clear property selection');
+  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  expect((Notice as any).messages.at(-1)).toBe('Please select at least one property.');
+  expect(input.value).toBe('Draft'); expect(plugin.prefs.profiles).toHaveLength(0);
 });

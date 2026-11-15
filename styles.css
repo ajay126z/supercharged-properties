@@ -1,5 +1,5 @@
-.workspace-leaf-content .view-content.pv-view { display:flex; flex-direction:column; height:100%; gap:0; padding:0; overflow:hidden; color:var(--text-normal); font-size:var(--nav-item-size, var(--font-ui-small)); }
-.pv-toolbar { flex-shrink:0; padding:0 8px 8px; border-bottom:1px solid var(--background-modifier-border); }
+.workspace-leaf-content .view-content.pv-view { display:flex; flex-direction:column; height:100%; max-height:var(--pv-visible-height, 100%); min-height:0; gap:0; padding:0; overflow:hidden; color:var(--text-normal); font-size:var(--nav-item-size, var(--font-ui-small)); }
+.pv-toolbar { display:flex; flex-direction:column; flex:0 1 auto; min-height:0; max-height:100%; padding:0 8px 8px; border-bottom:1px solid var(--background-modifier-border); }
 .pv-search { display:flex; align-items:center; gap:7px; border:1px solid var(--background-modifier-border); border-radius:var(--radius-s, 4px); padding:0 7px; background:var(--background-modifier-form-field, var(--background-primary)); }
 .pv-search:focus-within { border-color:var(--interactive-accent); }
 .pv-search input.pv-filter { width:100%; min-width:0; height:28px; border:0; box-shadow:none; background:transparent; padding:0; font-size:12px; }
@@ -35,7 +35,7 @@
 .pv-note-name { flex:1 1 auto; min-width:0; text-align:left; font-size:var(--font-ui-smaller, 12px); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .pv-note-path { flex:0 1 auto; min-width:0; max-width:40%; color:var(--text-faint); font-size:10px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .pv-view button:focus-visible, .pv-view select:focus-visible { outline:2px solid var(--interactive-accent); outline-offset:-2px; }
-.pv-scope-panel { margin-top:8px; padding:8px; border:1px solid var(--background-modifier-border); border-radius:var(--radius-s, 4px); background:var(--background-secondary); }
+.pv-scope-panel { display:flex; flex-direction:column; flex:0 1 auto; min-height:0; overflow:auto; overscroll-behavior:contain; scroll-padding-block:8px; margin-top:8px; padding:8px; border:1px solid var(--background-modifier-border); border-radius:var(--radius-s, 4px); background:var(--background-secondary); }
 .pv-scope-panel[hidden] { display:none; }
 .pv-scope-panel .pv-actions { margin-top:0; }
 .pv-scope-choices { max-height:180px; overflow:auto; margin-top:6px; }
@@ -75,3 +75,24 @@
 .pv-edit-path { font-weight: var(--font-semibold); }
 .pv-edit-hint { color: var(--text-muted); }
 .pv-edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Keep controls reachable when the viewport shrinks, including keyboard overlays. */
+.pv-toolbar > :not(.pv-scope-panel) { flex-shrink:0; }
+.pv-scope-panel > * { flex-shrink:0; }
+.pv-profile-actions button { white-space:normal; }
+
+@media (pointer:coarse), (max-width:600px) {
+  .pv-profile-manager { order:-1; margin-top:0; padding:0 0 10px; border-top:0; border-bottom:1px solid var(--background-modifier-border); margin-bottom:8px; }
+  .pv-profile-actions { gap:6px; }
+  .pv-profile-actions button { flex:1 1 60px; min-height:44px; padding:6px; font-size:13px; }
+  .pv-view .pv-profile-name, .pv-view .pv-filter { font-size:16px; min-height:40px; }
+  .pv-view .pv-profile-select { min-height:40px; font-size:14px; }
+  .pv-view button.pv-icon-button, .pv-view button.pv-toggle { min-width:40px; min-height:40px; }
+  .pv-scope-choice { min-height:40px; font-size:14px; }
+  .pv-scope-choices { max-height:160px; }
+}
+/* Obsidian may identify mobile independently of the pointer media query. */
+.is-mobile .pv-profile-manager { order:-1; margin-top:0; padding:0 0 10px; border-top:0; border-bottom:1px solid var(--background-modifier-border); margin-bottom:8px; }
+.is-mobile .pv-view .pv-profile-name, .is-mobile .pv-view .pv-filter { font-size:16px; min-height:40px; }
+.is-mobile .pv-profile-actions { gap:6px; }
+.is-mobile .pv-profile-actions button { flex:1 1 60px; min-height:44px; padding:6px; font-size:13px; }
