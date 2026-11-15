@@ -14,12 +14,18 @@ Choose the properties you want to see, save views for different projects, and ex
 - **Choose your order.** Sort alphabetically or by how many notes use a property or value.
 - **Stay up to date.** The view refreshes as your notes change.
 
+![Browse properties and search matching notes](docs/media/01-browse-and-search.gif)
+
 ## Keep your view focused
 
 - **Choose properties.** Show only the fields relevant to your current work.
 - **Save views.** Create selections such as Writing, Projects, or Reading and switch between them.
 - **Pin and hide.** Keep frequently used properties at the top and hide fields you do not need to see.
 - **Exclude folders.** Leave templates, drafts, or other folders out of the property list and counts. Exclusions include subfolders and also apply to new bulk edits.
+
+![Create and switch saved property views](docs/media/02-saved-views.gif)
+
+![Exclude Templates folders from the property tree](docs/media/05-exclude-templates.gif)
 
 ## Clean up properties across notes
 
@@ -38,6 +44,10 @@ Right-click a property or value to make changes across matching notes:
 Each edit shows the affected notes before you confirm. Property-name conflicts and changes made since the preview are skipped rather than overwritten. Browsing and organizing the view do not change your notes.
 
 Bulk edits apply to matching notes in included folders, even when a search or saved view shows only some of them. Folder exclusions limit these edits; display filters do not.
+
+![Merge property values with preview and undo](docs/media/03-merge-and-undo.gif)
+
+![Rename a property while preserving its values](docs/media/04-rename-property.gif)
 
 ### Undo and edit limits
 
