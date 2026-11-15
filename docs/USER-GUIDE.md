@@ -2,9 +2,9 @@
 
 Supercharged Properties displays your vault's YAML frontmatter as a tree of **properties → values → notes**. Use it to inspect metadata, find notes, organize the view, and explicitly edit matching values across notes.
 
-Browsing, searching, sorting, and saving views do not modify notes. The bulk value actions write frontmatter only after you review a preview and click Apply.
+Browsing, searching, sorting, and saving views do not modify notes. Property-name and value edits write frontmatter only after you review a preview and confirm.
 
-This guide covers 1.1.0 and the property-name rename feature in the current development build. The shared undo command is called **Undo last property edit** in development builds and **Undo last value edit** in 1.1.0. Earlier releases may not offer the edit actions.
+This guide describes the current development build. Published 1.1.0 includes bulk value editing, but does not include property-name renaming, excluded folders, or the text-property-only restriction on Split. The shared undo command is called **Undo last property edit** in development builds and **Undo last value edit** in 1.1.0.
 
 ## Contents
 
@@ -13,10 +13,14 @@ This guide covers 1.1.0 and the property-name rename feature in the current deve
 - [Understand values and counts](#understand-values-and-counts)
 - [Search the tree](#search-the-tree)
 - [Choose properties](#choose-properties)
+- [Exclude template or other folders](#exclude-template-or-other-folders)
+- [How display controls affect scope](#how-display-controls-affect-scope)
 - [Save and manage views](#save-and-manage-views)
 - [Sort, pin, and hide](#sort-pin-and-hide)
 - [Use Obsidian Search and copy links](#use-obsidian-search-and-copy-links)
+- [Rename property names](#rename-property-names)
 - [Edit values across notes](#edit-values-across-notes)
+- [Data access and privacy](#data-access-and-privacy)
 - [Settings and commands](#settings-and-commands)
 - [Keyboard and mobile use](#keyboard-and-mobile-use)
 - [Troubleshooting](#troubleshooting)
@@ -116,6 +120,33 @@ Click **Choose properties to show** to open the property picker.
 
 A selection controls which properties are displayed, not which notes belong to a value. Hidden properties remain hidden even when selected. Choosing None produces an empty tree with a prompt to select properties.
 
+## Exclude template or other folders
+
+In the current development build, open **Settings → Supercharged Properties → Excluded folders** and enter one vault-relative folder path per line:
+
+```text
+Templates
+Resources/Templates
+Archive/Drafts
+```
+
+Each entry excludes that folder and all descendants. `Templates` excludes `Templates/Daily/Example.md`, but not `Templates Archive/Example.md` or a root note named `Templates.md`. Paths are case-sensitive and are literal paths, not wildcard patterns. Leading/trailing slashes and pasted backslash separators are normalized; blank lines are ignored. Use paths relative to the vault, not absolute filesystem paths. Entries containing `..` are ignored.
+
+Changes apply immediately and are saved for the next session. Clear an entry to restore its notes. Excluded notes do not contribute properties, values, counts, local tree-search results, copied note links, or bulk-edit previews. A bulk edit opened before the setting changed also skips newly excluded notes. Existing undo remains available for earlier edits, even if their folders are now excluded.
+
+This setting does not change your notes or Obsidian's global Search settings. **Open in Search** and copied search queries use Obsidian Search and can still return excluded notes. Saved profiles retain their property keys; properties used only by excluded notes disappear until an included note uses them again.
+
+## How display controls affect scope
+
+| Control | Tree and counts | Copied note links | New bulk edits |
+| --- | --- | --- | --- |
+| Tree search | Filters displayed branches; row counts still represent their full indexed note set. | Copies the row's full indexed note set, not just visible search matches. | Does not restrict the selected row's batch to search matches. |
+| Property selection / saved view | Shows selected properties; does not filter notes within a property. | Uses the selected row's full indexed note set. | Does not narrow the selected row's notes. |
+| Hidden properties | Hides named properties without removing their indexed notes. | Available from visible rows. | Does not act as a note exclusion rule. |
+| Excluded folders | Removes notes from the index, values, and counts. | Excluded notes are omitted. | Excluded notes are omitted from previews and skipped before writes. |
+
+**Open in Search** and **Copy search query** generate queries for Obsidian's core Search. They do not add folder-exclusion conditions. Earlier edits can still be undone after their folders are excluded.
+
 ## Save and manage views
 
 Saved views, also called profiles, store a **property selection**. They do not save search text, sorting, pinning, or hidden-property settings as separate per-view preferences.
@@ -176,9 +207,9 @@ In development builds after 1.1.0, right-click a property row and choose **Renam
 
 ## Edit values across notes
 
-Value-row menus offer **Rename value…**, **Merge value…**, **Convert to wikilink…**, and **Split into list…** when applicable. These actions change values, not property names.
+Value-row menus offer **Rename value…**, **Merge value…**, **Convert to wikilink…**, and **Split into list…** when applicable. These actions change values, not property names. **Split into list…** requires a Text property and a text value. It is hidden for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses. Strings already stored inside lists are not split.
 
-Read the [bulk editing guide](BULK-EDITING.md) for examples, exact matching rules, preview and confirmation, partial failures, and undo. Each operation covers matching notes across the vault regardless of your tree search or saved view. The full preview shows which notes will change.
+Read the [bulk editing guide](BULK-EDITING.md) for examples, exact matching rules, preview and confirmation, partial failures, and undo. Each operation covers matching notes in included folders across the vault regardless of your tree search or saved view. Excluded folders are skipped. The full preview shows which notes will change.
 
 ## Data access and privacy
 
@@ -196,6 +227,7 @@ Open **Settings → Supercharged Properties**.
 | --- | --- |
 | Show note counts | Shows or hides distinct-note counts beside rows. |
 | Sort by | Selects the shared property/value sort preference. |
+| Excluded folders | One vault-relative folder per line, including subfolders; omitted from the index and new bulk edits. |
 | Hidden properties | One property name per line; remove a name to restore it. Leave empty to hide none. |
 
 Preferences, pinned properties, property selections, and saved views are saved as plugin settings. They are not added to your notes. Bulk-edit undo is temporary and is not saved with preferences.
@@ -219,15 +251,18 @@ The interface provides labelled controls, visible focus, expand/collapse state, 
 
 | Symptom | What to check |
 | --- | --- |
-| The tree is empty | Clear the tree search, choose All properties, check Hidden properties, and confirm notes contain YAML frontmatter. Then refresh. |
-| A property is missing from a saved view | Check its selected keys and Hidden properties. A view does not automatically gain new property keys. |
-| Counts seem too low | Counts represent distinct notes; duplicate list values in one note count once. |
+| The tree is empty | Clear the tree search, choose All properties, check Hidden properties and Excluded folders, and confirm notes contain YAML frontmatter. Then refresh. |
+| A property is missing from a saved view | Check its selected keys, Hidden properties, and Excluded folders. A view does not automatically gain new property keys. |
+| Counts seem too low | Excluded notes are not counted. Counts represent distinct notes; duplicate list values in one note count once. |
 | Two rows have the same label | They may have different stored types, such as numeric `4` and text `"4"`. Review the note's YAML. |
 | A nested object has no value row | Objects are not indexed as editable scalar values. Open its note through the property branch. |
 | A type icon is incorrect | Check the property's type in Obsidian and refresh the index. Missing type information falls back to text. |
 | Open in Search does not work | Enable the core Search plugin. The local property tree remains usable without it. |
 | Copy reports Clipboard unavailable | Clipboard access failed in the current host; open the note directly or retry after restoring clipboard access. |
 | A setting does not persist | Check the settings-write notice, vault permissions, and available storage, then retry. |
+| Split into list is missing | Confirm the property is configured as Text, the selected value is text, and the property is not tags, aliases, or cssclasses. After a type change, refresh the property index. |
+| A template note still appears | Use a vault-relative path with the exact folder capitalization. Templates excludes Templates/Note.md, not Other/Templates/Note.md. Core Search is independent of this setting. |
+| Rename property is missing | Confirm you are using a development build with this feature and open the property-row menu, not a value-row menu. |
 | An edit is skipped, fails, or cannot be undone | See [edit troubleshooting and limits](BULK-EDITING.md#troubleshooting-and-limits). |
 
 For development and release information, see the [documentation index](README.md).

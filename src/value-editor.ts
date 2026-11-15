@@ -26,13 +26,14 @@ export class ValueEditor {
   private busy = false;
   private last: LastEdit | undefined;
 
-  constructor(private readonly app: App) {}
+  constructor(private readonly app: App, private readonly includesPath: (path: string) => boolean = () => true) {}
 
   canUndo(): boolean { return !!this.last && !this.busy; }
 
   preview(request: ValueEditRequest, paths: Iterable<string>): ValueEditPreview {
     const changes: ValueEditChange[] = [];
     for (const path of new Set(paths)) {
+      if (!this.includesPath(path)) continue;
       const file = this.file(path);
       if (!file) continue;
       const frontmatter = this.frontmatter(file);
@@ -52,6 +53,7 @@ export class ValueEditor {
     const changes: ValueEditChange[] = [], conflicts: ValueEditFailure[] = [];
     if (error) return { source, target, total: 0, changes, conflicts, error };
     for (const path of new Set(paths)) {
+      if (!this.includesPath(path)) continue;
       const file = this.file(path);
       const frontmatter = file ? this.frontmatter(file) : undefined;
       if (!frontmatter) { conflicts.push({ path, message: 'Note or metadata unavailable.' }); continue; }
@@ -74,11 +76,13 @@ export class ValueEditor {
     let unchanged = 0;
     try {
       for (const change of preview.changes) {
+        if (!this.includesPath(change.path)) { unchanged++; continue; }
         const file = this.file(change.path);
         if (!file) { failures.push({ path: change.path, message: 'Note not found.' }); continue; }
         let snapshot: Snapshot | undefined;
         try {
           await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+            if (!this.includesPath(change.path)) return;
             if (!Object.prototype.hasOwnProperty.call(frontmatter, change.key) || !sameValue(frontmatter[change.key], change.original)) return;
             if (change.targetKey !== undefined && !canRename(frontmatter, change.key, change.targetKey)) return;
             snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: cloneValue(change.replacement), targetKey: change.targetKey };

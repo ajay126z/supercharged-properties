@@ -2,13 +2,20 @@
 
 Supercharged Properties is an Obsidian plugin that turns your vault's YAML frontmatter into a full-pane, browsable tree of **properties → values → notes**. Explore how metadata is used across your vault, filter it, save focused views, and jump straight to the notes you need.
 
-Browsing remains read-only. Explicit bulk value actions can now modify frontmatter after you review and confirm a preview.
+Browsing remains read-only. Explicit property-name and value actions can modify frontmatter after you review and confirm a preview.
+
+## Feature availability
+
+This README describes the current development build. Published **1.1.0** includes bulk value editing. Property-name renaming, excluded folders, and the restriction of Split into list to Text properties are development changes awaiting a release. The development undo command is **Undo last property edit**; 1.1.0 calls it **Undo last value edit**.
+
+For complete instructions, start with the [user guide](docs/USER-GUIDE.md).
 
 ## Features
 
 - **Property-name renaming (development build)** — rename a property across the vault with a complete preview, conflict skipping, and shared one-step undo.
-
-- **Full property tree** — every property, its values, and the notes that use them.
+- **Excluded folders (development build)** — omit template folders and their subfolders from the tree, counts, copied links, and new bulk edits.
+- **Bulk value editing** — rename or merge values, convert text to wikilinks, and split eligible text into lists with preview, confirmation, and one-step undo.
+- **Full property tree** — properties, values, and notes from included folders.
 - **Typed value rows** — strings, numbers, booleans, empty values, and nested lists are kept distinct. Repeated values are deduplicated per note.
 - **Property type icons** — rows show the icon for the type configured in Obsidian, such as text, list, tags, number, checkbox, date, or date & time. The plugin reads `.obsidian/types.json` through public APIs and falls back to built-in names and text.
 - **Search everything or narrow the scope** — search property names, values, note names, or paths, with automatic branch expansion for matches.
@@ -88,16 +95,25 @@ The toolbar provides:
   - **Copy matching note links**
   - **Pin property** / **Unpin property**
   - **Hide property**
+  - **Rename property…** (property rows)
+
+### Rename property names
+
+Right-click a property row and choose **Rename property…**. Enter the destination name, review eligible and skipped notes, then confirm with **Rename in N notes**. Values and stored types are preserved; existing destination keys and ambiguous source keys are skipped. Case-only corrections are supported. Saved views and display preferences include the new name and retain the old one for skipped or undone notes. The vault's configured property type is not renamed. See the [property-name guide](docs/PROPERTY-RENAMING.md).
+
+### Exclude template folders
+
+Open **Settings → Supercharged Properties → Excluded folders** and enter one vault-relative folder path per line, such as `Templates` or `Resources/Templates`. Entries include subfolders, are case-sensitive, and take effect immediately. Excluded notes are absent from the tree, counts, copied note links, and new bulk edits. Obsidian's core Search remains independent. See [folder exclusions](docs/USER-GUIDE.md#exclude-template-or-other-folders).
 
 ### Bulk value edits
 
 Right-click a value row to **Rename value**, **Merge value** into another value of the same type, **Convert to wikilink**, or **Split into list**. To merge `in-progress` and `doing` into a new `active` value, rename one to `active`, then merge the other into it. Each confirmed operation is a separate undo batch.
 
-The dialog lists every affected path and its before/after value. Actions cover matching values across the vault, regardless of search filters or saved views. Matching follows the tree's case-insensitive, Unicode-normalized identity and preserves distinct scalar types. Rename accepts text; numeric and boolean replacements retain their type when valid. Rename/merge deduplicate equal list entries. Split applies only to scalar text, using a literal delimiter, trimming parts and dropping empty parts. Wiki conversion wraps plain text in `[[…]]`; existing links and text containing brackets or newlines are skipped.
+The dialog lists every affected path and its before/after value. Actions cover matching values in included folders across the vault, regardless of search filters or saved views. Excluded folders are skipped, including notes excluded after the preview was opened. Matching follows the tree's case-insensitive, Unicode-normalized identity and preserves distinct scalar types. Rename accepts text; numeric and boolean replacements retain their type when valid. Rename/merge deduplicate equal list entries. Split is offered only for text values under Text properties and applies only to scalar text. List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses properties do not offer Split. It uses a literal delimiter, trims parts, and drops empty parts. Wiki conversion wraps plain text in `[[…]]`; existing links and text containing brackets or newlines are skipped.
 
 Click **Apply to N notes** to confirm. Notes whose property changed since preview are skipped. Failures are reported individually; successful notes can still be undone. Obsidian's frontmatter writer may reformat YAML, including comments and quoting; note bodies are not edited.
 
-Use **Supercharged Properties: Undo last property edit** in the command palette to restore the previous property values in one step. Undo preserves other properties and skips values edited since the batch. Failed or skipped undo entries can be retried. Undo is held in memory: another successful batch replaces it, and restarting or disabling the plugin clears it. Renamed or deleted notes cannot be restored through their old paths. This is a property-value undo, not a byte-for-byte YAML formatting restore.
+Use **Supercharged Properties: Undo last property edit** in the command palette to undo the last successful property-name or value batch in one step. Undo preserves other properties and skips values edited since the batch. Failed or skipped undo entries can be retried. Undo is held in memory: another successful batch replaces it, and restarting or disabling the plugin clears it. Renamed or deleted notes cannot be restored through their old paths. Undo restores keys and values, not YAML formatting. It remains available for previous edits even after their folders are excluded.
 
 ### Search scopes
 
@@ -120,6 +136,7 @@ Open **Settings → Supercharged Properties**:
 
 - **Show note counts** — display the number of distinct notes for each property and value.
 - **Sort by** — set the default sort order.
+- **Excluded folders** — one vault-relative folder path per line, such as `Templates` or `Resources/Templates`. Includes subfolders; matching is case-sensitive. Changes apply immediately.
 - **Hidden properties** — one property name per line. Hidden properties can be restored by removing their names here.
 
 ## How it works
@@ -153,7 +170,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture, testing, and review con
 - [Bulk value editing and undo](docs/BULK-EDITING.md)
 - [Property-name renaming](docs/PROPERTY-RENAMING.md)
 - [Documentation index](docs/README.md)
-
 - [Contributing](CONTRIBUTING.md)
 - [Publishing](docs/PUBLISHING.md)
 - [Release QA](docs/RELEASE-QA.md)

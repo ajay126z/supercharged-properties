@@ -30,7 +30,7 @@ authors:
 
 Lists, nested objects, text, numbers, booleans, and empty values are preserved. Other properties and the note body are not edited. Obsidian may reformat YAML, including comments and quoting.
 
-The action covers matching notes across the vault, including those hidden by search or saved views. There is no per-note selection. The preview lists the exact source spelling, destination, value, and path for each eligible note. Names are trimmed; blank names, line breaks, null characters, and the reserved name `position` are rejected.
+The action covers matching notes in included folders across the vault, including those hidden by search or saved views. Excluded folders are omitted from previews and checked again before writes. There is no per-note selection. The preview lists the exact source spelling, destination, value, and path for each eligible note. Names are trimmed; blank names, line breaks, null characters, and the reserved name `position` are rejected.
 
 ## Matching and conflicts
 
@@ -63,3 +63,7 @@ These additive preference updates are retained after undo; undo changes note pro
 Stored value types are preserved, but the vault's configured property-type assignment is not renamed. The supported public API used by this plugin does not expose that operation. Review the destination's configured type in Obsidian after renaming it; if a destination type is already configured, it remains in effect.
 
 Renaming special property names such as `tags`, `aliases`, or `cssclasses` changes which field Obsidian recognizes for that special behavior. The plugin does not update queries, templates, note-body references, or other plugins' settings that mention the old name.
+
+## Excluded folders
+
+The development build respects **Settings → Supercharged Properties → Excluded folders** for previews and new writes. Search and saved views do not limit a batch, but folder exclusions do. Notes newly excluded after a preview are skipped at apply time. Undo remains available for earlier edits even if their folders are subsequently excluded.

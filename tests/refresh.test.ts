@@ -124,3 +124,37 @@ it('treats malformed settings roots as defaults', async () => {
   expect(plugin.prefs.scope).toBeNull();
   expect(plugin.prefs.profiles).toEqual([]);
 });
+it('excludes configured folders on rebuild, create, and metadata changes without excluding similar prefixes', async () => {
+  const { plugin, files, metadata, cache, vault } = await setup({ excludedFolders: 'Templates' });
+  for (const path of ['Templates/A.md', 'Templates/Nested/B.md', 'Templates Archive/C.md', 'D.md']) {
+    const file = Object.assign(new TFile(), { path, extension: 'md' }); files.push(file);
+    metadata.set(path, { frontmatter: { status: 'doing' } });
+    vault.emit('create', file); cache.emit('changed', file, '', metadata.get(path));
+  }
+  expect([...plugin.index.properties.get('status')!.paths]).toEqual(['Templates Archive/C.md', 'D.md']);
+  plugin.rebuild();
+  expect(plugin.index.properties.get('status')!.paths.size).toBe(2);
+});
+it('reindexes immediately when exclusions change and persists the setting', async () => {
+  const { plugin, files, metadata } = await setup();
+  const file = Object.assign(new TFile(), { path: 'Templates/A.md', extension: 'md' }); files.push(file);
+  metadata.set(file.path, { frontmatter: { template: true } }); plugin.rebuild();
+  const save = vi.fn().mockResolvedValue(undefined); (plugin as any).saveData = save;
+  await plugin.setExcludedFolders('Templates'); expect(plugin.index.properties.size).toBe(0);
+  expect(save.mock.calls[0][0].excludedFolders).toBe('Templates');
+  await plugin.setExcludedFolders(''); expect(plugin.index.properties.has('template')).toBe(true);
+});
+it('handles notes moving into and out of excluded folders and folder renames', async () => {
+  const { plugin, vault, files, metadata } = await setup({ excludedFolders: 'Templates' });
+  const file = Object.assign(new TFile(), { path: 'A.md', extension: 'md' }); files.push(file);
+  const cache = { frontmatter: { status: 'doing' } };
+  metadata.set('A.md', cache); metadata.set('Templates/A.md', cache); plugin.rebuild();
+  file.path = 'Templates/A.md'; vault.emit('rename', file, 'A.md'); expect(plugin.index.properties.size).toBe(0);
+  file.path = 'A.md'; vault.emit('rename', file, 'Templates/A.md'); expect(plugin.index.properties.get('status')!.paths.has('A.md')).toBe(true);
+  file.path = 'Templates/A.md'; vault.emit('rename', {}, 'OldFolder'); vi.advanceTimersByTime(150);
+  expect(plugin.index.properties.size).toBe(0);
+});
+it('defaults malformed or absent excluded folder settings to include everything', async () => {
+  const { plugin } = await setup({ excludedFolders: ['Templates'] });
+  expect(plugin.prefs.excludedFolders).toBe(''); expect(plugin.includesPath('Templates/A.md')).toBe(true);
+});

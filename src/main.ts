@@ -1,10 +1,11 @@
 import { ItemView, Menu, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import { fold, natural, PropertyIndex, PropertyNode, ValueNode } from './index';
 
+import { excludedFolders, isFolderExcluded } from './folder-exclusions';
 import { SortOrder, sortOptions, sortOrder, sortNodes } from './sorting';
 import { propertyQuery } from './search';
 import { loadProfiles, sameKeys, PropertyProfile } from './profiles';
-import { PropertyTypeResolver } from './property-types';
+import { PropertyTypeResolver, supportsTextSplit } from './property-types';
 import { ValueEditor, type ValueEditPreview, type ValueEditResult } from './value-editor';
 import { PropertyRenameModal } from './property-rename-dialog';
 import { includeRenamedProperty } from './property-rename';
@@ -13,8 +14,8 @@ import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-o
 import type { PropertyValueKind } from './frontmatter-values';
 
 const VIEW = 'supercharged-properties';
-interface Preferences { counts: boolean; sort: SortOrder; hidden: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
-const defaults: Preferences = { counts: true, sort: 'name', hidden: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+interface Preferences { counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
+const defaults: Preferences = { counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 
 export default class SuperchargedPropertiesPlugin extends Plugin {
   index = new PropertyIndex();
@@ -36,12 +37,13 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
       pinned: Array.isArray(saved?.pinned) ? saved.pinned.filter((v: unknown) => typeof v === 'string') : [],
       counts: typeof saved?.counts === 'boolean' ? saved.counts : true,
       sort: sortOrder(saved?.sort),
+      excludedFolders: typeof saved.excludedFolders === 'string' ? saved.excludedFolders : '',
       hidden: typeof saved?.hidden === 'string' ? saved.hidden : '',
       expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((v: unknown) => typeof v === 'string') : []
     };
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
-    this.valueEditor = new ValueEditor(this.app);
+    this.valueEditor = new ValueEditor(this.app, path => this.includesPath(path));
     this.registerView(VIEW, leaf => new PropertiesView(leaf, this));
     this.addRibbonIcon('list-tree', 'Open Supercharged Properties', () => { void this.open(); });
     this.addCommand({ id: 'open', name: 'Open sidebar', callback: () => { void this.open(); } });
@@ -58,15 +60,15 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     });
     this.addSettingTab(new PreferencesTab(this));
     this.registerEvent(this.app.metadataCache.on('changed', (file, _data, cache) => {
-      this.index.update(file.path, cache.frontmatter);
+      this.updateIndexedNote(file.path, cache.frontmatter);
       this.refresh();
     }));
     this.registerEvent(this.app.metadataCache.on('resolved', () => this.scheduleRebuild()));
     this.registerEvent(this.app.vault.on('create', file => {
-      if (file instanceof TFile && file.extension === 'md') {
+      if (file instanceof TFile && file.extension === 'md' && this.includesPath(file.path)) {
         // Metadata may not be available yet; the cache changed event completes indexing.
         const cache = this.app.metadataCache.getFileCache(file);
-        if (cache) { this.index.update(file.path, cache.frontmatter); this.refresh(); }
+        if (cache) { this.updateIndexedNote(file.path, cache.frontmatter); this.refresh(); }
       }
     }));
     this.registerEvent(this.app.vault.on('delete', file => {
@@ -76,12 +78,27 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     this.registerEvent(this.app.vault.on('rename', (file, oldPath) => {
       if (file instanceof TFile) {
         this.index.remove(oldPath);
-        if (file.extension === 'md') this.index.update(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
+        if (file.extension === 'md' && this.includesPath(file.path)) this.updateIndexedNote(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
         this.refresh();
       } else this.scheduleRebuild();
     }));
     this.register(() => { window.clearTimeout(this.timer); window.clearTimeout(this.rebuildTimer); });
     this.app.workspace.onLayoutReady(() => this.rebuild());
+  }
+
+  includesPath(path: string): boolean {
+    return !isFolderExcluded(path, excludedFolders(this.prefs.excludedFolders));
+  }
+
+  private updateIndexedNote(path: string, frontmatter?: Record<string, unknown>): void {
+    if (this.includesPath(path)) this.index.update(path, frontmatter);
+    else this.index.remove(path);
+  }
+
+  async setExcludedFolders(value: string): Promise<void> {
+    this.prefs.excludedFolders = value;
+    this.rebuild();
+    await this.save();
   }
 
   private scheduleRebuild(): void {
@@ -93,7 +110,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     window.clearTimeout(this.rebuildTimer);
     this.index = new PropertyIndex();
     for (const file of this.app.vault.getMarkdownFiles()) {
-      this.index.update(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
+      if (this.includesPath(file.path)) this.updateIndexedNote(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
     }
     void this.reloadTypes();
   }
@@ -155,13 +172,21 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
 
   editValue(property: PropertyNode, node: ValueNode, mode: ValueEditMode): void {
     const [kind] = JSON.parse(node.id) as [PropertyValueKind, string];
+    if (mode === 'split' && (kind !== 'string' || !supportsTextSplit(property, this.typeResolver))) return;
     const request: ValueEditRequest = { property: property.id, kind, value: node.label, mode, replacement: node.label };
     const siblings = [...property.values.values()].filter(value => value !== node && (JSON.parse(value.id) as string[])[0] === kind).map(value => value.label);
     new ValueEditModal(this.app, {
       request: mode === 'merge' ? { ...request, replacement: siblings[0] } : request,
       siblings,
-      preview: edit => this.valueEditor.preview(edit, node.paths),
-      apply: preview => this.applyValueEdit(preview)
+      preview: edit => edit.mode === 'split' && !supportsTextSplit(property, this.typeResolver)
+        ? { total: 0, changes: [] } : this.valueEditor.preview(edit, node.paths),
+      apply: preview => {
+        if (mode === 'split' && !supportsTextSplit(property, this.typeResolver)) {
+          new Notice('Split into list is only available for text properties.');
+          return Promise.resolve();
+        }
+        return this.applyValueEdit(preview);
+      }
     }).open();
   }
 
@@ -598,7 +623,7 @@ export class PropertiesView extends ItemView {
         if ([...property.values.values()].some(value => value !== node && (JSON.parse(value.id) as string[])[0] === kind)) addEdit('Merge value…', 'merge');
         if (kind === 'string' && !isWikilink(node.label)) {
           addEdit('Convert to wikilink…', 'wikilink');
-          addEdit('Split into list…', 'split');
+          if (supportsTextSplit(property, this.plugin.typeResolver)) addEdit('Split into list…', 'split');
         }
       }
     }
@@ -621,6 +646,9 @@ class PreferencesTab extends PluginSettingTab {
         setting.addDropdown(dropdown => dropdown.addOptions(sortOptions).setValue(this.plugin.prefs.sort).onChange(async value => {
           this.plugin.prefs.sort = sortOrder(value); await this.plugin.save();
         }));
+      } },
+      { name: 'Excluded folders', desc: 'One vault-relative folder path per line, for example Templates or Resources/Templates. Includes subfolders; paths are case-sensitive, not patterns. Excluded notes are omitted from the tree, counts, copied links, and new bulk edits. Leave empty to include all folders.', render: (setting: Setting) => {
+        setting.addTextArea(text => text.setValue(this.plugin.prefs.excludedFolders).onChange(value => this.plugin.setExcludedFolders(value)));
       } },
       { name: 'Hidden properties', desc: 'One property name per line. Leave empty to show all YAML properties.', render: (setting: Setting) => {
         setting.addTextArea(text => text.setValue(this.plugin.prefs.hidden).onChange(async value => {

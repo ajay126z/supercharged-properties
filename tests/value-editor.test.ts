@@ -4,11 +4,11 @@ import { App, TFile } from 'obsidian';
 import { ValueEditor } from '../src/value-editor';
 import { previewValue, type ValueEditRequest } from '../src/value-operations';
 const request: ValueEditRequest = { property: 'status', kind: 'string', value: 'doing', mode: 'rename', replacement: 'active' };
-function setup() {
+function setup(includesPath?: (path: string) => boolean) {
   const data: Record<string, any> = { 'a.md': { status: 'doing', other: 1 }, 'b.md': { status: ['doing', 'active'] } };
   const files = Object.fromEntries(Object.keys(data).map(path => [path, Object.assign(new TFile(), { path })]));
   const app = { vault: { getAbstractFileByPath: (path: string) => files[path] }, metadataCache: { getFileCache: (file: TFile) => ({ frontmatter: data[file.path] }) }, fileManager: { processFrontMatter: vi.fn(async (file: TFile, callback: any) => { const next = structuredClone(data[file.path]); callback(next); data[file.path] = next; }) } };
-  return { data, app, editor: new ValueEditor(app as unknown as App) };
+  return { data, app, editor: new ValueEditor(app as unknown as App, includesPath) };
 }
 it('previews without writes, applies and restores a batch while preserving other properties', async () => {
   const { data, app, editor } = setup();
@@ -63,4 +63,23 @@ it('splits only scalar text, trims parts and omits blanks', () => {
   const split = { ...request, value: 'a, b,,c', mode: 'split' as const, delimiter: ',' };
   expect(previewValue('a, b,,c', split).value).toEqual(['a', 'b', 'c']);
   expect(previewValue(['a, b,,c'], split).changed).toBe(0);
+});
+
+it('excludes notes from both previews and rechecks exclusions before applying an older preview', async () => {
+  let excluded = false;
+  const { editor, data } = setup(path => !(excluded && path === 'a.md'));
+  const plan = editor.preview(request, Object.keys(data));
+  excluded = true;
+  expect(editor.preview(request, Object.keys(data)).total).toBe(1);
+  expect(editor.previewPropertyRename('status', 'state', Object.keys(data)).total).toBe(1);
+  expect(await editor.apply(plan)).toMatchObject({ updated: 1, unchanged: 1 });
+  expect(data['a.md'].status).toBe('doing');
+});
+it('keeps undo available for a previous edit even after its folder is excluded', async () => {
+  let included = true;
+  const { editor, data } = setup(() => included);
+  await editor.apply(editor.preview(request, ['a.md']));
+  included = false;
+  expect((await editor.undo()).restored).toBe(1);
+  expect(data['a.md'].status).toBe('doing');
 });

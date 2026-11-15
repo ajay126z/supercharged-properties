@@ -110,6 +110,26 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] **Copy matching note links** copies wiki links for every matching note.
 - [ ] Empty-value searches explain the local empty-row approximation.
 
+## Bulk value edits
+
+- [ ] Rename, merge, and wikilink conversion show full previews and require confirmation.
+- [ ] Split appears for text values under Text properties, including default unconfigured text properties.
+- [ ] Split is absent for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses properties, even when stored values look like text.
+- [ ] Built-in tags, aliases, and cssclasses remain ineligible with a Text override.
+- [ ] Non-text and complete-wikilink value rows do not offer Split.
+- [ ] Split changes only scalar strings, honors the literal delimiter, trims parts, and requires at least two nonempty parts.
+- [ ] Lists already stored under a Text property are not split again.
+- [ ] Stale previews and changed property types cannot apply unsupported splits.
+- [ ] Partial failures preserve undo for successful writes; later edits survive undo.
+
+## Excluded folders
+
+- [ ] Excluding Templates removes its notes and descendants from properties, counts, and copied links; similarly named sibling folders remain included.
+- [ ] Changing and clearing the setting updates the tree immediately and persists after reload.
+- [ ] Create, edit, note moves, and folder renames respect exclusions.
+- [ ] Existing bulk previews skip newly excluded notes when applied; undo of earlier edits still works.
+- [ ] Obsidian Search remains independent of folder exclusions, as documented.
+
 ## Property-name renaming
 
 - [ ] Property-row menus offer Rename property via mouse and keyboard.

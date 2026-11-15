@@ -8,10 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Restrict Split into list to text properties; hide it for list, number, checkbox, date, date & time, tags, aliases, and cssclasses properties.
+
 - Use Obsidian's `createEl` helpers for UI elements and specific CSS selectors instead of `!important`.
 - Stage and publish only the three Obsidian release assets, removing stale staging files.
 
 ### Added
+
+- Excluded folders setting: omit selected folders and descendants from the property index, counts, copied links, and new bulk edits, with immediate updates and persisted preferences.
 
 - Property-name renaming with complete previews, destination and ambiguity conflict skipping, guarded writes, and shared one-step undo.
 - Saved views and display preferences retain the old key and include the renamed key. Configured Obsidian property types are not changed.

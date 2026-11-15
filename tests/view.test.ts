@@ -308,3 +308,25 @@ it('offers property-name renaming from the property row keyboard menu', () => {
   (Menu as any).items.find((item: any) => item.title === 'Rename property…').run();
   expect(plugin.renameProperty).toHaveBeenCalledWith(plugin.index.properties.get('status'));
 });
+it.each(['text', 'multitext', 'list', 'number', 'checkbox', 'date', 'datetime', 'tags', 'aliases', 'cssclasses'])('offers Split into list only for configured text properties (%s)', (type) => {
+  plugin.typeResolver.typeFor = () => type;
+  click('Expand status');
+  document.querySelector('[aria-label="Show notes with status: Done (1)"]')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+  const titles = (Menu as any).items.map((item: any) => item.title);
+  expect(titles.includes('Split into list…')).toBe(type === 'text');
+  expect(titles).toContain('Rename value…');
+});
+it.each(['tags', 'aliases', 'cssclasses'])('never offers split for built-in %s even with a text override', (key) => {
+  plugin.index.update('Special.md', { [key]: 'one, two' });
+  plugin.typeResolver.typeFor = () => 'text'; view.render();
+  click(`Expand ${key}`);
+  document.querySelector(`[aria-label="Show notes with ${key}: one, two (1)"]`)!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+  expect((Menu as any).items.some((item: any) => item.title === 'Split into list…')).toBe(false);
+});
+it.each([12, true, null])('does not offer split for non-text values stored under a text property (%s)', (value) => {
+  plugin.index.update('Special.md', { example: value });
+  plugin.typeResolver.typeFor = () => 'text'; view.render(); click('Expand example');
+  const row = Array.from(document.querySelectorAll('[aria-label]')).find(el => el.getAttribute('aria-label')?.startsWith('Show notes with example:'))!;
+  row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+  expect((Menu as any).items.some((item: any) => item.title === 'Split into list…')).toBe(false);
+});

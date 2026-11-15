@@ -18,7 +18,7 @@ export class PropertyRenameModal extends Modal {
     this.titleEl.textContent = 'Rename property';
     const content = this.contentEl;
     content.classList.add('pv-edit-modal');
-    content.createEl('p', { text: `Rename ${this.options.property} across the vault, including notes hidden by filters.` });
+    content.createEl('p', { text: `Rename ${this.options.property} across included folders in the vault, including notes hidden by search filters. Excluded folders are skipped.` });
     const label = content.createEl('label', { cls: 'pv-edit-field' });
     label.createSpan({ text: 'New property name' });
     const input = label.createEl('input', { cls: 'pv-edit-input' });

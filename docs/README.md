@@ -2,12 +2,23 @@
 
 ## For users
 
-- [User guide](USER-GUIDE.md): installation, browsing, counts and types, search, property selection, saved views, sorting, pinning, hiding, Search integration, settings, keyboard use, and troubleshooting.
-- [Bulk value editing](BULK-EDITING.md): rename, merge, wikilink conversion, splitting text into lists, previews, confirmation, conflicts, and undo.
+These guides describe the current development build. Property-name renaming, excluded folders, and the text-property-only Split restriction are not included in the published 1.1.0 binaries. See the release notes below for version-specific behavior.
 
-These guides describe version 1.1.0. Consult the release notes for the features included in a particular published version.
+| Guide | Covers |
+| --- | --- |
+| [User guide](USER-GUIDE.md) | Installation, browsing, types and counts, local search, property selection, folder exclusions, saved views, sorting, pinning, hiding, Search integration, copying, settings, commands, privacy, and troubleshooting. |
+| [Bulk value editing](BULK-EDITING.md) | Rename, merge, wikilink conversion, text-only splitting, eligibility, preview, confirmation, conflicts, and one-step undo. |
+| [Property-name renaming](PROPERTY-RENAMING.md) | Key renaming, case corrections, collision handling, preserved values, preference updates, and shared undo. |
 
-- [Property-name renaming](PROPERTY-RENAMING.md): development feature for guarded key renaming, conflicts, and shared undo.
+### Common tasks
+
+- [Keep template notes out of the tree](USER-GUIDE.md#exclude-template-or-other-folders)
+- [Understand how filters affect edits and copied links](USER-GUIDE.md#how-display-controls-affect-scope)
+- [Save a focused property view](USER-GUIDE.md#save-and-manage-views)
+- [Rename a property such as author to authors](PROPERTY-RENAMING.md#preview-and-apply)
+- [Combine doing and in-progress into active](BULK-EDITING.md#combine-two-values-under-a-new-name)
+- [Check which properties support Split into list](BULK-EDITING.md#split-text-into-a-yaml-list)
+- [Undo a batch](BULK-EDITING.md#undo-the-last-batch)
 
 ## For contributors and maintainers
 

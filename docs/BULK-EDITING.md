@@ -1,6 +1,6 @@
 # Bulk value editing
 
-Bulk edits let you standardize a property's values across notes. They are explicit write actions; ordinary browsing remains read-only. These features are available starting in version 1.1.0.
+Bulk edits let you standardize a property's values across notes. They are explicit write actions; ordinary browsing remains read-only. The four value operations were introduced in 1.1.0. This guide describes the current development build, which also adds folder exclusions, shared undo with property-name renaming, and text-property-only Split eligibility.
 
 [Back to the user guide](USER-GUIDE.md)
 
@@ -18,7 +18,7 @@ Preview values use JSON-style notation: `"false"` is text, `false` is a boolean,
 
 Apply is disabled when the input is invalid, the preview is updating, or no notes would change. Closing or cancelling the dialog before Apply does not write notes. Once Apply starts, closing the dialog does not cancel the running batch.
 
-**Scope:** each action covers the indexed notes for the selected value across the vault. Search, saved views, and collapsed branches do not restrict the edit to visible notes. There is no per-note inclusion checkbox. Inspect the full preview before confirming.
+**Scope:** each action covers the indexed notes for the selected value in included folders across the vault. Excluded folders are omitted from previews and checked again before writes. Search, saved views, and collapsed branches do not restrict the edit to visible notes. There is no per-note inclusion checkbox. Inspect the full preview before confirming.
 
 Before writing each note, the plugin compares the current property value with the previewed value. If it changed, the note is skipped. Other property changes do not block the edit. The completion notice reports updated, skipped, and failed notes; failures also identify the affected paths.
 
@@ -102,7 +102,23 @@ Existing complete wikilinks do not offer this action. Strings containing bracket
 
 ## Split text into a YAML list
 
-1. Open a text value such as `topics` → `research, writing, editing`.
+In the development build, **Split into list…** appears only for plain text values under properties configured as **Text** (including the default text type for unconfigured properties). It is hidden for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses properties. The built-in `tags`, `aliases`, and `cssclasses` names remain ineligible even if their type is overridden to Text.
+
+| Property type or special name | Split into list |
+| --- | --- |
+| Text, including the default for an unconfigured property | Available on text-value rows that are not complete wikilinks. |
+| List | Not available. |
+| Number | Not available. |
+| Checkbox | Not available. |
+| Date | Not available. |
+| Date & Time | Not available. |
+| tags | Not available. |
+| aliases | Not available. |
+| cssclasses | Not available. |
+
+A text-looking value under a Date or List property does not make that property eligible. Refresh the property index after changing a property type in Obsidian. Non-text values and complete wikilink rows do not offer Split, even under a Text property. A Text property containing a list is not converted again: only scalar text in matching notes can change.
+
+1. Confirm the property is configured as **Text**, then open a text value such as `topics` → `research, writing, editing`.
 2. Choose **Split into list…**.
 3. Enter the literal separator in **Delimiter**; the default is a comma.
 4. Review and apply.
@@ -150,8 +166,9 @@ The undo command is available only when an undo batch exists and no edit is runn
 | Situation | Meaning and next step |
 | --- | --- |
 | No notes will change | Check the replacement or delimiter and the operation's eligibility rules. For Split, confirm the source is scalar text and yields at least two parts. |
+| Split is missing | Check the property-type table above. Refresh the index after changing the configured type. The restriction affects Split, not the other value actions. |
 | Merge is missing | No other value of the same stored type exists under the property. Rename can create a target value first. |
-| Notes were skipped on Apply | Their property changed after preview. Reopen the action to generate a fresh preview. |
+| Notes were skipped on Apply | Their property changed after preview or their folder was excluded. Reopen the action to generate a fresh preview. |
 | Some writes failed | Successful writes remain applied and undoable. Inspect the path-specific notices and resolve the reported issue before retrying. The batch is not all-or-nothing. |
 | Undo skipped a note | The edited property no longer matches the batch's result. Inspect the note; undo will not overwrite that later value. |
 | Undo reports a missing note | It stores paths. A renamed, moved, or deleted note cannot be restored through its old path. |
@@ -159,4 +176,8 @@ The undo command is available only when an undo batch exists and no edit is runn
 | Undo disappeared after reload | Undo is held in memory and is cleared when the plugin is disabled, reloaded, or Obsidian restarts. |
 | YAML layout or comments changed | Obsidian's frontmatter writer may reformat YAML. Undo restores property values, not original formatting, comments, or quoting. |
 
-Edits change frontmatter property values. They do not change property names, note bodies, or configured property types. Undo is a temporary recovery convenience, not a persistent history or a replacement for vault backups.
+The value actions in this guide change frontmatter property values. They do not change property names, note bodies, or configured property types. Undo is a temporary recovery convenience, not a persistent history or a replacement for vault backups.
+
+## Excluded folders
+
+The development build respects **Settings → Supercharged Properties → Excluded folders** for previews and new writes. Search and saved views do not limit a batch, but folder exclusions do. Notes newly excluded after a preview are skipped at apply time. Undo remains available for earlier edits even if their folders are subsequently excluded.

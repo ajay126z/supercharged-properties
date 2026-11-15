@@ -152,6 +152,14 @@ var PropertyIndex = class {
   }
 };
 
+// src/folder-exclusions.ts
+function excludedFolders(text) {
+  return [...new Set(text.split("\n").map((line) => line.trim().replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/")).filter((path) => path && !path.split("/").includes("..")))];
+}
+function isFolderExcluded(path, folders) {
+  return folders.some((folder) => path.startsWith(`${folder}/`));
+}
+
 // src/sorting.ts
 var sortOptions = {
   name: "Property name (A to Z)",
@@ -253,6 +261,9 @@ var PropertyTypeResolver = class {
     return TYPE_ICONS.get(this.typeFor(property)) ?? "text";
   }
 };
+function supportsTextSplit(property, resolver) {
+  return !BUILTIN_TYPES.has(fold(property.id)) && resolver.typeFor(property) === "text";
+}
 
 // src/value-editor.ts
 var import_obsidian2 = require("obsidian");
@@ -383,8 +394,9 @@ function coerce(kind, replacement) {
 
 // src/value-editor.ts
 var ValueEditor = class {
-  constructor(app) {
+  constructor(app, includesPath = () => true) {
     this.app = app;
+    this.includesPath = includesPath;
     this.busy = false;
   }
   canUndo() {
@@ -393,6 +405,7 @@ var ValueEditor = class {
   preview(request, paths) {
     const changes = [];
     for (const path of new Set(paths)) {
+      if (!this.includesPath(path)) continue;
       const file = this.file(path);
       if (!file) continue;
       const frontmatter = this.frontmatter(file);
@@ -411,6 +424,7 @@ var ValueEditor = class {
     const changes = [], conflicts = [];
     if (error) return { source, target, total: 0, changes, conflicts, error };
     for (const path of new Set(paths)) {
+      if (!this.includesPath(path)) continue;
       const file = this.file(path);
       const frontmatter = file ? this.frontmatter(file) : void 0;
       if (!frontmatter) {
@@ -441,6 +455,10 @@ var ValueEditor = class {
     let unchanged = 0;
     try {
       for (const change of preview.changes) {
+        if (!this.includesPath(change.path)) {
+          unchanged++;
+          continue;
+        }
         const file = this.file(change.path);
         if (!file) {
           failures.push({ path: change.path, message: "Note not found." });
@@ -449,6 +467,7 @@ var ValueEditor = class {
         let snapshot;
         try {
           await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+            if (!this.includesPath(change.path)) return;
             if (!Object.prototype.hasOwnProperty.call(frontmatter, change.key) || !sameValue(frontmatter[change.key], change.original)) return;
             if (change.targetKey !== void 0 && !canRename(frontmatter, change.key, change.targetKey)) return;
             snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: cloneValue(change.replacement), targetKey: change.targetKey };
@@ -531,7 +550,7 @@ var PropertyRenameModal = class extends import_obsidian3.Modal {
     this.titleEl.textContent = "Rename property";
     const content = this.contentEl;
     content.classList.add("pv-edit-modal");
-    content.createEl("p", { text: `Rename ${this.options.property} across the vault, including notes hidden by filters.` });
+    content.createEl("p", { text: `Rename ${this.options.property} across included folders in the vault, including notes hidden by search filters. Excluded folders are skipped.` });
     const label = content.createEl("label", { cls: "pv-edit-field" });
     label.createSpan({ text: "New property name" });
     const input = label.createEl("input", { cls: "pv-edit-input" });
@@ -631,7 +650,7 @@ var ValueEditModal = class extends import_obsidian4.Modal {
         this.request = { ...this.request, delimiter: value };
       }, "Split the current text into a list. Each trimmed part becomes an item.");
     }
-    el(this.contentEl, "p", "pv-edit-hint", "Edits affect matching values across the vault, including notes hidden by filters. Undo is available for the last batch until the plugin reloads. Applying another batch replaces that undo. YAML formatting may change.");
+    el(this.contentEl, "p", "pv-edit-hint", "Edits affect matching values in included folders across the vault, including notes hidden by search filters. Excluded folders are skipped. Undo is available for the last batch until the plugin reloads. Applying another batch replaces that undo. YAML formatting may change.");
     this.previewEl = el(this.contentEl, "div", "pv-edit-preview");
     this.previewEl.setAttribute("aria-live", "polite");
     const actions = el(this.contentEl, "div", "pv-edit-actions");
@@ -728,7 +747,7 @@ function el(parent, tag, cls = "", text = "") {
 
 // src/main.ts
 var VIEW = "supercharged-properties";
-var defaults = { counts: true, sort: "name", hidden: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+var defaults = { counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
   constructor() {
     super(...arguments);
@@ -747,12 +766,13 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
       pinned: Array.isArray(saved?.pinned) ? saved.pinned.filter((v) => typeof v === "string") : [],
       counts: typeof saved?.counts === "boolean" ? saved.counts : true,
       sort: sortOrder(saved?.sort),
+      excludedFolders: typeof saved.excludedFolders === "string" ? saved.excludedFolders : "",
       hidden: typeof saved?.hidden === "string" ? saved.hidden : "",
       expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((v) => typeof v === "string") : []
     };
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
-    this.valueEditor = new ValueEditor(this.app);
+    this.valueEditor = new ValueEditor(this.app, (path) => this.includesPath(path));
     this.registerView(VIEW, (leaf) => new PropertiesView(leaf, this));
     this.addRibbonIcon("list-tree", "Open Supercharged Properties", () => {
       void this.open();
@@ -775,15 +795,15 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
     });
     this.addSettingTab(new PreferencesTab(this));
     this.registerEvent(this.app.metadataCache.on("changed", (file, _data, cache) => {
-      this.index.update(file.path, cache.frontmatter);
+      this.updateIndexedNote(file.path, cache.frontmatter);
       this.refresh();
     }));
     this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRebuild()));
     this.registerEvent(this.app.vault.on("create", (file) => {
-      if (file instanceof import_obsidian5.TFile && file.extension === "md") {
+      if (file instanceof import_obsidian5.TFile && file.extension === "md" && this.includesPath(file.path)) {
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache) {
-          this.index.update(file.path, cache.frontmatter);
+          this.updateIndexedNote(file.path, cache.frontmatter);
           this.refresh();
         }
       }
@@ -797,7 +817,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
       if (file instanceof import_obsidian5.TFile) {
         this.index.remove(oldPath);
-        if (file.extension === "md") this.index.update(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
+        if (file.extension === "md" && this.includesPath(file.path)) this.updateIndexedNote(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
         this.refresh();
       } else this.scheduleRebuild();
     }));
@@ -807,6 +827,18 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
     });
     this.app.workspace.onLayoutReady(() => this.rebuild());
   }
+  includesPath(path) {
+    return !isFolderExcluded(path, excludedFolders(this.prefs.excludedFolders));
+  }
+  updateIndexedNote(path, frontmatter) {
+    if (this.includesPath(path)) this.index.update(path, frontmatter);
+    else this.index.remove(path);
+  }
+  async setExcludedFolders(value) {
+    this.prefs.excludedFolders = value;
+    this.rebuild();
+    await this.save();
+  }
   scheduleRebuild() {
     window.clearTimeout(this.rebuildTimer);
     this.rebuildTimer = window.setTimeout(() => this.rebuild(), 150);
@@ -815,7 +847,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
     window.clearTimeout(this.rebuildTimer);
     this.index = new PropertyIndex();
     for (const file of this.app.vault.getMarkdownFiles()) {
-      this.index.update(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
+      if (this.includesPath(file.path)) this.updateIndexedNote(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
     }
     void this.reloadTypes();
   }
@@ -869,13 +901,20 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
   }
   editValue(property, node, mode) {
     const [kind] = JSON.parse(node.id);
+    if (mode === "split" && (kind !== "string" || !supportsTextSplit(property, this.typeResolver))) return;
     const request = { property: property.id, kind, value: node.label, mode, replacement: node.label };
     const siblings = [...property.values.values()].filter((value) => value !== node && JSON.parse(value.id)[0] === kind).map((value) => value.label);
     new ValueEditModal(this.app, {
       request: mode === "merge" ? { ...request, replacement: siblings[0] } : request,
       siblings,
-      preview: (edit) => this.valueEditor.preview(edit, node.paths),
-      apply: (preview) => this.applyValueEdit(preview)
+      preview: (edit) => edit.mode === "split" && !supportsTextSplit(property, this.typeResolver) ? { total: 0, changes: [] } : this.valueEditor.preview(edit, node.paths),
+      apply: (preview) => {
+        if (mode === "split" && !supportsTextSplit(property, this.typeResolver)) {
+          new import_obsidian5.Notice("Split into list is only available for text properties.");
+          return Promise.resolve();
+        }
+        return this.applyValueEdit(preview);
+      }
     }).open();
   }
   async openTab() {
@@ -1403,7 +1442,7 @@ ${property.label}`;
         if ([...property.values.values()].some((value) => value !== node && JSON.parse(value.id)[0] === kind)) addEdit("Merge value\u2026", "merge");
         if (kind === "string" && !isWikilink(node.label)) {
           addEdit("Convert to wikilink\u2026", "wikilink");
-          addEdit("Split into list\u2026", "split");
+          if (supportsTextSplit(property, this.plugin.typeResolver)) addEdit("Split into list\u2026", "split");
         }
       }
     }
@@ -1428,6 +1467,9 @@ var PreferencesTab = class extends import_obsidian5.PluginSettingTab {
           this.plugin.prefs.sort = sortOrder(value);
           await this.plugin.save();
         }));
+      } },
+      { name: "Excluded folders", desc: "One vault-relative folder path per line, for example Templates or Resources/Templates. Includes subfolders; paths are case-sensitive, not patterns. Excluded notes are omitted from the tree, counts, copied links, and new bulk edits. Leave empty to include all folders.", render: (setting) => {
+        setting.addTextArea((text) => text.setValue(this.plugin.prefs.excludedFolders).onChange((value) => this.plugin.setExcludedFolders(value)));
       } },
       { name: "Hidden properties", desc: "One property name per line. Leave empty to show all YAML properties.", render: (setting) => {
         setting.addTextArea((text) => text.setValue(this.plugin.prefs.hidden).onChange(async (value) => {
