@@ -1,10 +1,10 @@
 # Bulk value editing
 
-Bulk edits let you standardize a property's values across notes. They are explicit write actions; ordinary browsing remains read-only. The four value operations were introduced in 1.1.0. This guide describes the current development build, which also adds folder exclusions, shared undo with property-name renaming, and text-property-only Split eligibility.
+Bulk edits let you standardize a property's values across notes. They are explicit write actions; ordinary browsing remains read-only. The four value operations were introduced in 1.1.0. This guide describes the 1.2.0, which also adds folder exclusions, shared undo with property-name renaming, and text-property-only Split eligibility.
 
 [Back to the user guide](USER-GUIDE.md)
 
-In development builds, value edits share one undo slot with [property-name renames](PROPERTY-RENAMING.md). The command is **Undo last property edit**; in 1.1.0 it is named **Undo last value edit**.
+In 1.2.0, value edits share one undo slot with [property-name renames](PROPERTY-RENAMING.md). The command is **Undo last property edit**; in 1.1.0 it is named **Undo last value edit**.
 
 ## Preview and confirm every batch
 
@@ -102,7 +102,7 @@ Existing complete wikilinks do not offer this action. Strings containing bracket
 
 ## Split text into a YAML list
 
-In the development build, **Split into list…** appears only for plain text values under properties configured as **Text** (including the default text type for unconfigured properties). It is hidden for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses properties. The built-in `tags`, `aliases`, and `cssclasses` names remain ineligible even if their type is overridden to Text.
+In 1.2.0, **Split into list…** appears only for plain text values under properties configured as **Text** (including the default text type for unconfigured properties). It is hidden for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses properties. The built-in `tags`, `aliases`, and `cssclasses` names remain ineligible even if their type is overridden to Text.
 
 | Property type or special name | Split into list |
 | --- | --- |
@@ -180,4 +180,4 @@ The value actions in this guide change frontmatter property values. They do not 
 
 ## Excluded folders
 
-The development build respects **Settings → Supercharged Properties → Excluded folders** for previews and new writes. Search and saved views do not limit a batch, but folder exclusions do. Notes newly excluded after a preview are skipped at apply time. Undo remains available for earlier edits even if their folders are subsequently excluded.
+Version 1.2.0 respects **Settings → Supercharged Properties → Excluded folders** for previews and new writes. Search and saved views do not limit a batch, but folder exclusions do. Notes newly excluded after a preview are skipped at apply time. Undo remains available for earlier edits even if their folders are subsequently excluded.

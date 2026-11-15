@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. Property-name and value edits write frontmatter only after you review a preview and confirm.
 
-This guide describes the current development build. Published 1.1.0 includes bulk value editing, but does not include property-name renaming, excluded folders, or the text-property-only restriction on Split. The shared undo command is called **Undo last property edit** in development builds and **Undo last value edit** in 1.1.0.
+This guide describes **1.2.0**, including property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 ## Contents
 
@@ -122,7 +122,7 @@ A selection controls which properties are displayed, not which notes belong to a
 
 ## Exclude template or other folders
 
-In the current development build, open **Settings → Supercharged Properties → Excluded folders** and enter one vault-relative folder path per line:
+In the 1.2.0, open **Settings → Supercharged Properties → Excluded folders** and enter one vault-relative folder path per line:
 
 ```text
 Templates
@@ -203,7 +203,7 @@ Obsidian Search applies its own matching and type rules, so results may differ f
 
 ## Rename property names
 
-In development builds after 1.1.0, right-click a property row and choose **Rename property…**. Review all affected and skipped notes before confirming. Values keep their stored types; destination conflicts are skipped. Read the [property-name renaming guide](PROPERTY-RENAMING.md) for case-only renames, preference updates, configured-type limitations, and shared undo.
+In 1.2.0, right-click a property row and choose **Rename property…**. Review all affected and skipped notes before confirming. Values keep their stored types; destination conflicts are skipped. Read the [property-name renaming guide](PROPERTY-RENAMING.md) for case-only renames, preference updates, configured-type limitations, and shared undo.
 
 ## Edit values across notes
 
@@ -262,7 +262,7 @@ The interface provides labelled controls, visible focus, expand/collapse state, 
 | A setting does not persist | Check the settings-write notice, vault permissions, and available storage, then retry. |
 | Split into list is missing | Confirm the property is configured as Text, the selected value is text, and the property is not tags, aliases, or cssclasses. After a type change, refresh the property index. |
 | A template note still appears | Use a vault-relative path with the exact folder capitalization. Templates excludes Templates/Note.md, not Other/Templates/Note.md. Core Search is independent of this setting. |
-| Rename property is missing | Confirm you are using a development build with this feature and open the property-row menu, not a value-row menu. |
+| Rename property is missing | Confirm you are using version 1.2.0 or later and open the property-row menu, not a value-row menu. |
 | An edit is skipped, fails, or cannot be undone | See [edit troubleshooting and limits](BULK-EDITING.md#troubleshooting-and-limits). |
 
 For development and release information, see the [documentation index](README.md).

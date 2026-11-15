@@ -2,7 +2,7 @@
 
 ## For users
 
-These guides describe the current development build. Property-name renaming, excluded folders, and the text-property-only Split restriction are not included in the published 1.1.0 binaries. See the release notes below for version-specific behavior.
+These guides describe **1.2.0**, including property-name renaming, excluded folders, and text-property-only Split eligibility. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
@@ -30,6 +30,7 @@ These guides describe the current development build. Property-name renaming, exc
 
 ## Release notes
 
+- [1.2.0](releases/1.2.0.md)
 - [1.1.0](releases/1.1.0.md)
 - [1.0.3](releases/1.0.3.md)
 - [1.0.2](releases/1.0.2.md)

@@ -6,14 +6,14 @@ Browsing remains read-only. Explicit property-name and value actions can modify 
 
 ## Feature availability
 
-This README describes the current development build. Published **1.1.0** includes bulk value editing. Property-name renaming, excluded folders, and the restriction of Split into list to Text properties are development changes awaiting a release. The development undo command is **Undo last property edit**; 1.1.0 calls it **Undo last value edit**.
+This README describes **1.2.0**, which adds property-name renaming, excluded folders, and text-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 For complete instructions, start with the [user guide](docs/USER-GUIDE.md).
 
 ## Features
 
-- **Property-name renaming (development build)** — rename a property across the vault with a complete preview, conflict skipping, and shared one-step undo.
-- **Excluded folders (development build)** — omit template folders and their subfolders from the tree, counts, copied links, and new bulk edits.
+- **Property-name renaming** — rename a property across the vault with a complete preview, conflict skipping, and shared one-step undo.
+- **Excluded folders** — omit template folders and their subfolders from the tree, counts, copied links, and new bulk edits.
 - **Bulk value editing** — rename or merge values, convert text to wikilinks, and split eligible text into lists with preview, confirmation, and one-step undo.
 - **Full property tree** — properties, values, and notes from included folders.
 - **Typed value rows** — strings, numbers, booleans, empty values, and nested lists are kept distinct. Repeated values are deduplicated per note.
@@ -174,6 +174,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture, testing, and review con
 - [Publishing](docs/PUBLISHING.md)
 - [Release QA](docs/RELEASE-QA.md)
 - [Changelog](CHANGELOG.md)
+- [1.2.0 release notes](docs/releases/1.2.0.md)
 - [1.1.0 release notes](docs/releases/1.1.0.md)
 - [1.0.3 release notes](docs/releases/1.0.3.md)
 - [1.0.2 release notes](docs/releases/1.0.2.md)

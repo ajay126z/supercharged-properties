@@ -1,6 +1,6 @@
 # Rename property names
 
-This feature is available in the current development build after 1.1.0. It changes a property's **name**, for example `author` → `authors`, while preserving each note's value and stored type. It does not merge properties.
+This feature is available starting in **1.2.0**. It changes a property's **name**, for example `author` → `authors`, while preserving each note's value and stored type. It does not merge properties.
 
 [Back to the user guide](USER-GUIDE.md)
 
@@ -66,4 +66,4 @@ Renaming special property names such as `tags`, `aliases`, or `cssclasses` chang
 
 ## Excluded folders
 
-The development build respects **Settings → Supercharged Properties → Excluded folders** for previews and new writes. Search and saved views do not limit a batch, but folder exclusions do. Notes newly excluded after a preview are skipped at apply time. Undo remains available for earlier edits even if their folders are subsequently excluded.
+Version 1.2.0 respects **Settings → Supercharged Properties → Excluded folders** for previews and new writes. Search and saved views do not limit a batch, but folder exclusions do. Notes newly excluded after a preview are skipped at apply time. Undo remains available for earlier edits even if their folders are subsequently excluded.
