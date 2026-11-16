@@ -2,7 +2,7 @@
 
 ## Project
 
-Supercharged Properties is an Obsidian plugin that indexes YAML frontmatter across the vault and renders a full-pane tree of properties, values, and notes. It supports search, sorting, property scoping, saved profiles, pinning, hiding, and native Obsidian Search integration. Browsing is read-only; explicit bulk value, property-name, and deletion edits use preview, confirmation, conflict checks, and session-scoped one-step undo through public processFrontMatter.
+Supercharged Properties is an Obsidian plugin that indexes YAML frontmatter across the vault and renders a full-pane tree of properties, values, and notes. It supports search, sorting, property scoping, saved profiles, pinning, hiding, and native Obsidian Search integration. Browsing is read-only; explicit selected-note, bulk value, property-name, and deletion edits use preview, confirmation, conflict checks, and session-scoped one-step undo through public processFrontMatter.
 
 - Plugin ID: `supercharged-properties`
 - Runtime entry: `src/main.ts` bundled to `main.js` (CommonJS, ES2020)
@@ -22,7 +22,7 @@ export PATH="$HOME/.nvm/versions/node/v24.22.2/bin:$PATH"
 ```sh
 npm run lint       # ESLint with eslint-plugin-obsidianmd, zero warnings allowed
 npm run build      # tsc --noEmit, then esbuild -> main.js
-npm test           # Vitest, 17 files / 137 tests
+npm test           # Vitest test suite
 npm test -- tests/view.test.ts             # one suite
 npm test -- tests/search.test.ts -t quotes # one test by name
 npm run validate   # lint -> build -> test -> release validation
@@ -44,6 +44,9 @@ Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply(
 
 Supporting modules:
 
+- `src/note-menu.ts` - desktop/keyboard context menus and touch long-press with movement, scroll, and click guards.
+- `src/note-value-dialog.ts` - selected-note text assignment, explicit empty values, preview, and mobile viewport fitting.
+- `src/modal-layout.ts` - sizes the selected-note dialog container to the visual viewport without measuring centered content; keeps mobile dialogs spacious and keyboard-safe.
 - `src/mobile-layout.ts` - fits touch views to the visual viewport while the keyboard is open, with listener cleanup on view close.
 - `src/sorting.ts` - sort modes and natural ordering with deterministic ID tie-breaks.
 - `src/search.ts` - quotes Obsidian property queries; null/empty uses the `null` operator.
@@ -52,7 +55,7 @@ Supporting modules:
 - `src/property-types.ts` - resolves property type icons from the vault's `types.json` through public adapter APIs, with built-in and text fallbacks. `supportsTextSplit` gates the text-only Split edit.
 - `src/value-operations.ts` - pure frontmatter transforms for rename, merge, wikilink, split, and delete edits.
 - `src/property-rename.ts` - property-name validation, folded collision checks, and preference carry-over after a rename.
-- `src/value-editor.ts` - preview/apply/undo over public `processFrontMatter`, including property deletion, with a busy guard that rejects overlapping batches.
+- `src/value-editor.ts` - preview/apply/undo over public `processFrontMatter`, including property deletion and selected-note text assignment, with a busy guard that rejects overlapping batches.
 - `src/value-dialog.ts`, `src/property-rename-dialog.ts`, `src/property-delete-dialog.ts` - preview and confirmation modals.
 - `styles.css` - all view styling, using Obsidian theme variables. Keep selectors prefixed with `pv-`.
 

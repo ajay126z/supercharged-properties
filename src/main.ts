@@ -6,12 +6,14 @@ import { excludedFolders, isFolderExcluded } from './folder-exclusions';
 import { SortOrder, sortOptions, sortOrder, sortNodes } from './sorting';
 import { propertyQuery } from './search';
 import { loadProfiles, sameKeys, PropertyProfile } from './profiles';
-import { PropertyTypeResolver, supportsTextSplit } from './property-types';
+import { PropertyTypeResolver, supportsTextSplit, supportsTextAssignment } from './property-types';
 import { ValueEditor, type ValueEditPreview, type ValueEditResult } from './value-editor';
 import { PropertyRenameModal } from './property-rename-dialog';
 import { PropertyDeleteModal } from './property-delete-dialog';
 import { includeRenamedProperty } from './property-rename';
 import { ValueEditModal } from './value-dialog';
+import { NoteValueModal } from './note-value-dialog';
+import { attachNoteMenu } from './note-menu';
 import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-operations';
 import type { PropertyValueKind } from './frontmatter-values';
 
@@ -45,7 +47,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     };
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
-    this.valueEditor = new ValueEditor(this.app, path => this.includesPath(path));
+    this.valueEditor = new ValueEditor(this.app, path => this.includesPath(path), id => supportsTextAssignment({ id }, this.typeResolver));
     this.registerView(VIEW, leaf => new PropertiesView(leaf, this));
     this.addRibbonIcon('list-tree', 'Open Supercharged Properties', () => { void this.open(); });
     this.addCommand({ id: 'open', name: 'Open sidebar', callback: () => { void this.open(); } });
@@ -186,6 +188,29 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     }).open();
   }
 
+  changeNoteValue(property: PropertyNode, paths: readonly string[], complete: () => void): void {
+    if (!supportsTextAssignment(property, this.typeResolver)) return;
+    const selected = [...new Set(paths)];
+    const values = [...property.values.values()]
+      .filter(value => (JSON.parse(value.id) as string[])[0] === 'string')
+      .map(value => value.label).sort(natural);
+    new NoteValueModal(this.app, {
+      property: property.label,
+      count: selected.length,
+      values,
+      preview: replacement => this.valueEditor.previewNoteValue(property.id, replacement, selected),
+      apply: async preview => {
+        // Refresh configured types before the write as the dialog may have remained open.
+        await this.typeResolver.load();
+        const result = await this.valueEditor.apply(preview);
+        new Notice(`Updated ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 10000);
+        for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
+        this.rebuild();
+        complete();
+      }
+    }).open();
+  }
+
   editValue(property: PropertyNode, node: ValueNode, mode: ValueEditMode): void {
     const [kind] = JSON.parse(node.id) as [PropertyValueKind, string];
     if (mode === 'split' && (kind !== 'string' || !supportsTextSplit(property, this.typeResolver))) return;
@@ -228,6 +253,11 @@ function el<K extends keyof HTMLElementTagNameMap>(parent: HTMLElement, tag: K, 
 
 export class PropertiesView extends ItemView {
   private disposeViewport: (() => void) | undefined;
+  private selectedNotes: { property: string; paths: Set<string>; context: string } | undefined;
+  private noteAnchor: { property: string; row: string; context: string } | undefined;
+  private renderedNotes = new Map<string, Array<{ row: string; path: string }>>();
+  private selectionBar!: HTMLElement;
+  private noteMenuDisposers: Array<() => void> = [];
   private query = '';
   private searchScope = 'any';
   private searchHeader!: HTMLElement;
@@ -260,6 +290,7 @@ export class PropertiesView extends ItemView {
   async onOpen(): Promise<void> {
     this.contentEl.replaceChildren();
     this.contentEl.classList.add('pv-view');
+    this.contentEl.addEventListener('keydown', this.onSelectionKeydown);
     this.disposeViewport?.();
     this.disposeViewport = fitVisibleViewport(this.contentEl);
     const toolbar = el(this.contentEl, 'div', 'pv-toolbar');
@@ -316,6 +347,8 @@ export class PropertiesView extends ItemView {
     this.searchToggle.setAttribute('aria-expanded', 'false');
     this.scopePanel = el(toolbar, 'div', 'pv-scope-panel'); this.scopePanel.hidden = true;
     this.summary = el(this.contentEl, 'div', 'pv-summary'); this.summary.setAttribute('aria-live', 'polite');
+    this.selectionBar = el(this.contentEl, 'div', 'pv-note-selection');
+    this.selectionBar.hidden = true;
     this.body = el(this.contentEl, 'div', 'pv-tree');
     this.body.setAttribute('aria-label', 'Properties, values and notes');
     this.contentEl.appendChild(this.summary);
@@ -323,6 +356,10 @@ export class PropertiesView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.contentEl.removeEventListener('keydown', this.onSelectionKeydown);
+    this.disposeNoteMenus();
+    this.selectedNotes = undefined;
+    this.noteAnchor = undefined;
     this.disposeViewport?.();
     this.disposeViewport = undefined;
   }
@@ -492,6 +529,9 @@ export class PropertiesView extends ItemView {
   render(): void {
     if (!this.body) return;
     this.syncProfiles();
+    this.disposeNoteMenus();
+    this.syncNoteSelection();
+    this.renderedNotes.clear();
     const focusId = (this.contentEl.ownerDocument.activeElement as HTMLElement | null)?.dataset.pvFocus;
     const scroll = this.body.scrollTop; this.body.replaceChildren();
     if (!this.scopePanel.hidden) this.renderScopeChoices();
@@ -537,13 +577,13 @@ export class PropertiesView extends ItemView {
         valueToggle.disabled = !!this.query && !keyMatches && !this.matches(value.label, 'value') && noteMatches(value);
         const valueButton = this.nodeButton(valueRow, property, value, toggleValue);
         valueButton.setAttribute('aria-expanded', String(showNotes));
-        if (showNotes) this.renderNotes(valueGroup, value, id, keyMatches || this.matches(value.label, 'value'));
+        if (showNotes) this.renderNotes(valueGroup, property, value, id, keyMatches || this.matches(value.label, 'value'));
       }
       if (values.length > limit) this.button(children, `Show more (${values.length - limit})`, 'Show more values', () => { this.limits.set(property.id, limit + 100); this.render(); });
       // Properties with unsupported object values still expose their notes.
       const assigned = new Set([...property.values.values()].flatMap(value => [...value.paths]));
       const otherPaths = new Set([...property.paths].filter(path => !assigned.has(path)));
-      if (otherPaths.size) this.renderNotes(children, { ...property, paths: otherPaths }, property.id, keyMatches);
+      if (otherPaths.size) this.renderNotes(children, property, { ...property, paths: otherPaths }, property.id, keyMatches);
     }
     this.allExpanded = this.visibleKeys.length > 0 && (!!this.query || this.visibleKeys.every(key => this.plugin.prefs.expanded.includes(key)));
     const toggleLabel = this.allExpanded ? 'Collapse all properties' : 'Expand all properties';
@@ -581,22 +621,157 @@ export class PropertiesView extends ItemView {
     if (this.plugin.prefs.counts) el(button, 'span', 'pv-count', String(node.paths.size));
     return button;
   }
-  private renderNotes(parent: HTMLElement, node: ValueNode, id: string, ancestorMatches: boolean): void {
+  private renderNotes(parent: HTMLElement, property: PropertyNode, node: ValueNode, id: string, ancestorMatches: boolean): void {
     const notes = el(parent, 'div', 'pv-notes');
     const paths = [...node.paths].sort(natural).filter(path => !this.query || ancestorMatches || this.matches(path, 'note'));
     const limitKey = `notes:${id}`; const limit = this.limits.get(limitKey) ?? 100;
     for (const path of paths.slice(0, limit)) {
-      const button = this.button(notes, '', path, () => {}); button.className = 'pv-file';
+      const rowId = JSON.stringify(['note', property.id, id, path]);
+      const rendered = this.renderedNotes.get(property.id) ?? [];
+      rendered.push({ row: rowId, path });
+      this.renderedNotes.set(property.id, rendered);
+      const row = el(notes, 'div', 'pv-note-row');
+      if (this.selectedNotes?.property === property.id) {
+        const checkbox = el(row, 'input', 'pv-note-checkbox');
+        checkbox.type = 'checkbox'; checkbox.checked = this.selectedNotes.paths.has(path);
+        checkbox.setAttribute('aria-label', `Select ${path} for ${property.label}`);
+        checkbox.dataset.pvFocus = JSON.stringify(['note-select', property.id, id, path]);
+        checkbox.addEventListener('click', event => {
+          if (event.shiftKey) {
+            event.preventDefault();
+            this.selectNoteRange(property, rowId, path);
+          }
+        });
+        checkbox.addEventListener('change', () => {
+          this.noteAnchor = { property: property.id, row: rowId, context: this.noteSelectionContext() };
+          if (!this.selectedNotes) return;
+          if (checkbox.checked) this.selectedNotes.paths.add(path); else this.selectedNotes.paths.delete(path);
+          this.render();
+        });
+      }
+      const button = this.button(row, '', path, () => {}); button.className = 'pv-file';
+      button.dataset.pvFocus = rowId;
+      button.dataset.notePath = path;
+      button.classList.toggle('is-selected', this.selectedNotes?.property === property.id && this.selectedNotes.paths.has(path));
+      if (supportsTextAssignment(property, this.plugin.typeResolver)) {
+        button.setAttribute('aria-haspopup', 'menu');
+        this.noteMenuDisposers.push(attachNoteMenu(button, point => this.showNoteMenu(point, property, path, rowId)));
+        button.addEventListener('keydown', event => {
+          if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+          event.preventDefault();
+          const notes = this.renderedNotes.get(property.id) ?? [];
+          const index = notes.findIndex(note => note.row === rowId);
+          const next = notes[index + (event.key === 'ArrowDown' ? 1 : -1)];
+          if (!next) return;
+          if (event.shiftKey) {
+            const paths = new Set(this.selectedNotes?.property === property.id ? this.selectedNotes.paths : []);
+            paths.add(path); paths.add(next.path);
+            this.selectedNotes = { property: property.id, paths, context: this.noteSelectionContext() };
+            this.render();
+          }
+          Array.from(this.body.querySelectorAll<HTMLElement>('.pv-file')).find(note => note.dataset.pvFocus === next.row)?.focus();
+        });
+      }
       setIcon(el(button, 'span', 'pv-icon'), 'file-text');
       el(button, 'span', 'pv-note-name', path.split('/').pop()?.replace(/\.md$/, '') ?? path);
       const folder = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
       if (folder) el(button, 'small', 'pv-note-path', folder);
       button.addEventListener('click', event => {
+        const modifiedOpen = event.ctrlKey || event.metaKey;
+        if (supportsTextAssignment(property, this.plugin.typeResolver)) {
+          if (!modifiedOpen && event.shiftKey) {
+            event.preventDefault();
+            this.selectNoteRange(property, rowId, path);
+            return;
+          }
+          if (!modifiedOpen && (event.altKey || (usesTouchLayout(this.contentEl) && this.selectedNotes?.property === property.id))) {
+            event.preventDefault();
+            const paths = new Set(this.selectedNotes?.property === property.id ? this.selectedNotes.paths : []);
+            if (paths.has(path)) paths.delete(path);
+            else {
+              paths.add(path);
+              this.noteAnchor = { property: property.id, row: rowId, context: this.noteSelectionContext() };
+            }
+            this.selectedNotes = { property: property.id, paths, context: this.noteSelectionContext() };
+            this.render(); return;
+          }
+          this.noteAnchor = { property: property.id, row: rowId, context: this.noteSelectionContext() };
+        } else this.noteAnchor = undefined;
+        this.selectedNotes = undefined;
+        this.render();
         const file = this.app.vault.getAbstractFileByPath(path);
         if (file instanceof TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new Notice('Unable to open note.'));
       });
     }
     if (paths.length > limit) this.button(notes, 'Show more notes', 'Show 100 more notes', () => { this.limits.set(limitKey, limit + 100); this.render(); });
+  }
+
+  private selectNoteRange(property: PropertyNode, row: string, path: string): void {
+    const context = this.noteSelectionContext();
+    const notes = this.renderedNotes.get(property.id) ?? [];
+    const anchor = this.noteAnchor;
+    const start = anchor?.property === property.id && anchor.context === context
+      ? notes.findIndex(note => note.row === anchor.row) : -1;
+    const end = notes.findIndex(note => note.row === row);
+    const paths = start >= 0 && end >= 0
+      ? notes.slice(Math.min(start, end), Math.max(start, end) + 1).map(note => note.path)
+      : [path];
+    if (start < 0) this.noteAnchor = { property: property.id, row, context };
+    const selected = new Set(this.selectedNotes?.property === property.id ? this.selectedNotes.paths : []);
+    for (const path of paths) selected.add(path);
+    this.selectedNotes = { property: property.id, paths: selected, context };
+    this.render();
+  }
+
+  private onSelectionKeydown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' && this.selectedNotes) {
+      event.preventDefault(); event.stopPropagation();
+      this.selectedNotes = undefined;
+      this.render();
+    }
+  };
+
+  private disposeNoteMenus(): void {
+    for (const dispose of this.noteMenuDisposers) dispose();
+    this.noteMenuDisposers = [];
+  }
+
+  private noteSelectionContext(): string {
+    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders]);
+  }
+
+  private syncNoteSelection(): void {
+    if (this.noteAnchor?.context !== this.noteSelectionContext()) this.noteAnchor = undefined;
+    let selection = this.selectedNotes;
+    const property = selection && this.plugin.index.properties.get(selection.property);
+    if (selection && (!property || !supportsTextAssignment(property, this.plugin.typeResolver) || selection.context !== this.noteSelectionContext())) {
+      this.selectedNotes = selection = undefined;
+    }
+    this.selectionBar.replaceChildren();
+    this.selectionBar.hidden = !selection;
+    if (!selection || !property) return;
+    for (const path of selection.paths) if (!property.paths.has(path)) selection.paths.delete(path);
+    el(this.selectionBar, 'span', 'pv-selection-count', `${selection.paths.size} selected · ${property.label}`);
+    const change = this.button(this.selectionBar, `Change ${property.label}…`, `Change ${property.label} for selected notes`, () => {
+      this.plugin.changeNoteValue(property, [...selection.paths], () => { this.selectedNotes = undefined; this.noteAnchor = undefined; this.render(); });
+    });
+    change.disabled = selection.paths.size === 0;
+    this.button(this.selectionBar, 'Cancel', 'Cancel note selection', () => { this.selectedNotes = undefined; this.noteAnchor = undefined; this.render(); });
+  }
+
+  private showNoteMenu(point: { x: number; y: number }, property: PropertyNode, path: string, row: string): void {
+    const menu = new Menu();
+    const selection = this.selectedNotes;
+    const paths = selection?.property === property.id && selection.paths.has(path) ? [...selection.paths] : [path];
+    menu.addItem(item => item.setTitle(`Change ${property.label}…`).setIcon('pencil').onClick(() => {
+      this.plugin.changeNoteValue(property, paths, () => { this.selectedNotes = undefined; this.noteAnchor = undefined; this.render(); });
+    }));
+    menu.addItem(item => item.setTitle('Select notes…').setIcon('list-checks').onClick(() => {
+      this.noteAnchor = { property: property.id, row, context: this.noteSelectionContext() };
+      this.selectedNotes = { property: property.id, paths: new Set([path]), context: this.noteSelectionContext() };
+      this.render();
+    }));
+    menu.showAtPosition(point);
   }
 
   private queryFor(property: PropertyNode, node: ValueNode): string {

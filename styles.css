@@ -96,3 +96,30 @@
 .is-mobile .pv-view .pv-profile-name, .is-mobile .pv-view .pv-filter { font-size:16px; min-height:40px; }
 .is-mobile .pv-profile-actions { gap:6px; }
 .is-mobile .pv-profile-actions button { flex:1 1 60px; min-height:44px; padding:6px; font-size:13px; }
+
+/* Selected-note edits: keep actions outside the scrolling tree and dialog fields. */
+.pv-note-row { display:flex; align-items:center; min-width:0; }
+.pv-note-row .pv-note-checkbox { flex-shrink:0; margin:6px; }
+.pv-view .pv-note-row button.pv-file { flex:1; min-width:0; -webkit-touch-callout:none; user-select:none; }
+.pv-note-selection { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px; border-bottom:1px solid var(--background-modifier-border); flex-shrink:0; }
+.pv-note-selection[hidden], .pv-note-edit [hidden] { display:none; }
+.pv-selection-count { flex:1 1 100%; overflow-wrap:anywhere; }
+.modal.pv-note-value-modal { width:640px; max-width:calc(100vw - 32px); height:min(680px, 85vh); min-height:0; overflow:hidden; }
+.modal.pv-note-value-modal .modal-header { flex-shrink:0; }
+.modal.pv-note-value-modal .modal-content.pv-note-edit { display:flex; flex:1 1 0; flex-direction:column; min-height:0; max-height:none; overflow:hidden; }
+.modal-container.pv-note-modal-container.pv-touch-modal { position:fixed; inset:unset; top:var(--pv-dialog-top, 0px); left:0; width:100%; height:var(--pv-dialog-height, 100dvh); box-sizing:border-box; padding:max(12px, var(--safe-area-inset-top, 0px)) max(12px, var(--safe-area-inset-right, 0px)) max(12px, var(--safe-area-inset-bottom, 0px)) max(12px, var(--safe-area-inset-left, 0px)); align-items:center; }
+.pv-note-modal-container.pv-touch-modal .modal.pv-note-value-modal { width:100%; max-width:640px; height:100%; max-height:800px; min-height:0; margin:0; box-sizing:border-box; }
+.pv-note-edit-scroll { flex:1 1 0; min-height:0; overflow:auto; padding:2px; }
+.pv-note-edit .pv-edit-preview { max-height:none; overflow:visible; }
+.pv-note-edit .pv-edit-actions { flex-shrink:0; padding-block:8px; flex-wrap:wrap; }
+.pv-note-edit select, .pv-note-edit input { width:100%; }
+.is-mobile .pv-note-edit input, .is-mobile .pv-note-edit select { font-size:16px; min-height:40px; }
+.is-mobile .pv-note-selection button, .is-mobile .pv-note-edit button, .is-mobile .pv-view button.pv-file { min-height:40px; }
+@media (pointer:coarse) {
+  .pv-note-edit input, .pv-note-edit select { font-size:16px; min-height:40px; }
+  .pv-note-selection button, .pv-note-edit button, .pv-view button.pv-file { min-height:40px; }
+}
+
+.pv-view button.pv-file.is-selected { background:var(--nav-item-background-selected, var(--background-modifier-hover)); color:var(--nav-item-color-selected, var(--text-normal)); }
+
+.pv-note-edit-scroll > .pv-edit-field { margin-bottom:12px; }

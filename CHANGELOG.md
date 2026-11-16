@@ -6,7 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Give the Change property dialog a stable, spacious mobile layout. Fit the outer modal to the visible viewport, keep its preview scrollable and actions reachable above the keyboard, and restore its full height after keyboard dismissal.
+
 ### Added
+
+- Show note-selection checkboxes on desktop as well as mobile, while retaining row highlights and desktop selection shortcuts.
+
+- Align desktop note selection with File explorer: highlighted rows, Alt/Option-click toggles, additive Shift-click ranges, Shift+Up/Down, Escape to clear, and plain/Ctrl/Cmd-click opening notes. Mobile retains long-press and checkbox selection.
+
+- Change a text property on one or more selected notes via desktop right-click or mobile long-press. Choose existing values, add new text, or set empty, with property-scoped selection, preview, conflict checks, and shared undo.
 
 - Delete a property name from matching notes, or delete a matching value from scalar and list frontmatter. Both actions reuse preview, explicit confirmation, conflict skipping, and the shared one-step undo. Property deletion preserves selections, saved views, pins, expansion, and hiding references for undo. Value deletion skips ambiguous property names when removing the whole key, both in preview and before writing.
 

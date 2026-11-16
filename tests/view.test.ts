@@ -444,3 +444,159 @@ it('uses the same selection validation for Done/Enter', () => {
   expect((Notice as any).messages.at(-1)).toBe('Please select at least one property.');
   expect(input.value).toBe('Draft'); expect(plugin.prefs.profiles).toHaveLength(0);
 });
+
+function noteMenu(path: string) {
+  const row = document.querySelector(`button.pv-file[aria-label="${path}"]`) as HTMLElement;
+  row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  return (Menu as any).items;
+}
+it('changes one note in its parent property and selects notes across that property only', () => {
+  document.body.classList.add('is-mobile');
+  plugin.changeNoteValue = vi.fn();
+  click('Expand status'); click('Show notes with status: Done (1)'); click('Show notes with status: Pending (1)');
+  noteMenu('Projects/One.md').find((item: any) => item.title === 'Change status…').run();
+  expect(plugin.changeNoteValue).toHaveBeenLastCalledWith(plugin.index.properties.get('status'), ['Projects/One.md'], expect.any(Function));
+  noteMenu('Projects/One.md').find((item: any) => item.title === 'Select notes…').run();
+  const second = document.querySelector('[aria-label="Select Two.md for status"]') as HTMLInputElement;
+  second.click();
+  click('Change status for selected notes');
+  expect(plugin.changeNoteValue).toHaveBeenLastCalledWith(plugin.index.properties.get('status'), ['Projects/One.md', 'Two.md'], expect.any(Function));
+  expect(openFile).not.toHaveBeenCalled();
+  expect(document.querySelector('.pv-note-selection')!.textContent).toContain('2 selected');
+  click('Cancel note selection'); expect((document.querySelector('.pv-note-selection') as HTMLElement).hidden).toBe(true);
+});
+it('clears selected notes on filter changes and removes deleted paths on refresh', () => {
+  click('Expand status'); click('Show notes with status: Done (1)');
+  noteMenu('Projects/One.md').find((item: any) => item.title === 'Select notes…').run();
+  plugin.index.remove('Projects/One.md'); view.render();
+  expect(document.querySelector('.pv-note-selection')!.textContent).toContain('0 selected');
+  expect((document.querySelector('[aria-label="Change status for selected notes"]') as HTMLButtonElement).disabled).toBe(true);
+  click('Toggle search');
+  const search = document.querySelector('[aria-label="Filter properties and values"]') as HTMLInputElement;
+  search.value = 'Pending'; search.dispatchEvent(new Event('input'));
+  expect((document.querySelector('.pv-note-selection') as HTMLElement).hidden).toBe(true);
+});
+it('does not expose note changes for unsupported property types', () => {
+  click('Expand tags'); click('Show notes with tags: work (1)');
+  expect(document.querySelector('button.pv-file')!.hasAttribute('aria-haspopup')).toBe(false);
+});
+it('uses long press on mobile without opening the note', () => {
+  vi.useFakeTimers(); document.body.classList.add('is-mobile');
+  click('Expand status'); click('Show notes with status: Done (1)');
+  const note = document.querySelector('button.pv-file')!;
+  note.dispatchEvent(Object.assign(new Event('pointerdown'), { pointerType: 'touch', pointerId: 1, clientX: 10, clientY: 20 }));
+  vi.advanceTimersByTime(500);
+  note.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  expect((Menu as any).items.map((item: any) => item.title)).toEqual(['Change status…', 'Select notes…']);
+  expect(openFile).not.toHaveBeenCalled(); vi.useRealTimers();
+});
+it('uses only an unselected note for its context action and replaces selection when switching properties', () => {
+  document.body.classList.add('is-mobile');
+  plugin.changeNoteValue = vi.fn();
+  plugin.index.update('Third.md', { author: 'Ada' }); view.render();
+  click('Expand status'); click('Show notes with status: Done (1)'); click('Show notes with status: Pending (1)');
+  noteMenu('Projects/One.md').find((item: any) => item.title === 'Select notes…').run();
+  noteMenu('Two.md').find((item: any) => item.title === 'Change status…').run();
+  expect(plugin.changeNoteValue).toHaveBeenLastCalledWith(plugin.index.properties.get('status'), ['Two.md'], expect.any(Function));
+  click('Expand author'); click('Show notes with author: Ada (1)');
+  noteMenu('Third.md').find((item: any) => item.title === 'Select notes…').run();
+  expect(document.querySelectorAll('.pv-note-checkbox')).toHaveLength(1);
+  click('Change author for selected notes');
+  expect(plugin.changeNoteValue).toHaveBeenLastCalledWith(plugin.index.properties.get('author'), ['Third.md'], expect.any(Function));
+});
+it('clears note selection after changing the visible property scope', () => {
+  click('Expand status'); click('Show notes with status: Done (1)');
+  noteMenu('Projects/One.md').find((item: any) => item.title === 'Select notes…').run();
+  click('Choose properties to show'); click('Clear property selection');
+  expect((document.querySelector('.pv-note-selection') as HTMLElement).hidden).toBe(true);
+});
+
+function rangeNotes() {
+  plugin.index = new PropertyIndex();
+  for (const [path, status] of [['A.md', 'active'], ['B.md', 'active'], ['C.md', 'active'], ['D.md', 'done'], ['E.md', 'done']]) plugin.index.update(path, { status });
+  view.render();
+  click('Expand status'); click('Show notes with status: active (3)'); click('Show notes with status: done (2)');
+}
+function shiftNote(path: string) {
+  document.querySelector(`button.pv-file[aria-label="${path}"]`)!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true, cancelable: true }));
+}
+function checkedNotes() {
+  return [...document.querySelectorAll<HTMLElement>('.pv-file.is-selected')].map(note => `Select ${note.dataset.notePath} for ${JSON.parse(note.dataset.pvFocus!)[1]}`);
+}
+it('Shift-click selects a visible range across value groups and adds to the selection in either direction', () => {
+  rangeNotes(); click('B.md'); expect(openFile).toHaveBeenCalledOnce();
+  shiftNote('D.md');
+  expect(checkedNotes()).toEqual(['Select B.md for status', 'Select C.md for status', 'Select D.md for status']);
+  shiftNote('C.md'); expect(checkedNotes()).toEqual(['Select B.md for status', 'Select C.md for status', 'Select D.md for status']);
+  shiftNote('A.md'); expect(checkedNotes()).toEqual(['Select A.md for status', 'Select B.md for status', 'Select C.md for status', 'Select D.md for status']);
+  expect(openFile).toHaveBeenCalledOnce();
+});
+it('Shift-click starts selection without an anchor and Cancel clears the anchor', () => {
+  rangeNotes(); shiftNote('C.md'); expect(checkedNotes()).toEqual(['Select C.md for status']);
+  shiftNote('E.md'); expect(checkedNotes()).toHaveLength(3);
+  click('Cancel note selection'); shiftNote('A.md');
+  expect(checkedNotes()).toEqual(['Select A.md for status']); expect(openFile).not.toHaveBeenCalled();
+});
+it.each([false, true])('supports Shift-click and ordinary checkbox selection on touch=%s', touch => {
+  if (touch) document.body.classList.add('is-mobile');
+  rangeNotes(); noteMenu('B.md').find((item: any) => item.title === 'Select notes…').run();
+  document.querySelector('[aria-label="Select D.md for status"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true, cancelable: true }));
+  expect(checkedNotes()).toEqual(['Select B.md for status', 'Select C.md for status', 'Select D.md for status']);
+  (document.querySelector('[aria-label="Select A.md for status"]') as HTMLInputElement).click();
+  shiftNote('C.md'); expect(checkedNotes()).toEqual(['Select A.md for status', 'Select B.md for status', 'Select C.md for status', 'Select D.md for status']);
+  expect(openFile).not.toHaveBeenCalled();
+});
+it('does not extend a range into another property or a collapsed branch', () => {
+  rangeNotes(); click('B.md'); click('Collapse notes for status: active');
+  shiftNote('E.md'); expect(checkedNotes()).toEqual(['Select E.md for status']);
+  plugin.index.update('F.md', { author: 'Ada' }); plugin.index.update('G.md', { author: 'Ada' }); view.render();
+  click('Expand author'); click('Show notes with author: Ada (2)');
+  shiftNote('F.md'); expect(checkedNotes()).toEqual(['Select F.md for author']);
+  shiftNote('G.md'); expect(checkedNotes()).toEqual(['Select F.md for author', 'Select G.md for author']);
+});
+it('drops the range anchor when search changes', () => {
+  rangeNotes(); click('B.md'); click('Toggle search');
+  const search = document.querySelector('[aria-label="Filter properties and values"]') as HTMLInputElement;
+  search.value = 'E.md'; search.dispatchEvent(new Event('input'));
+  shiftNote('E.md'); expect(checkedNotes()).toEqual(['Select E.md for status']);
+});
+
+function modifiedNote(path: string, modifiers: MouseEventInit) {
+  document.querySelector(`button.pv-file[aria-label="${path}"]`)!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ...modifiers }));
+}
+it('Alt/Option-click keeps desktop checkboxes synchronized with highlighted notes without opening them', () => {
+  rangeNotes(); modifiedNote('B.md', { altKey: true }); modifiedNote('E.md', { altKey: true });
+  expect(checkedNotes()).toEqual(['Select B.md for status', 'Select E.md for status']);
+  expect(document.querySelectorAll('.pv-note-checkbox')).toHaveLength(5);
+  expect(document.querySelectorAll('.pv-note-checkbox:checked')).toHaveLength(2);
+  modifiedNote('B.md', { altKey: true });
+  expect(checkedNotes()).toEqual(['Select E.md for status']);
+  expect(openFile).not.toHaveBeenCalled();
+});
+it('preserves separate Alt-selected notes when adding a Shift range', () => {
+  rangeNotes(); modifiedNote('A.md', { altKey: true }); modifiedNote('D.md', { altKey: true });
+  shiftNote('E.md'); expect(checkedNotes()).toEqual(['Select A.md for status', 'Select D.md for status', 'Select E.md for status']);
+  shiftNote('C.md'); expect(checkedNotes()).toEqual(['Select A.md for status', 'Select C.md for status', 'Select D.md for status', 'Select E.md for status']);
+});
+it.each([{}, { ctrlKey: true }, { metaKey: true }, { ctrlKey: true, shiftKey: true }])('normal and new-tab clicks open a note and clear the multi-selection: %j', modifiers => {
+  rangeNotes(); modifiedNote('A.md', { altKey: true }); modifiedNote('D.md', { altKey: true });
+  modifiedNote('D.md', modifiers);
+  expect(openFile).toHaveBeenCalledOnce(); expect(checkedNotes()).toEqual([]);
+  expect((document.querySelector('.pv-note-selection') as HTMLElement).hidden).toBe(true);
+});
+it('supports Shift-arrow selection, preserves it on reverse movement, and clears it with Escape', () => {
+  rangeNotes();
+  const key = (path: string, name: string, shiftKey = false) => document.querySelector(`button.pv-file[aria-label="${path}"]`)!.dispatchEvent(new KeyboardEvent('keydown', { key: name, shiftKey, bubbles: true, cancelable: true }));
+  key('B.md', 'ArrowDown', true);
+  expect(checkedNotes()).toEqual(['Select B.md for status', 'Select C.md for status']);
+  expect(document.activeElement?.getAttribute('aria-label')).toBe('C.md');
+  key('C.md', 'ArrowUp', true); expect(checkedNotes()).toEqual(['Select B.md for status', 'Select C.md for status']);
+  key('B.md', 'Escape'); expect(checkedNotes()).toEqual([]); expect(openFile).not.toHaveBeenCalled();
+});
+it('keeps plain mobile taps toggling notes in the long-press selection flow', () => {
+  document.body.classList.add('is-mobile'); rangeNotes();
+  noteMenu('B.md').find((item: any) => item.title === 'Select notes…').run();
+  click('D.md'); expect(checkedNotes()).toEqual(['Select B.md for status', 'Select D.md for status']);
+  click('B.md'); expect(checkedNotes()).toEqual(['Select D.md for status']);
+  expect(openFile).not.toHaveBeenCalled(); expect(document.querySelectorAll('.pv-note-checkbox')).toHaveLength(5);
+});

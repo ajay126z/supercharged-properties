@@ -182,6 +182,20 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] Context menus work through long-press or the host equivalent.
 - [ ] Note opening and Ctrl/Cmd-equivalent behavior are sane.
 
+## Selected-note editing
+
+- [ ] Right-click an editable note on desktop and long-press it on mobile; both expose Change property and Select notes actions.
+- [ ] Long-press does not open the note; scrolling cancels a pending long-press.
+- [ ] Selection checkboxes and row highlights remain synchronized on desktop and mobile.
+- [ ] Alt/Option-click toggles notes, Shift-click adds ranges, Shift+Up/Down adds focused notes, and Escape clears selection.
+- [ ] Plain desktop clicks clear multi-selection and open notes; Ctrl/Cmd-click opens a new tab. Mobile taps toggle notes while selection mode is active.
+- [ ] Selection stays within one property. Range selection includes only displayed rows, and search/scope changes clear selection.
+- [ ] Existing, custom, and empty destinations update only selected paths; literal `empty` remains text, while Set empty retains the key with null.
+- [ ] Preview reports unsupported values, missing/ambiguous keys, exclusions, and unchanged notes; stale notes and type changes are skipped before writing.
+- [ ] Undo restores successful selected-note changes and preserves later edits; zero-write batches retain the previous undo.
+- [ ] The mobile dialog opens at a usable height for one and many notes, its preview scrolls, and focused inputs and actions remain visible above the keyboard.
+- [ ] Closing the keyboard restores the dialog height, and closing the dialog removes its viewport listeners.
+
 ## Documentation and licensing
 
 - [ ] [README.md](../README.md) matches the shipped behavior.

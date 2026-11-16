@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. Property-name and value edits write frontmatter only after you review a preview and confirm.
 
-This guide describes **1.2.1** and the unreleased property and value deletion actions. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
+This guide describes **1.2.1** and unreleased property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 ## Contents
 
@@ -20,6 +20,7 @@ This guide describes **1.2.1** and the unreleased property and value deletion ac
 - [Use Obsidian Search and copy links](#use-obsidian-search-and-copy-links)
 - [Rename property names](#rename-property-names)
 - [Delete properties or values](#delete-properties-or-values)
+- [Change a property on selected notes](#change-a-property-on-selected-notes)
 - [Edit values across notes](#edit-values-across-notes)
 - [Data access and privacy](#data-access-and-privacy)
 - [Settings and commands](#settings-and-commands)
@@ -62,7 +63,8 @@ Open Supercharged Properties, expand `status`, then expand `doing` to find the n
 | --- | --- |
 | Property label or chevron | Expands or collapses that property's values. |
 | Value label or chevron | Shows or hides notes containing that value. |
-| Note row | Opens the note; Ctrl-click or Cmd-click opens a new tab. |
+| Note row | Opens the note; Ctrl/Cmd-click opens a new tab. In mobile selection mode, tapping toggles selection. Right-click (desktop) or long-press (mobile) opens text-property actions. |
+| Note-selection checkbox | Toggles selection without opening the note. Available during selection mode on desktop and mobile. |
 | Expand all properties | Expands currently visible properties. It does not open every value's note list. |
 | Collapse all properties | Collapses branches and clears the tree search. |
 | Show more | Reveals another page of a large value or note list. |
@@ -146,6 +148,8 @@ This setting does not change your notes or Obsidian's global Search settings. **
 | Hidden properties | Hides named properties without removing their indexed notes. | Available from visible rows. | Does not act as a note exclusion rule. |
 | Excluded folders | Removes notes from the index, values, and counts. | Excluded notes are omitted. | Excluded notes are omitted from previews and skipped before writes. |
 
+The table describes property/value-row bulk actions. **Change status…** from a note row edits only the explicitly selected notes. Selection checkboxes do not narrow a value-row Rename, Merge, or Delete batch. Changing the search or property scope clears note selection.
+
 **Open in Search** and **Copy search query** generate queries for Obsidian's core Search. They do not add folder-exclusion conditions. Earlier edits can still be undone after their folders are excluded.
 
 ## Save and manage views
@@ -225,6 +229,12 @@ Obsidian Search applies its own matching and type rules, so results may differ f
 
 In 1.2.0, right-click a property row and choose **Rename property…**. Review all affected and skipped notes before confirming. Values keep their stored types; destination conflicts are skipped. Read the [property-name renaming guide](PROPERTY-RENAMING.md) for case-only renames, preference updates, configured-type limitations, and shared undo. The same property-row menu also offers **Delete property…**.
 
+## Change a property on selected notes
+
+Right-click a note on desktop or long-press it on mobile, then choose **Change status…** (using the parent property's name). Choose an existing value, enter a new one, or set the property empty. **Select notes…** starts a selection within the property. Selection mode shows checkboxes and highlighted rows on both desktop and mobile. Click a checkbox to toggle a note without opening it. Desktop shortcuts remain: Alt/Option-click toggles individual notes, Shift-click adds a range, and Escape clears the selection. Plain clicks open notes and clear desktop multi-selection; Ctrl/Cmd-click opens a new tab. Mobile selection uses checkboxes and tap-to-toggle rows. Normal taps open notes outside selection mode; scrolling cancels a pending long-press.
+
+This action supports Text properties with text or empty scalar values. It previews only the selected notes and shares **Undo last property edit** with other edits. See [changing selected notes](NOTE-VALUE-EDITING.md) for the complete workflow, eligibility, and safeguards.
+
 ## Edit values across notes
 
 Value-row menus offer **Rename value…**, **Delete value…**, **Merge value…**, **Convert to wikilink…**, and **Split into list…** when applicable. These actions change values, not property names. **Delete value…** removes a matching scalar property or matching list entries; removing the entire value also removes the key from that note. Empty and object rows do not offer deletion. **Split into list…** requires a Text property and a text value. It is hidden for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses. Strings already stored inside lists are not split.
@@ -272,9 +282,11 @@ Available command-palette commands use the prefix **Supercharged Properties:**.
 
 ## Keyboard and mobile use
 
-Tab through controls and use their normal keyboard activation. With a property or value label focused, press **Shift+F10** or the **Context Menu** key to open its row menu. **Escape** in the tree search closes it and clears the query. Ctrl-click or Cmd-click on a note opens a new tab.
+Tab through controls and use their normal keyboard activation. With a property, value, or editable note row focused, press **Shift+F10** or the **Context Menu** key to open its row menu. **Escape** in the tree search closes it and clears the query. Ctrl-click or Cmd-click on a note opens a new tab.
 
-The interface provides labelled controls, visible focus, expand/collapse state, and a live summary. On mobile, use the available ribbon or command-palette entry to open the view. Row menus depend on the host's context-menu gesture, such as long-press; touch behavior should be verified on your device.
+For note selection on desktop, Alt/Option-click toggles individual notes, Shift-click adds a displayed range, and Shift+Up/Down adds notes while moving keyboard focus. Escape clears note selection. Checkboxes toggle notes on both desktop and mobile without opening them; Shift-clicking a checkbox adds a range.
+
+The interface provides labelled controls, visible focus, expand/collapse state, and a live summary. On mobile, use the ribbon or command palette to open the view. Long-press an editable note row for **Change property…** or **Select notes…**; scrolling cancels the pending long-press. The change dialog uses the visible screen area, scrolls its contents, and keeps Apply and Cancel above the keyboard.
 
 ## Troubleshooting
 
@@ -292,6 +304,9 @@ The interface provides labelled controls, visible focus, expand/collapse state, 
 | Split into list is missing | Confirm the property is configured as Text, the selected value is text, and the property is not tags, aliases, or cssclasses. After a type change, refresh the property index. |
 | A template note still appears | Use a vault-relative path with the exact folder capitalization. Templates excludes Templates/Note.md, not Other/Templates/Note.md. Core Search is independent of this setting. |
 | Rename property is missing | Confirm you are using version 1.2.0 or later and open the property-row menu, not a value-row menu. |
+| Change status… is missing | Open the note-row menu under a Text property. List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses are not supported by selected-note editing. |
+| Some selected notes do not change | Inspect the preview for unchanged values, excluded folders, missing/ambiguous keys, and unsupported stored values. Changes made after preview are skipped at Apply. |
+| Shift-click does not deselect notes when moving back | Shift-click adds to the selection. Use a checkbox or Alt/Option-click to deselect individual notes. |
 | Delete value is missing | Empty `(empty)` and object rows do not offer deletion. To remove the whole property, use **Delete property…** on its property row. |
 | A property disappeared after deleting its last value | Deleting an entire value removes the property key from that note. Undo restores it while the key name remains free. |
 | An edit is skipped, fails, or cannot be undone | See [edit troubleshooting and limits](BULK-EDITING.md#troubleshooting-and-limits). |

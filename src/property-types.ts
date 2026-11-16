@@ -63,6 +63,11 @@ export class PropertyTypeResolver {
   }
 }
 
+/** Text-only actions never convert built-in list properties or other configured types. */
+export function supportsTextAssignment(property: Pick<PropertyNode, 'id'>, resolver: Pick<PropertyTypeResolver, 'typeFor'>): boolean {
+  return !BUILTIN_TYPES.has(fold(property.id)) && resolver.typeFor(property) === 'text';
+}
+
 /** Split is a text-property operation, never a special built-in property operation. */
 export function supportsTextSplit(property: Pick<PropertyNode, 'id'>, resolver: Pick<PropertyTypeResolver, 'typeFor'>): boolean {
   return !BUILTIN_TYPES.has(fold(property.id)) && resolver.typeFor(property) === 'text';

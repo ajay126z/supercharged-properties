@@ -163,3 +163,66 @@ it('can still delete part of a list and undo with a pre-existing case variant', 
   expect(await editor.undo()).toMatchObject({ restored: 1, skipped: 0 });
   expect(data['b.md']).toEqual({ status: ['doing', 'active'], Status: 'keep' });
 });
+
+it('assigns a text value only to selected notes with mixed originals, preserving keys and undo', async () => {
+  const { data, editor } = setup();
+  data['a.md'] = { Status: 'todo', other: 1 };
+  data['b.md'] = { status: null };
+  const preview = editor.previewNoteValue('status', 'closed', ['a.md', 'b.md', 'a.md']);
+  expect(preview).toMatchObject({ total: 2, unchanged: 0, conflicts: [] });
+  expect((await editor.apply(preview)).updated).toBe(2);
+  expect(data['a.md']).toEqual({ Status: 'closed', other: 1 });
+  expect(data['b.md']).toEqual({ status: 'closed' });
+  expect((await editor.undo()).restored).toBe(2);
+  expect(data['a.md']).toEqual({ Status: 'todo', other: 1 });
+  expect(data['b.md']).toEqual({ status: null });
+  await editor.apply(editor.previewNoteValue('status', 'new', ['a.md']));
+  expect(data['b.md']).toEqual({ status: null });
+});
+it('sets empty without removing the key and distinguishes literal empty text', async () => {
+  const { data, editor } = setup();
+  await editor.apply(editor.previewNoteValue('status', null, ['a.md']));
+  expect(data['a.md']).toEqual({ status: null, other: 1 });
+  expect(editor.previewNoteValue('status', null, ['a.md'])).toMatchObject({ total: 0, unchanged: 1 });
+  await editor.undo();
+  expect(data['a.md'].status).toBe('doing');
+  await editor.apply(editor.previewNoteValue('status', 'empty', ['a.md']));
+  expect(data['a.md'].status).toBe('empty');
+});
+it.each([[], ['doing'], 5, false, { key: 'value' }])('does not replace unsupported values: %j', original => {
+  const { data, editor } = setup();
+  data['a.md'].status = original;
+  expect(editor.previewNoteValue('status', 'closed', ['a.md'])).toMatchObject({ total: 0, conflicts: [{ path: 'a.md' }] });
+});
+it('reports excluded, missing and ambiguous assignments and skips newly stale keys', async () => {
+  const { data, editor } = setup(path => path !== 'b.md');
+  expect(editor.previewNoteValue('status', 'closed', ['b.md', 'missing'])).toMatchObject({ total: 0, conflicts: [{ path: 'b.md' }, { path: 'missing' }] });
+  data['a.md'].Status = 'other';
+  expect(editor.previewNoteValue('status', 'closed', ['a.md']).conflicts[0].message).toContain('Ambiguous');
+  delete data['a.md'].Status;
+  let preview = editor.previewNoteValue('status', 'closed', ['a.md']);
+  data['a.md'].Status = 'other';
+  expect(await editor.apply(preview)).toMatchObject({ updated: 0, unchanged: 1 });
+  delete data['a.md'].Status;
+  preview = editor.previewNoteValue('status', 'closed', ['a.md']);
+  data['a.md'].status = 'later';
+  expect(await editor.apply(preview)).toMatchObject({ updated: 0, unchanged: 1 });
+  delete data['a.md'].status;
+  expect(editor.previewNoteValue('status', 'closed', ['a.md']).conflicts[0].message).toContain('missing');
+});
+it('rechecks type and folder eligibility before assigning and preserves prior undo on zero writes', async () => {
+  const { data, app } = setup();
+  let text = true, included = true;
+  const editor = new ValueEditor(app as any, () => included, () => text);
+  await editor.apply(editor.previewNoteValue('status', 'active', ['a.md']));
+  let preview = editor.previewNoteValue('status', 'closed', ['a.md']);
+  text = false;
+  expect(await editor.apply(preview)).toMatchObject({ updated: 0, unchanged: 1 });
+  expect(editor.previewNoteValue('status', 'closed', ['a.md']).conflicts).toHaveLength(1);
+  text = true;
+  preview = editor.previewNoteValue('status', 'closed', ['a.md']);
+  included = false;
+  expect(await editor.apply(preview)).toMatchObject({ updated: 0, unchanged: 1 });
+  expect((await editor.undo()).restored).toBe(1);
+  expect(data['a.md'].status).toBe('doing');
+});

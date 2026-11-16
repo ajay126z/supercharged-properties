@@ -215,3 +215,7 @@ The value actions in this guide change frontmatter property values. They do not 
 ## Excluded folders
 
 Version 1.2.0 respects **Settings → Supercharged Properties → Excluded folders** for previews and new writes. Search and saved views do not limit a batch, but folder exclusions do. Notes newly excluded after a preview are skipped at apply time. Undo remains available for earlier edits even if their folders are subsequently excluded.
+
+## Change selected notes instead
+
+To assign one destination to specific notes, right-click a note on desktop or long-press on mobile and choose **Change property…** (the menu uses the actual property name). **Select notes…** supports several notes within the same property. This text-only action can combine notes from different starting values and supports explicit empty values. See [changing selected notes](NOTE-VALUE-EDITING.md).

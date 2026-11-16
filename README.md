@@ -27,6 +27,12 @@ Choose the properties you want to see, save views for different projects, and ex
 
 ![Exclude Templates folders from the property tree](docs/media/05-exclude-templates.gif)
 
+## Change selected notes
+
+Right-click a note on desktop or long-press it on mobile and choose **Change status…** to update its parent text property. Pick an existing value, add a new value, or set it empty. Choose **Select notes…** to update several notes under the same property, including notes in different value groups. On desktop, Alt/Option-click toggles individual notes and Shift-click adds a displayed range, matching Obsidian's File explorer. Selection mode shows checkboxes beside notes on both desktop and mobile, with selected rows highlighted. The mobile change dialog uses the available screen space and keeps its actions above the keyboard. Review the preview before applying; one-step undo restores the last successful batch.
+
+See [changing selected notes](docs/NOTE-VALUE-EDITING.md) for supported types and selection behavior.
+
 ## Clean up properties across notes
 
 Right-click a property or value to make changes across matching notes:
@@ -103,6 +109,7 @@ Your notes stay in your vault. The plugin does not send vault data to external s
 ## Help and documentation
 
 - [User guide](docs/USER-GUIDE.md) — browsing, search, saved views, exclusions, keyboard controls, and troubleshooting.
+- [Change selected notes](docs/NOTE-VALUE-EDITING.md) — single-note edits, selection checkboxes, desktop shortcuts, mobile long-press, and undo.
 - [Bulk value editing](docs/BULK-EDITING.md) — rename, delete, merge, link conversion, splitting, and undo.
 - [Property-name renaming](docs/PROPERTY-RENAMING.md) — renaming, deletion, previews, conflicts, and effects on saved views.
 - [Changelog](CHANGELOG.md) — changes by version.
