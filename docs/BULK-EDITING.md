@@ -1,6 +1,6 @@
 # Bulk value editing
 
-Bulk edits let you standardize a property's values across notes. They are explicit write actions; ordinary browsing remains read-only. The four value operations were introduced in 1.1.0. This guide describes the 1.2.0, which also adds folder exclusions, shared undo with property-name renaming, and text-property-only Split eligibility.
+Bulk edits let you standardize a property's values across notes. They are explicit write actions; ordinary browsing remains read-only. The original four value operations were introduced in 1.1.0; **Delete value…** was added after 1.2.1. This guide describes the 1.2.0 and later behavior, including folder exclusions, shared undo with property-name renaming, and text-property-only Split eligibility.
 
 [Back to the user guide](USER-GUIDE.md)
 
@@ -12,7 +12,7 @@ In 1.2.0, value edits share one undo slot with [property-name renames](PROPERTY-
 2. Right-click the value you want to change, or focus its label and press Shift+F10 / the Context Menu key.
 3. Choose an edit action and supply its replacement or delimiter if needed.
 4. Review the affected-note count and scroll through the complete list of paths and before/after values.
-5. Click **Apply to N notes** to confirm, or **Cancel** to leave notes unchanged.
+5. Click **Apply to N notes** to confirm, or **Cancel** to leave notes unchanged. For deletion, the button reads **Delete from N notes**.
 
 Preview values use JSON-style notation: `"false"` is text, `false` is a boolean, and `["a","b"]` is a list. Quotes and brackets in the preview are value notation, not a promise of the exact YAML formatting that will be written.
 
@@ -142,14 +142,44 @@ Split applies only when the property's entire stored value is a scalar string ma
 
 Parts remain text, even if they look numeric or boolean. Repeated parts are retained. This action does not change the vault's configured property type; review that separately in Obsidian if needed.
 
+## Delete a value
+
+Use Delete value to remove one matching value from a property. Deleting a scalar removes the entire property key from that note. Deleting an entry inside a list removes every matching entry, including entries in nested lists; nested lists that become empty are pruned.
+
+1. Open the menu for `status` → `obsolete`.
+2. Choose **Delete value…**.
+3. Review the preview and click **Delete from N notes**.
+
+Before:
+
+```yaml
+status: obsolete
+```
+
+After, the note no longer has a `status` key. For a list:
+
+```yaml
+status: [active, obsolete]
+```
+
+becomes:
+
+```yaml
+status: [active]
+```
+
+If no values remain after deleting list entries, the property key is removed. Empty `(empty)` rows and nested object values do not offer deletion. Deleting a property name, rather than a value, is covered in the [property-renaming guide](PROPERTY-RENAMING.md#delete-a-property).
+
+Delete is destructive but shares the same preview, conflict checks, and undo as the other value actions. Undo restores the previous scalar or list structure; it does not restore YAML formatting or comments.
+
 ## How matching works
 
 - Actions stay within the selected property; changing an author does not change the same text in another property.
 - Property names and text values match the tree's grouping: surrounding whitespace is ignored, text is Unicode-normalized, and capitalization is ignored.
 - Numbers, booleans, and text are distinct. A text `"false"` row does not match boolean `false`.
 - Empty values and objects do not offer these edit actions.
-- Rename, Merge, and wikilink conversion can affect matching scalar entries within nested lists. Split handles only a scalar property.
-- If one note contains multiple keys that normalize to the same name, such as both `Status` and `status`, the editor considers the first matching key. Review such notes individually rather than assuming both keys will change.
+- Rename, Merge, Delete, and wikilink conversion can affect matching scalar entries within nested lists. Split handles only a scalar property.
+- If one note contains multiple keys that normalize to the same name, such as both `Status` and `status`, a value edit considers the first matching key. Review such notes individually rather than assuming both keys will change. Deleting the property name skips an ambiguous note instead.
 
 A preview may therefore contain fewer notes than the tree row's count: some notes may already have the desired value, be ineligible for that operation, or no longer be available.
 
@@ -157,7 +187,7 @@ A preview may therefore contain fewer notes than the tree row's count: some note
 
 Open the command palette and run **Supercharged Properties: Undo last property edit**. One invocation attempts to restore the previous property value in every successfully edited note from the last batch. Undo runs immediately; there is no second preview dialog.
 
-Undo restores a note only if its edited property still equals the value written by the batch. Later changes to that property are skipped; changes to other properties are preserved. A skipped or failed undo entry remains available for retry, and the notice reports restored, skipped, and failed counts. Retrying does not force an overwrite of a conflicting value.
+Undo restores a note only if its edited property still equals the value written by the batch. Later changes to that property are skipped; changes to other properties are preserved. A skipped or failed undo entry remains available for retry, and the notice reports restored, skipped, and failed counts. Retrying does not force an overwrite of a conflicting value. When undo restores a deleted property key, it does so only while no key with the same folded name exists; a recreated key is left untouched and the entry stays available for retry.
 
 The undo command is available only when an undo batch exists and no edit is running. After all entries are restored, it is no longer available. There is no redo action.
 
@@ -165,12 +195,14 @@ The undo command is available only when an undo batch exists and no edit is runn
 
 | Situation | Meaning and next step |
 | --- | --- |
-| No notes will change | Check the replacement or delimiter and the operation's eligibility rules. For Split, confirm the source is scalar text and yields at least two parts. |
+| No notes will change | Check the replacement or delimiter and the operation's eligibility rules. For Split, confirm the source is scalar text and yields at least two parts. For Delete, confirm the row is not an empty or object value. |
+| Delete value is missing | Empty `(empty)` rows and nested object values do not offer deletion. Delete a property name from its property row instead. |
+| A property disappeared after deleting its last value | Deleting the entire value removes the property key from that note. That is expected; undo restores it while the key remains free. |
 | Split is missing | Check the property-type table above. Refresh the index after changing the configured type. The restriction affects Split, not the other value actions. |
 | Merge is missing | No other value of the same stored type exists under the property. Rename can create a target value first. |
 | Notes were skipped on Apply | Their property changed after preview or their folder was excluded. Reopen the action to generate a fresh preview. |
 | Some writes failed | Successful writes remain applied and undoable. Inspect the path-specific notices and resolve the reported issue before retrying. The batch is not all-or-nothing. |
-| Undo skipped a note | The edited property no longer matches the batch's result. Inspect the note; undo will not overwrite that later value. |
+| Undo skipped a note | The edited property no longer matches the batch's result. Inspect the note; undo will not overwrite that later value. For a deleted key, remove or rename any recreated key with the same folded name before retrying. |
 | Undo reports a missing note | It stores paths. A renamed, moved, or deleted note cannot be restored through its old path. |
 | Undo disappeared after another edit | A new batch with at least one successful write replaces the previous undo batch. A batch with no successful writes does not replace it. |
 | Undo disappeared after reload | Undo is held in memory and is cleared when the plugin is disabled, reloaded, or Obsidian restarts. |

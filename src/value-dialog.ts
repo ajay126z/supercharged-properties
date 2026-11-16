@@ -52,6 +52,8 @@ export class ValueEditModal extends Modal {
       });
     } else if (this.request.mode === 'wikilink') {
       el(this.contentEl, 'p', 'pv-edit-hint', `Every matching note will use ${`[[${this.request.value}]]`}.`);
+    } else if (this.request.mode === 'delete') {
+      el(this.contentEl, 'p', 'pv-edit-hint', 'Matching values are removed from eligible notes. If the value is the entire property value, the property key is removed. Empty and object values do not offer deletion.');
     } else {
       this.field('Delimiter', this.request.delimiter ?? ',', value => {
         this.request = { ...this.request, delimiter: value };
@@ -66,6 +68,7 @@ export class ValueEditModal extends Modal {
     cancel.addEventListener('click', () => this.close());
     this.applyButton = el(actions, 'button', 'mod-cta', 'Apply');
     this.applyButton.type = 'button';
+    if (this.request.mode === 'delete') this.applyButton.classList.add('mod-warning');
     this.applyButton.addEventListener('click', () => { void this.submit(); });
     this.updatePreview();
   }
@@ -101,6 +104,11 @@ export class ValueEditModal extends Modal {
     return true;
   }
 
+  private applyLabel(total: number): string {
+    const verb = this.request.mode === 'delete' ? 'Delete from' : 'Apply to';
+    return `${verb} ${total} note${total === 1 ? '' : 's'}`;
+  }
+
   private updatePreview(): void {
     this.previewEl.replaceChildren();
     if (!this.valid()) {
@@ -110,7 +118,7 @@ export class ValueEditModal extends Modal {
     }
     const preview = this.options.preview(this.request);
     this.displayed = preview;
-    this.applyButton.textContent = `Apply to ${preview.total} notes`;
+    this.applyButton.textContent = this.applyLabel(preview.total);
     this.applyButton.disabled = this.busy || preview.total === 0;
     el(this.previewEl, 'p', 'pv-edit-count', preview.total
       ? `${preview.total} note${preview.total === 1 ? '' : 's'} will change.`
@@ -137,7 +145,7 @@ export class ValueEditModal extends Modal {
       this.busy = false;
       if (this.input) this.input.disabled = false;
       if (this.select) this.select.disabled = false;
-      this.applyButton.textContent = 'Apply';
+      this.applyButton.textContent = this.applyLabel(this.displayed?.total ?? 0);
       this.updatePreview();
       new Notice('Could not update property values.');
     }
@@ -150,6 +158,7 @@ function titleFor(mode: ValueEditMode): string {
     case 'merge': return 'Merge value';
     case 'wikilink': return 'Convert to wikilink';
     case 'split': return 'Split into list';
+    case 'delete': return 'Delete value';
   }
 }
 

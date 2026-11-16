@@ -9,7 +9,9 @@ import { loadProfiles, sameKeys, PropertyProfile } from './profiles';
 import { PropertyTypeResolver, supportsTextSplit } from './property-types';
 import { ValueEditor, type ValueEditPreview, type ValueEditResult } from './value-editor';
 import { PropertyRenameModal } from './property-rename-dialog';
+import { PropertyDeleteModal } from './property-delete-dialog';
 import { includeRenamedProperty } from './property-rename';
+import { forgetDeletedProperty } from './property-delete';
 import { ValueEditModal } from './value-dialog';
 import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-operations';
 import type { PropertyValueKind } from './frontmatter-values';
@@ -140,9 +142,9 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     return this.saveQueue;
   }
 
-  async applyValueEdit(preview: ValueEditPreview): Promise<void> {
+  async applyValueEdit(preview: ValueEditPreview, verb = 'Updated'): Promise<void> {
     const result: ValueEditResult = await this.valueEditor.apply(preview);
-    new Notice(`Updated ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 10000);
+    new Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 10000);
     for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
     this.rebuild();
   }
@@ -171,6 +173,21 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     }).open();
   }
 
+  deleteProperty(property: PropertyNode): void {
+    new PropertyDeleteModal(this.app, {
+      property: property.label,
+      preview: () => this.valueEditor.previewPropertyDelete(property.id, this.index.properties.get(property.id)?.paths ?? []),
+      apply: async preview => {
+        const result = await this.valueEditor.apply(preview);
+        new Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 10000);
+        for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
+        this.rebuild();
+        const complete = preview.conflicts.length === 0 && result.failures.length === 0 && result.unchanged === 0;
+        if (complete && forgetDeletedProperty(this.prefs, property.id)) await this.save();
+      }
+    }).open();
+  }
+
   editValue(property: PropertyNode, node: ValueNode, mode: ValueEditMode): void {
     const [kind] = JSON.parse(node.id) as [PropertyValueKind, string];
     if (mode === 'split' && (kind !== 'string' || !supportsTextSplit(property, this.typeResolver))) return;
@@ -186,7 +203,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
           new Notice('Split into list is only available for text properties.');
           return Promise.resolve();
         }
-        return this.applyValueEdit(preview);
+        return this.applyValueEdit(preview, mode === 'delete' ? 'Deleted from' : 'Updated');
       }
     }).open();
   }
@@ -635,6 +652,7 @@ export class PropertiesView extends ItemView {
     }));
     if (node === property) {
       menu.addItem(item => item.setTitle('Rename property…').setIcon('pencil').onClick(() => this.plugin.renameProperty(property)));
+      menu.addItem(item => item.setTitle('Delete property…').setIcon('trash-2').onClick(() => this.plugin.deleteProperty(property)));
       const pinned = this.plugin.prefs.pinned.includes(property.id);
       menu.addItem(item => item.setTitle(pinned ? 'Unpin property' : 'Pin property').setIcon('pin').onClick(() => {
         this.plugin.prefs.pinned = pinned ? this.plugin.prefs.pinned.filter(key => key !== property.id) : [...this.plugin.prefs.pinned, property.id];
@@ -647,10 +665,11 @@ export class PropertiesView extends ItemView {
     }
     if (node !== property) {
       const [kind] = JSON.parse(node.id) as [PropertyValueKind, string];
-      const addEdit = (title: string, mode: ValueEditMode) => menu.addItem(item => item.setTitle(title).setIcon('pencil').onClick(() => this.plugin.editValue(property, node, mode)));
+      const addEdit = (title: string, mode: ValueEditMode, icon = 'pencil') => menu.addItem(item => item.setTitle(title).setIcon(icon).onClick(() => this.plugin.editValue(property, node, mode)));
       if (kind !== 'empty') {
         addEdit('Rename value…', 'rename');
         if ([...property.values.values()].some(value => value !== node && (JSON.parse(value.id) as string[])[0] === kind)) addEdit('Merge value…', 'merge');
+        addEdit('Delete value…', 'delete', 'trash-2');
         if (kind === 'string' && !isWikilink(node.label)) {
           addEdit('Convert to wikilink…', 'wikilink');
           if (supportsTextSplit(property, this.plugin.typeResolver)) addEdit('Split into list…', 'split');

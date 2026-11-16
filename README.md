@@ -34,14 +34,16 @@ Right-click a property or value to make changes across matching notes:
 | Action | Example |
 | --- | --- |
 | Rename a property | Change `author` to `authors` while keeping each note's value. |
+| Delete a property | Remove `deprecated` from every note that still has it. |
 | Rename a value | Change `status: in-progress` to `status: active`. |
+| Delete a value | Remove `obsolete` from `status` values and list entries. |
 | Merge values | Combine `doing` with an existing `active` value. |
 | Convert text to a link | Change `Ada Lovelace` to `[[Ada Lovelace]]`. |
 | Split text into a list | Turn `research, writing, editing` into three list items. |
 
 **Split into list** is available only for text values under Text properties. It is not offered for List, Number, Checkbox, Date, Date & Time, tags, aliases, or cssclasses.
 
-Each edit shows the affected notes before you confirm. Property-name conflicts and changes made since the preview are skipped rather than overwritten. Browsing and organizing the view do not change your notes.
+Each edit shows the affected notes before you confirm. Property-name and deletion conflicts, and changes made since the preview, are skipped rather than overwritten. Browsing and organizing the view do not change your notes.
 
 Bulk edits apply to matching notes in included folders, even when a search or saved view shows only some of them. Folder exclusions limit these edits; display filters do not.
 
@@ -51,7 +53,7 @@ Bulk edits apply to matching notes in included folders, even when a search or sa
 
 ### Undo and edit limits
 
-Use **Supercharged Properties: Undo last property edit** to undo the last successful batch. Undo preserves later edits by skipping conflicting values. It is available until the plugin reloads or another successful batch replaces it.
+Use **Supercharged Properties: Undo last property edit** to undo the last successful batch. Undo preserves later edits by skipping conflicting values, including property keys recreated after a deletion. It is available until the plugin reloads or another successful batch replaces it.
 
 Edits can change property formatting, including YAML comments and quoting; undo restores names and values, not the original formatting. Renaming a property does not update its configured type, templates, or queries that reference its old name. See the [editing guide](docs/BULK-EDITING.md) and [property-renaming guide](docs/PROPERTY-RENAMING.md) for details.
 
@@ -101,8 +103,8 @@ Your notes stay in your vault. The plugin does not send vault data to external s
 ## Help and documentation
 
 - [User guide](docs/USER-GUIDE.md) — browsing, search, saved views, exclusions, keyboard controls, and troubleshooting.
-- [Bulk value editing](docs/BULK-EDITING.md) — rename, merge, link conversion, splitting, and undo.
-- [Property-name renaming](docs/PROPERTY-RENAMING.md) — previews, conflicts, and effects on saved views.
+- [Bulk value editing](docs/BULK-EDITING.md) — rename, delete, merge, link conversion, splitting, and undo.
+- [Property-name renaming](docs/PROPERTY-RENAMING.md) — renaming, deletion, previews, conflicts, and effects on saved views.
 - [Changelog](CHANGELOG.md) — changes by version.
 - [Documentation index](docs/README.md) — all user and contributor guides.
 - [Report an issue](https://github.com/ajay126z/supercharged-properties/issues).

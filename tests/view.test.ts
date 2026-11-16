@@ -311,6 +311,30 @@ it('offers property-name renaming from the property row keyboard menu', () => {
   (Menu as any).items.find((item: any) => item.title === 'Rename property…').run();
   expect(plugin.renameProperty).toHaveBeenCalledWith(plugin.index.properties.get('status'));
 });
+it('offers property deletion from the property row keyboard menu', () => {
+  plugin.deleteProperty = vi.fn();
+  const row = document.querySelector('[aria-label="Toggle status (2)"]')!;
+  row.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+  (Menu as any).items.find((item: any) => item.title === 'Delete property…').run();
+  expect(plugin.deleteProperty).toHaveBeenCalledWith(plugin.index.properties.get('status'));
+});
+it('offers value deletion from the value row keyboard menu', () => {
+  plugin.editValue = vi.fn();
+  click('Expand status');
+  const row = document.querySelector('[aria-label="Show notes with status: Done (1)"]')!;
+  row.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+  (Menu as any).items.find((item: any) => item.title === 'Delete value…').run();
+  const status = plugin.index.properties.get('status');
+  const done = [...status.values.values()].find((value: { label: string }) => value.label === 'Done');
+  expect(plugin.editValue).toHaveBeenCalledWith(status, done, 'delete');
+});
+it('does not offer value deletion for empty rows', () => {
+  plugin.index.update('Empty.md', { blank: null }); view.render();
+  click('Expand blank');
+  const row = Array.from(document.querySelectorAll('[aria-label]')).find(element => element.getAttribute('aria-label')?.startsWith('Show notes with blank:'))!;
+  row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+  expect((Menu as any).items.some((item: any) => item.title === 'Delete value…')).toBe(false);
+});
 it.each(['text', 'multitext', 'list', 'number', 'checkbox', 'date', 'datetime', 'tags', 'aliases', 'cssclasses'])('offers Split into list only for configured text properties (%s)', (type) => {
   plugin.typeResolver.typeFor = () => type;
   click('Expand status');

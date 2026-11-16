@@ -25,7 +25,7 @@ __export(main_exports, {
   default: () => SuperchargedPropertiesPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/frontmatter-values.ts
 var EMPTY = Object.freeze({ kind: "empty", text: "" });
@@ -382,6 +382,7 @@ function sameValue(a, b) {
 }
 function transformValue(raw, request, inList) {
   if (Array.isArray(raw)) {
+    if (request.mode === "delete") return deleteFromList(raw, request);
     let changed = 0;
     let value2 = raw.map((item) => {
       const result = transformValue(item, request, true);
@@ -394,8 +395,26 @@ function transformValue(raw, request, inList) {
     return changed ? { changed, value: value2 } : { changed: 0, value: raw };
   }
   if (!matches(raw, request)) return { changed: 0, value: raw };
+  if (request.mode === "delete") return { changed: 1, value: raw, remove: true };
   const value = transformScalar(raw, request, inList);
   return sameValue(value, raw) ? { changed: 0, value: raw } : { changed: 1, value };
+}
+function deleteFromList(items, request) {
+  let changed = 0;
+  const value = [];
+  for (const item of items) {
+    if (Array.isArray(item)) {
+      const result = deleteFromList(item, request);
+      changed += result.changed;
+      if (result.remove) continue;
+      value.push(result.value);
+    } else if (matches(item, request)) {
+      changed++;
+    } else {
+      value.push(item);
+    }
+  }
+  return changed ? { changed, value, remove: value.length === 0 } : { changed: 0, value: items };
 }
 function matches(raw, request) {
   if (request.kind === "empty") return false;
@@ -423,6 +442,8 @@ function transformScalar(raw, request, inList) {
       const parts = raw.split(delimiter).map((part) => part.trim()).filter(Boolean);
       return parts.length > 1 ? parts : raw;
     }
+    case "delete":
+      return raw;
   }
 }
 function coerce(kind, replacement) {
@@ -458,9 +479,32 @@ var ValueEditor = class {
       if (raw === void 0) continue;
       const result = previewValue(raw, request);
       if (!result.changed) continue;
-      changes.push({ path, key: propertyKey(frontmatter, request.property), original: cloneValue(raw), replacement: cloneValue(result.value), before: JSON.stringify(raw), after: JSON.stringify(result.value) });
+      const remove = result.remove === true;
+      changes.push({ path, key: propertyKey(frontmatter, request.property), original: cloneValue(raw), replacement: remove ? void 0 : cloneValue(result.value), remove, before: JSON.stringify(raw), after: remove ? "(removed)" : JSON.stringify(result.value) });
     }
     return { total: changes.length, changes };
+  }
+  previewPropertyDelete(property, paths) {
+    const changes = [], conflicts = [];
+    for (const path of new Set(paths)) {
+      if (!this.includesPath(path)) continue;
+      const file = this.file(path);
+      const frontmatter = file ? this.frontmatter(file) : void 0;
+      if (!frontmatter) {
+        conflicts.push({ path, message: "Note or metadata unavailable." });
+        continue;
+      }
+      const keys = matchingKeys(frontmatter, property);
+      if (!keys.length) continue;
+      if (keys.length !== 1) {
+        conflicts.push({ path, message: "Ambiguous source keys." });
+        continue;
+      }
+      const key = keys[0];
+      const original = cloneValue(frontmatter[key]);
+      changes.push({ path, key, original, replacement: void 0, remove: true, propertyDelete: true, before: JSON.stringify(original), after: "(removed)" });
+    }
+    return { property, total: changes.length, changes, conflicts };
   }
   previewPropertyRename(source, name, paths) {
     const target = name.trim();
@@ -513,10 +557,15 @@ var ValueEditor = class {
           await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
             if (!this.includesPath(change.path)) return;
             if (!Object.prototype.hasOwnProperty.call(frontmatter, change.key) || !sameValue(frontmatter[change.key], change.original)) return;
+            if (change.propertyDelete && matchingKeys(frontmatter, change.key).length !== 1) return;
             if (change.targetKey !== void 0 && !canRename(frontmatter, change.key, change.targetKey)) return;
-            snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: cloneValue(change.replacement), targetKey: change.targetKey };
-            setOwnValue(frontmatter, change.targetKey ?? change.key, cloneValue(change.replacement));
-            if (change.targetKey !== void 0) delete frontmatter[change.key];
+            const remove = change.remove === true;
+            snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: remove ? void 0 : cloneValue(change.replacement), targetKey: change.targetKey, remove };
+            if (remove) delete frontmatter[change.key];
+            else {
+              setOwnValue(frontmatter, change.targetKey ?? change.key, cloneValue(change.replacement));
+              if (change.targetKey !== void 0) delete frontmatter[change.key];
+            }
           });
           if (snapshot) snapshots.push(snapshot);
           else unchanged++;
@@ -549,6 +598,16 @@ var ValueEditor = class {
       let matched = false;
       try {
         await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+          if (snapshot.remove) {
+            if (matchingKeys(frontmatter, snapshot.key).length) {
+              skipped++;
+              remaining.push(snapshot);
+              return;
+            }
+            matched = true;
+            setOwnValue(frontmatter, snapshot.key, cloneValue(snapshot.before));
+            return;
+          }
           const currentKey = snapshot.targetKey ?? snapshot.key;
           const safeKey = snapshot.targetKey === void 0 || canRename(frontmatter, currentKey, snapshot.key);
           if (!safeKey || !Object.prototype.hasOwnProperty.call(frontmatter, currentKey) || !sameValue(frontmatter[currentKey], snapshot.after)) {
@@ -655,9 +714,116 @@ var PropertyRenameModal = class extends import_obsidian3.Modal {
   }
 };
 
-// src/value-dialog.ts
+// src/property-delete-dialog.ts
 var import_obsidian4 = require("obsidian");
-var ValueEditModal = class extends import_obsidian4.Modal {
+var PropertyDeleteModal = class extends import_obsidian4.Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+    this.busy = false;
+  }
+  onOpen() {
+    this.titleEl.textContent = "Delete property";
+    const content = this.contentEl;
+    content.classList.add("pv-edit-modal");
+    content.createEl("p", { text: `Delete ${this.options.property} from every eligible note in included folders across the vault, including notes hidden by search filters. Excluded folders are skipped.` });
+    content.createEl("p", { cls: "pv-edit-hint", text: "The property key and its values are removed from matching notes. Notes with ambiguous keys or unavailable metadata are skipped. Undo last property edit restores the last batch until reload." });
+    const previewEl = content.createDiv({ cls: "pv-edit-preview" });
+    previewEl.setAttribute("aria-live", "polite");
+    const actions = content.createDiv({ cls: "pv-edit-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel" });
+    cancel.type = "button";
+    cancel.addEventListener("click", () => this.close());
+    const apply = actions.createEl("button", { text: "Delete", cls: "mod-warning" });
+    apply.type = "button";
+    const render = () => {
+      this.displayed = this.options.preview();
+      const plan = this.displayed;
+      previewEl.replaceChildren();
+      apply.textContent = `Delete from ${plan.total} notes`;
+      apply.disabled = this.busy || plan.total === 0;
+      previewEl.createEl("p", { text: `${plan.total} note${plan.total === 1 ? "" : "s"} will lose this property; ${plan.conflicts.length} will be skipped.` });
+      for (const change of plan.changes) {
+        const row = previewEl.createDiv({ cls: "pv-edit-change" });
+        row.createSpan({ cls: "pv-edit-path", text: change.path });
+        row.createSpan({ cls: "pv-edit-values", text: `${change.key}: ${change.before} \u2192 removed` });
+      }
+      if (plan.conflicts.length) previewEl.createEl("h3", { text: "Skipped notes" });
+      for (const conflict of plan.conflicts) previewEl.createEl("p", { cls: "pv-edit-change", text: `${conflict.path}: ${conflict.message}` });
+    };
+    apply.addEventListener("click", () => {
+      if (this.busy || apply.disabled || !this.displayed) return;
+      this.busy = true;
+      cancel.disabled = true;
+      apply.disabled = true;
+      apply.textContent = "Deleting\u2026";
+      void this.options.apply(this.displayed).then(() => this.close()).catch(() => {
+        this.busy = false;
+        cancel.disabled = false;
+        new import_obsidian4.Notice("Could not delete properties.");
+        render();
+      });
+    });
+    render();
+    cancel.focus();
+  }
+  onClose() {
+    this.contentEl.replaceChildren();
+  }
+};
+
+// src/property-delete.ts
+function forgetDeletedProperty(prefs, name) {
+  const target = fold(name);
+  const matches2 = (key) => fold(key) === target;
+  let changed = false;
+  if (prefs.scope) {
+    const scope = prefs.scope.filter((key) => !matches2(key));
+    if (scope.length !== prefs.scope.length) {
+      prefs.scope = scope;
+      changed = true;
+    }
+  }
+  const removeKeys = (keys) => keys.filter((key) => !matches2(key));
+  const pinned = removeKeys(prefs.pinned);
+  if (pinned.length !== prefs.pinned.length) {
+    prefs.pinned = pinned;
+    changed = true;
+  }
+  const expanded = removeKeys(prefs.expanded);
+  if (expanded.length !== prefs.expanded.length) {
+    prefs.expanded = expanded;
+    changed = true;
+  }
+  const hidden = prefs.hidden.split("\n");
+  const visible = hidden.filter((line) => !matches2(line));
+  if (visible.length !== hidden.length) {
+    prefs.hidden = visible.join("\n");
+    changed = true;
+  }
+  const profiles = [];
+  for (const profile of prefs.profiles) {
+    const keys = removeKeys(profile.keys);
+    if (keys.length !== profile.keys.length) {
+      profile.keys = keys;
+      changed = true;
+    }
+    if (keys.length) profiles.push(profile);
+    else changed = true;
+  }
+  if (profiles.length !== prefs.profiles.length) {
+    prefs.profiles = profiles;
+    if (prefs.activeProfile && !profiles.some((profile) => profile.id === prefs.activeProfile)) {
+      prefs.activeProfile = null;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// src/value-dialog.ts
+var import_obsidian5 = require("obsidian");
+var ValueEditModal = class extends import_obsidian5.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -689,6 +855,8 @@ var ValueEditModal = class extends import_obsidian4.Modal {
       });
     } else if (this.request.mode === "wikilink") {
       el(this.contentEl, "p", "pv-edit-hint", `Every matching note will use ${`[[${this.request.value}]]`}.`);
+    } else if (this.request.mode === "delete") {
+      el(this.contentEl, "p", "pv-edit-hint", "Matching values are removed from eligible notes. If the value is the entire property value, the property key is removed. Empty and object values do not offer deletion.");
     } else {
       this.field("Delimiter", this.request.delimiter ?? ",", (value) => {
         this.request = { ...this.request, delimiter: value };
@@ -703,6 +871,7 @@ var ValueEditModal = class extends import_obsidian4.Modal {
     cancel.addEventListener("click", () => this.close());
     this.applyButton = el(actions, "button", "mod-cta", "Apply");
     this.applyButton.type = "button";
+    if (this.request.mode === "delete") this.applyButton.classList.add("mod-warning");
     this.applyButton.addEventListener("click", () => {
       void this.submit();
     });
@@ -735,6 +904,10 @@ var ValueEditModal = class extends import_obsidian4.Modal {
     if (this.request.mode === "split") return !!this.request.delimiter;
     return true;
   }
+  applyLabel(total) {
+    const verb = this.request.mode === "delete" ? "Delete from" : "Apply to";
+    return `${verb} ${total} note${total === 1 ? "" : "s"}`;
+  }
   updatePreview() {
     this.previewEl.replaceChildren();
     if (!this.valid()) {
@@ -744,7 +917,7 @@ var ValueEditModal = class extends import_obsidian4.Modal {
     }
     const preview = this.options.preview(this.request);
     this.displayed = preview;
-    this.applyButton.textContent = `Apply to ${preview.total} notes`;
+    this.applyButton.textContent = this.applyLabel(preview.total);
     this.applyButton.disabled = this.busy || preview.total === 0;
     el(this.previewEl, "p", "pv-edit-count", preview.total ? `${preview.total} note${preview.total === 1 ? "" : "s"} will change.` : "No notes will change.");
     for (const change of preview.changes) {
@@ -767,9 +940,9 @@ var ValueEditModal = class extends import_obsidian4.Modal {
       this.busy = false;
       if (this.input) this.input.disabled = false;
       if (this.select) this.select.disabled = false;
-      this.applyButton.textContent = "Apply";
+      this.applyButton.textContent = this.applyLabel(this.displayed?.total ?? 0);
       this.updatePreview();
-      new import_obsidian4.Notice("Could not update property values.");
+      new import_obsidian5.Notice("Could not update property values.");
     }
   }
 };
@@ -783,6 +956,8 @@ function titleFor(mode) {
       return "Convert to wikilink";
     case "split":
       return "Split into list";
+    case "delete":
+      return "Delete value";
   }
 }
 function el(parent, tag, cls = "", text = "") {
@@ -792,7 +967,7 @@ function el(parent, tag, cls = "", text = "") {
 // src/main.ts
 var VIEW = "supercharged-properties";
 var defaults = { counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
-var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
+var SuperchargedPropertiesPlugin = class extends import_obsidian6.Plugin {
   constructor() {
     super(...arguments);
     this.index = new PropertyIndex();
@@ -844,7 +1019,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
     }));
     this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRebuild()));
     this.registerEvent(this.app.vault.on("create", (file) => {
-      if (file instanceof import_obsidian5.TFile && file.extension === "md" && this.includesPath(file.path)) {
+      if (file instanceof import_obsidian6.TFile && file.extension === "md" && this.includesPath(file.path)) {
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache) {
           this.updateIndexedNote(file.path, cache.frontmatter);
@@ -853,13 +1028,13 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
       }
     }));
     this.registerEvent(this.app.vault.on("delete", (file) => {
-      if (file instanceof import_obsidian5.TFile) {
+      if (file instanceof import_obsidian6.TFile) {
         this.index.remove(file.path);
         this.refresh();
       } else this.scheduleRebuild();
     }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-      if (file instanceof import_obsidian5.TFile) {
+      if (file instanceof import_obsidian6.TFile) {
         this.index.remove(oldPath);
         if (file.extension === "md" && this.includesPath(file.path)) this.updateIndexedNote(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
         this.refresh();
@@ -910,21 +1085,21 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
   save() {
     const snapshot = JSON.parse(JSON.stringify(this.prefs));
     this.saveQueue = this.saveQueue.then(() => this.saveData(snapshot)).catch(() => {
-      new import_obsidian5.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
+      new import_obsidian6.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
     });
     this.refresh();
     return this.saveQueue;
   }
-  async applyValueEdit(preview) {
+  async applyValueEdit(preview, verb = "Updated") {
     const result = await this.valueEditor.apply(preview);
-    new import_obsidian5.Notice(`Updated ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
-    for (const failure of result.failures) new import_obsidian5.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian6.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
+    for (const failure of result.failures) new import_obsidian6.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
   }
   async undoValueEdit() {
     const result = await this.valueEditor.undo();
-    new import_obsidian5.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
-    for (const failure of result.failures) new import_obsidian5.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian6.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
+    for (const failure of result.failures) new import_obsidian6.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
   }
   renameProperty(property) {
@@ -937,9 +1112,23 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
           includeRenamedProperty(this.prefs, preview.source, preview.target);
           await this.save();
         }
-        new import_obsidian5.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian5.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian6.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian6.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
+      }
+    }).open();
+  }
+  deleteProperty(property) {
+    new PropertyDeleteModal(this.app, {
+      property: property.label,
+      preview: () => this.valueEditor.previewPropertyDelete(property.id, this.index.properties.get(property.id)?.paths ?? []),
+      apply: async (preview) => {
+        const result = await this.valueEditor.apply(preview);
+        new import_obsidian6.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian6.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        this.rebuild();
+        const complete = preview.conflicts.length === 0 && result.failures.length === 0 && result.unchanged === 0;
+        if (complete && forgetDeletedProperty(this.prefs, property.id)) await this.save();
       }
     }).open();
   }
@@ -954,10 +1143,10 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
       preview: (edit) => edit.mode === "split" && !supportsTextSplit(property, this.typeResolver) ? { total: 0, changes: [] } : this.valueEditor.preview(edit, node.paths),
       apply: (preview) => {
         if (mode === "split" && !supportsTextSplit(property, this.typeResolver)) {
-          new import_obsidian5.Notice("Split into list is only available for text properties.");
+          new import_obsidian6.Notice("Split into list is only available for text properties.");
           return Promise.resolve();
         }
-        return this.applyValueEdit(preview);
+        return this.applyValueEdit(preview, mode === "delete" ? "Deleted from" : "Updated");
       }
     }).open();
   }
@@ -978,7 +1167,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian5.Plugin {
 function el2(parent, tag, cls = "", text = "") {
   return parent.createEl(tag, { cls, text });
 }
-var PropertiesView = class extends import_obsidian5.ItemView {
+var PropertiesView = class extends import_obsidian6.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -1008,7 +1197,7 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     this.searchHeader = el2(toolbar, "div", "pv-search-header");
     this.searchHeader.hidden = true;
     const search = el2(this.searchHeader, "div", "pv-search");
-    (0, import_obsidian5.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian6.setIcon)(el2(search, "span", "pv-icon"), "search");
     this.input = el2(search, "input", "pv-filter");
     this.input.type = "search";
     this.input.placeholder = "Find properties, values, notes\u2026";
@@ -1101,7 +1290,7 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     }
   }
   openSearchScopeMenu() {
-    const menu = new import_obsidian5.Menu();
+    const menu = new import_obsidian6.Menu();
     for (const [value, label] of [["any", "Search everything"], ["key", "Property names"], ["value", "Values"], ["note", "Note names / paths"]]) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.searchScope === value).onClick(() => {
         this.searchScope = value;
@@ -1126,11 +1315,11 @@ var PropertiesView = class extends import_obsidian5.ItemView {
   iconButton(parent, title, icon, run) {
     const button = this.button(parent, "", title, run);
     button.className = "pv-icon-button";
-    (0, import_obsidian5.setIcon)(button, icon);
+    (0, import_obsidian6.setIcon)(button, icon);
     return button;
   }
   openSortMenu() {
-    const menu = new import_obsidian5.Menu();
+    const menu = new import_obsidian6.Menu();
     for (const [value, label] of Object.entries(sortOptions)) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.plugin.prefs.sort === value).onClick(() => {
         this.plugin.prefs.sort = sortOrder(value);
@@ -1168,7 +1357,7 @@ var PropertiesView = class extends import_obsidian5.ItemView {
       this.render();
     });
     const search = el2(this.scopePanel, "div", "pv-search pv-picker-search");
-    (0, import_obsidian5.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian6.setIcon)(el2(search, "span", "pv-icon"), "search");
     const input = el2(search, "input", "pv-filter");
     input.type = "search";
     input.placeholder = "Find a property\u2026";
@@ -1228,26 +1417,26 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     const keys = [...prefs.scope ?? this.plugin.index.properties.keys()];
     if (action === "new" || action === "update") {
       if (!keys.length) {
-        new import_obsidian5.Notice("Please select at least one property.");
+        new import_obsidian6.Notice("Please select at least one property.");
         return;
       }
       if (prefs.scope === null || sameKeys(keys, [...this.plugin.index.properties.keys()])) {
-        new import_obsidian5.Notice("All properties View already exists.");
+        new import_obsidian6.Notice("All properties View already exists.");
         return;
       }
     }
     if (action === "new" || action === "rename") {
       if (!name) {
-        new import_obsidian5.Notice("Enter a name for this view.");
+        new import_obsidian6.Notice("Enter a name for this view.");
         this.profileName.focus();
         return;
       }
       if (fold(name) === "all properties") {
-        new import_obsidian5.Notice("All properties View already exists.");
+        new import_obsidian6.Notice("All properties View already exists.");
         return;
       }
       if (prefs.profiles.some((profile) => fold(profile.name) === fold(name) && (action === "new" || profile !== active))) {
-        new import_obsidian5.Notice("A view with that name already exists.");
+        new import_obsidian6.Notice("A view with that name already exists.");
         return;
       }
     }
@@ -1373,7 +1562,7 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     this.expandToggle.setAttribute("aria-label", toggleLabel);
     this.expandToggle.setAttribute("aria-pressed", String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
-    (0, import_obsidian5.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
+    (0, import_obsidian6.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
     this.summary.textContent = `${visible} properties \xB7 ${scope === null ? "Entire vault" : "Custom selection"}`;
     if (!visible) el2(this.body, "div", "pv-empty", scope?.length === 0 ? "Choose properties above to start exploring." : "No matching properties. Adjust your search or selection.");
     this.body.scrollTop = scroll;
@@ -1400,10 +1589,10 @@ var PropertiesView = class extends import_obsidian5.ItemView {
       const icon = el2(button, "span", "pv-icon pv-type-icon");
       icon.title = `Type: ${type}`;
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian5.setIcon)(icon, this.plugin.typeResolver.iconFor(property));
+      (0, import_obsidian6.setIcon)(icon, this.plugin.typeResolver.iconFor(property));
     }
     el2(button, "span", "pv-label", node.label);
-    if (isKey && this.plugin.prefs.pinned.includes(property.id)) (0, import_obsidian5.setIcon)(el2(button, "span", "pv-pin"), "pin");
+    if (isKey && this.plugin.prefs.pinned.includes(property.id)) (0, import_obsidian6.setIcon)(el2(button, "span", "pv-pin"), "pin");
     if (!isKey) {
       const kind = JSON.parse(node.id)[0];
       if (kind !== "string") el2(button, "span", "pv-kind", kind);
@@ -1420,13 +1609,13 @@ var PropertiesView = class extends import_obsidian5.ItemView {
       const button = this.button(notes, "", path, () => {
       });
       button.className = "pv-file";
-      (0, import_obsidian5.setIcon)(el2(button, "span", "pv-icon"), "file-text");
+      (0, import_obsidian6.setIcon)(el2(button, "span", "pv-icon"), "file-text");
       el2(button, "span", "pv-note-name", path.split("/").pop()?.replace(/\.md$/, "") ?? path);
       const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
       if (folder) el2(button, "small", "pv-note-path", folder);
       button.addEventListener("click", (event) => {
         const file = this.app.vault.getAbstractFileByPath(path);
-        if (file instanceof import_obsidian5.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian5.Notice("Unable to open note."));
+        if (file instanceof import_obsidian6.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian6.Notice("Unable to open note."));
       });
     }
     if (paths.length > limit) this.button(notes, "Show more notes", "Show 100 more notes", () => {
@@ -1442,9 +1631,9 @@ var PropertiesView = class extends import_obsidian5.ItemView {
   async copy(text) {
     try {
       await this.contentEl.ownerDocument.defaultView.navigator.clipboard.writeText(text);
-      new import_obsidian5.Notice("Copied to clipboard.");
+      new import_obsidian6.Notice("Copied to clipboard.");
     } catch {
-      new import_obsidian5.Notice("Clipboard unavailable.");
+      new import_obsidian6.Notice("Clipboard unavailable.");
     }
   }
   async search(property, node) {
@@ -1462,27 +1651,27 @@ var PropertiesView = class extends import_obsidian5.ItemView {
       if (typeof view.setQuery !== "function") {
         created?.detach();
         created = null;
-        new import_obsidian5.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian6.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
       view.setQuery(query);
       created = null;
       await this.app.workspace.revealLeaf(leaf);
       if (node !== property && JSON.parse(node.id)[0] === "empty") {
-        new import_obsidian5.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
+        new import_obsidian6.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
       }
     } catch {
       if (created) {
         created.detach();
         created = null;
-        new import_obsidian5.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian6.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
-      new import_obsidian5.Notice("Could not open Search. Your notes remain available in the property tree.");
+      new import_obsidian6.Notice("Could not open Search. Your notes remain available in the property tree.");
     }
   }
   showMenu(event, property, node) {
-    const menu = new import_obsidian5.Menu();
+    const menu = new import_obsidian6.Menu();
     menu.addItem((item) => item.setTitle("Open in Search").setIcon("search").onClick(() => {
       void this.search(property, node);
     }));
@@ -1494,6 +1683,7 @@ var PropertiesView = class extends import_obsidian5.ItemView {
     }));
     if (node === property) {
       menu.addItem((item) => item.setTitle("Rename property\u2026").setIcon("pencil").onClick(() => this.plugin.renameProperty(property)));
+      menu.addItem((item) => item.setTitle("Delete property\u2026").setIcon("trash-2").onClick(() => this.plugin.deleteProperty(property)));
       const pinned = this.plugin.prefs.pinned.includes(property.id);
       menu.addItem((item) => item.setTitle(pinned ? "Unpin property" : "Pin property").setIcon("pin").onClick(() => {
         this.plugin.prefs.pinned = pinned ? this.plugin.prefs.pinned.filter((key) => key !== property.id) : [...this.plugin.prefs.pinned, property.id];
@@ -1505,15 +1695,16 @@ var PropertiesView = class extends import_obsidian5.ItemView {
 ${property.label}`;
         void this.plugin.save();
         this.render();
-        new import_obsidian5.Notice("Property hidden. Restore it in Supercharged Properties settings.");
+        new import_obsidian6.Notice("Property hidden. Restore it in Supercharged Properties settings.");
       }));
     }
     if (node !== property) {
       const [kind] = JSON.parse(node.id);
-      const addEdit = (title, mode) => menu.addItem((item) => item.setTitle(title).setIcon("pencil").onClick(() => this.plugin.editValue(property, node, mode)));
+      const addEdit = (title, mode, icon = "pencil") => menu.addItem((item) => item.setTitle(title).setIcon(icon).onClick(() => this.plugin.editValue(property, node, mode)));
       if (kind !== "empty") {
         addEdit("Rename value\u2026", "rename");
         if ([...property.values.values()].some((value) => value !== node && JSON.parse(value.id)[0] === kind)) addEdit("Merge value\u2026", "merge");
+        addEdit("Delete value\u2026", "delete", "trash-2");
         if (kind === "string" && !isWikilink(node.label)) {
           addEdit("Convert to wikilink\u2026", "wikilink");
           if (supportsTextSplit(property, this.plugin.typeResolver)) addEdit("Split into list\u2026", "split");
@@ -1523,7 +1714,7 @@ ${property.label}`;
     menu.showAtMouseEvent(event);
   }
 };
-var PreferencesTab = class extends import_obsidian5.PluginSettingTab {
+var PreferencesTab = class extends import_obsidian6.PluginSettingTab {
   constructor(plugin) {
     super(plugin.app, plugin);
     this.plugin = plugin;
@@ -1556,7 +1747,7 @@ var PreferencesTab = class extends import_obsidian5.PluginSettingTab {
   display() {
     this.containerEl.replaceChildren();
     for (const definition of this.getSettingDefinitions()) {
-      const setting = new import_obsidian5.Setting(this.containerEl).setName(definition.name);
+      const setting = new import_obsidian6.Setting(this.containerEl).setName(definition.name);
       if (definition.desc) setting.setDesc(definition.desc);
       definition.render(setting);
     }

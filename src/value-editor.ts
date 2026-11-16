@@ -12,14 +12,15 @@ import {
   type ValueEditRequest
 } from './value-operations';
 
-export interface ValueEditChange { readonly path: string; readonly before: string; readonly after: string; readonly key: string; readonly original: unknown; readonly replacement: unknown; readonly targetKey?: string }
+export interface ValueEditChange { readonly path: string; readonly before: string; readonly after: string; readonly key: string; readonly original: unknown; readonly replacement: unknown; readonly targetKey?: string; readonly remove?: boolean; readonly propertyDelete?: boolean }
 export interface ValueEditPreview { readonly total: number; readonly changes: ValueEditChange[] }
 export interface PropertyRenamePreview extends ValueEditPreview { readonly source: string; readonly target: string; readonly conflicts: ValueEditFailure[]; readonly error?: string }
+export interface PropertyDeletePreview extends ValueEditPreview { readonly property: string; readonly conflicts: ValueEditFailure[] }
 export interface ValueEditFailure { readonly path: string; readonly message: string }
 export interface ValueEditResult { readonly updated: number; readonly unchanged: number; readonly failures: ValueEditFailure[] }
 export interface ValueUndoResult { readonly restored: number; readonly skipped: number; readonly failures: ValueEditFailure[] }
 
-interface Snapshot { readonly path: string; readonly key: string; readonly before: unknown; readonly after: unknown; readonly targetKey?: string }
+interface Snapshot { readonly path: string; readonly key: string; readonly before: unknown; readonly after: unknown; readonly targetKey?: string; readonly remove: boolean }
 interface LastEdit { readonly snapshots: Snapshot[] }
 
 export class ValueEditor {
@@ -42,9 +43,27 @@ export class ValueEditor {
       if (raw === undefined) continue;
       const result = previewValue(raw, request);
       if (!result.changed) continue;
-      changes.push({ path, key: propertyKey(frontmatter, request.property)!, original: cloneValue(raw), replacement: cloneValue(result.value), before: JSON.stringify(raw), after: JSON.stringify(result.value) });
+      const remove = result.remove === true;
+      changes.push({ path, key: propertyKey(frontmatter, request.property)!, original: cloneValue(raw), replacement: remove ? undefined : cloneValue(result.value), remove, before: JSON.stringify(raw), after: remove ? '(removed)' : JSON.stringify(result.value) });
     }
     return { total: changes.length, changes };
+  }
+
+  previewPropertyDelete(property: string, paths: Iterable<string>): PropertyDeletePreview {
+    const changes: ValueEditChange[] = [], conflicts: ValueEditFailure[] = [];
+    for (const path of new Set(paths)) {
+      if (!this.includesPath(path)) continue;
+      const file = this.file(path);
+      const frontmatter = file ? this.frontmatter(file) : undefined;
+      if (!frontmatter) { conflicts.push({ path, message: 'Note or metadata unavailable.' }); continue; }
+      const keys = matchingKeys(frontmatter, property);
+      if (!keys.length) continue;
+      if (keys.length !== 1) { conflicts.push({ path, message: 'Ambiguous source keys.' }); continue; }
+      const key = keys[0];
+      const original = cloneValue(frontmatter[key]);
+      changes.push({ path, key, original, replacement: undefined, remove: true, propertyDelete: true, before: JSON.stringify(original), after: '(removed)' });
+    }
+    return { property, total: changes.length, changes, conflicts };
   }
 
   previewPropertyRename(source: string, name: string, paths: Iterable<string>): PropertyRenamePreview {
@@ -84,10 +103,15 @@ export class ValueEditor {
           await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
             if (!this.includesPath(change.path)) return;
             if (!Object.prototype.hasOwnProperty.call(frontmatter, change.key) || !sameValue(frontmatter[change.key], change.original)) return;
+            if (change.propertyDelete && matchingKeys(frontmatter, change.key).length !== 1) return;
             if (change.targetKey !== undefined && !canRename(frontmatter, change.key, change.targetKey)) return;
-            snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: cloneValue(change.replacement), targetKey: change.targetKey };
-            setOwnValue(frontmatter, change.targetKey ?? change.key, cloneValue(change.replacement));
-            if (change.targetKey !== undefined) delete frontmatter[change.key];
+            const remove = change.remove === true;
+            snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: remove ? undefined : cloneValue(change.replacement), targetKey: change.targetKey, remove };
+            if (remove) delete frontmatter[change.key];
+            else {
+              setOwnValue(frontmatter, change.targetKey ?? change.key, cloneValue(change.replacement));
+              if (change.targetKey !== undefined) delete frontmatter[change.key];
+            }
           });
           if (snapshot) snapshots.push(snapshot);
           else unchanged++;
@@ -113,6 +137,12 @@ export class ValueEditor {
       let matched = false;
       try {
         await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
+          if (snapshot.remove) {
+            if (matchingKeys(frontmatter, snapshot.key).length) { skipped++; remaining.push(snapshot); return; }
+            matched = true;
+            setOwnValue(frontmatter, snapshot.key, cloneValue(snapshot.before));
+            return;
+          }
           const currentKey = snapshot.targetKey ?? snapshot.key;
           const safeKey = snapshot.targetKey === undefined || canRename(frontmatter, currentKey, snapshot.key);
           if (!safeKey || !Object.prototype.hasOwnProperty.call(frontmatter, currentKey) || !sameValue(frontmatter[currentKey], snapshot.after)) { skipped++; remaining.push(snapshot); return; }

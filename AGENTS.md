@@ -2,7 +2,7 @@
 
 ## Project
 
-Supercharged Properties is an Obsidian plugin that indexes YAML frontmatter across the vault and renders a full-pane tree of properties, values, and notes. It supports search, sorting, property scoping, saved profiles, pinning, hiding, and native Obsidian Search integration. Browsing is read-only; explicit bulk value and property-name edits use preview, confirmation, conflict checks, and session-scoped one-step undo through public processFrontMatter.
+Supercharged Properties is an Obsidian plugin that indexes YAML frontmatter across the vault and renders a full-pane tree of properties, values, and notes. It supports search, sorting, property scoping, saved profiles, pinning, hiding, and native Obsidian Search integration. Browsing is read-only; explicit bulk value, property-name, and deletion edits use preview, confirmation, conflict checks, and session-scoped one-step undo through public processFrontMatter.
 
 - Plugin ID: `supercharged-properties`
 - Runtime entry: `src/main.ts` bundled to `main.js` (CommonJS, ES2020)
@@ -22,7 +22,7 @@ export PATH="$HOME/.nvm/versions/node/v24.22.2/bin:$PATH"
 ```sh
 npm run lint       # ESLint with eslint-plugin-obsidianmd, zero warnings allowed
 npm run build      # tsc --noEmit, then esbuild -> main.js
-npm test           # Vitest, 14 files / 115 tests
+npm test           # Vitest, 16 files / 131 tests
 npm test -- tests/view.test.ts             # one suite
 npm test -- tests/search.test.ts -t quotes # one test by name
 npm run validate   # lint -> build -> test -> release validation
@@ -40,7 +40,7 @@ Run `npm run lint` and `npm test` after source changes. `npm run build` regenera
 3. `PropertiesView` (`src/main.ts`) renders the toolbar, picker, profile selector, summary, and tree. Rendering is full-rebuild with scroll/focus restoration.
 4. Incremental events (`metadataCache.changed`, vault create/delete/rename) update or remove single notes. Metadata resolution and folder renames schedule a debounced full rebuild (150 ms); view rendering is separately debounced (100 ms).
 
-Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply()`, then `rebuild()`. The preview includes every matching note in included folders even when search or property scope hides it. `apply()` re-checks the original value inside `processFrontMatter`, so notes changed after preview are skipped rather than overwritten. One successful batch replaces the session-scoped undo snapshot; undo also skips later conflicting edits. Property renames additionally skip folded-key collisions and reject the reserved `position` key.
+Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply()`, then `rebuild()`. The preview includes every matching note in included folders even when search or property scope hides it. `apply()` re-checks the original value inside `processFrontMatter`, so notes changed after preview are skipped rather than overwritten. One successful batch replaces the session-scoped undo snapshot; undo also skips later conflicting edits. Property renames additionally skip folded-key collisions and reject the reserved `position` key. Value deletion removes a scalar key or matching list entries; property deletion removes the key from every eligible note and re-checks folded-key ambiguity at apply time. A fully successful property deletion also clears stale selection, profile, pin, expansion, and hidden references; undo restores a deleted key only while no folded matching key exists.
 
 Supporting modules:
 
@@ -50,10 +50,11 @@ Supporting modules:
 - `src/profiles.ts` - validates and normalizes saved profiles; rejects malformed or duplicate entries.
 - `src/folder-exclusions.ts` - parses newline-separated vault paths; matching is case-sensitive, includes descendants, and is not glob-based.
 - `src/property-types.ts` - resolves property type icons from the vault's `types.json` through public adapter APIs, with built-in and text fallbacks. `supportsTextSplit` gates the text-only Split edit.
-- `src/value-operations.ts` - pure frontmatter transforms for rename, merge, wikilink, and split edits.
+- `src/value-operations.ts` - pure frontmatter transforms for rename, merge, wikilink, split, and delete edits.
 - `src/property-rename.ts` - property-name validation, folded collision checks, and preference carry-over after a rename.
-- `src/value-editor.ts` - preview/apply/undo over public `processFrontMatter`, with a busy guard that rejects overlapping batches.
-- `src/value-dialog.ts`, `src/property-rename-dialog.ts` - preview and confirmation modals.
+- `src/property-delete.ts` - removes deleted-property references from selections, saved views, pins, expansion, and hiding.
+- `src/value-editor.ts` - preview/apply/undo over public `processFrontMatter`, including property deletion, with a busy guard that rejects overlapping batches.
+- `src/value-dialog.ts`, `src/property-rename-dialog.ts`, `src/property-delete-dialog.ts` - preview and confirmation modals.
 - `styles.css` - all view styling, using Obsidian theme variables. Keep selectors prefixed with `pv-`.
 
 ## Conventions
@@ -74,10 +75,10 @@ Supporting modules:
 Vitest aliases `obsidian` to the empty `tests/obsidian-stub.ts`; each suite that touches the host supplies its own `vi.mock('obsidian')` doubles. `tests/dom-helpers.ts` runs as a setup file and shims Obsidian's `createEl`/`createDiv`/`createSpan` for jsdom tests, which opt in with `// @vitest-environment jsdom`.
 
 - Pure logic: `index`, `frontmatter-values`, `sorting`, `search`, `profiles`, `property-types`, `folder-exclusions`.
-- Edit behavior: `value-editor.test.ts` and `property-rename.test.ts` exercise previews, conflict skips, and undo with fake app/file doubles.
+- Edit behavior: `value-editor.test.ts`, `property-rename.test.ts`, and `property-delete.test.ts` exercise previews, conflict skips, and undo with fake app/file doubles.
 - Host lifecycle: `refresh.test.ts` (fake timers, event emitters, save queue).
 - Mobile viewport: `mobile-layout.test.ts` (jsdom, fake `visualViewport`, resize/scroll/focus events, cleanup).
-- UI behavior: `view.test.ts`, `value-dialog.test.ts`, `property-rename-dialog.test.ts` (jsdom, accessible labels, menus, profiles, CSS fixture). Set `PV_PREVIEW=/path/out.html` to emit a standalone layout fixture for CSS QA.
+- UI behavior: `view.test.ts`, `value-dialog.test.ts`, `property-rename-dialog.test.ts`, `property-delete-dialog.test.ts` (jsdom, accessible labels, menus, profiles, CSS fixture). Set `PV_PREVIEW=/path/out.html` to emit a standalone layout fixture for CSS QA.
 
 When changing accessible labels, menu titles, or DOM classes, update the tests that select by them.
 

@@ -27,3 +27,20 @@ it('disables confirmation while a changed input awaits its preview and for blank
   vi.advanceTimersByTime(120);
   expect((modal.contentEl.querySelector('.mod-cta') as HTMLButtonElement).disabled).toBe(true);
 });
+it('offers a destructive delete confirmation without an input', async () => {
+  const plan = { total: 2, changes: [
+    { path: 'a.md', key: 'status', before: '"obsolete"', after: '(removed)', original: 'obsolete', replacement: undefined, remove: true },
+    { path: 'b.md', key: 'status', before: '["active","obsolete"]', after: '["active"]', original: ['active', 'obsolete'], replacement: ['active'], remove: false }
+  ] };
+  const apply = vi.fn().mockResolvedValue(undefined);
+  const modal = new ValueEditModal({} as App, { request: { property: 'status', kind: 'string', value: 'obsolete', mode: 'delete' }, siblings: [], preview: () => plan, apply });
+  modal.onOpen();
+  expect(modal.titleEl.textContent).toBe('Delete value');
+  expect(modal.contentEl.querySelector('input')).toBeNull();
+  const button = modal.contentEl.querySelector('.mod-cta') as HTMLButtonElement;
+  expect(button.classList.contains('mod-warning')).toBe(true);
+  expect(button.textContent).toBe('Delete from 2 notes');
+  expect(modal.contentEl.textContent).toContain('(removed)');
+  button.click(); await Promise.resolve();
+  expect(apply).toHaveBeenCalledWith(plan);
+});

@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. Property-name and value edits write frontmatter only after you review a preview and confirm.
 
-This guide describes **1.2.0**, including property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
+This guide describes **1.2.1** and the unreleased property and value deletion actions. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 ## Contents
 
@@ -19,6 +19,7 @@ This guide describes **1.2.0**, including property-name renaming, excluded folde
 - [Sort, pin, and hide](#sort-pin-and-hide)
 - [Use Obsidian Search and copy links](#use-obsidian-search-and-copy-links)
 - [Rename property names](#rename-property-names)
+- [Delete properties or values](#delete-properties-or-values)
 - [Edit values across notes](#edit-values-across-notes)
 - [Data access and privacy](#data-access-and-privacy)
 - [Settings and commands](#settings-and-commands)
@@ -222,13 +223,22 @@ Obsidian Search applies its own matching and type rules, so results may differ f
 
 ## Rename property names
 
-In 1.2.0, right-click a property row and choose **Rename property…**. Review all affected and skipped notes before confirming. Values keep their stored types; destination conflicts are skipped. Read the [property-name renaming guide](PROPERTY-RENAMING.md) for case-only renames, preference updates, configured-type limitations, and shared undo.
+In 1.2.0, right-click a property row and choose **Rename property…**. Review all affected and skipped notes before confirming. Values keep their stored types; destination conflicts are skipped. Read the [property-name renaming guide](PROPERTY-RENAMING.md) for case-only renames, preference updates, configured-type limitations, and shared undo. The same property-row menu also offers **Delete property…**.
 
 ## Edit values across notes
 
-Value-row menus offer **Rename value…**, **Merge value…**, **Convert to wikilink…**, and **Split into list…** when applicable. These actions change values, not property names. **Split into list…** requires a Text property and a text value. It is hidden for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses. Strings already stored inside lists are not split.
+Value-row menus offer **Rename value…**, **Delete value…**, **Merge value…**, **Convert to wikilink…**, and **Split into list…** when applicable. These actions change values, not property names. **Delete value…** removes a matching scalar property or matching list entries; removing the entire value also removes the key from that note. Empty and object rows do not offer deletion. **Split into list…** requires a Text property and a text value. It is hidden for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses. Strings already stored inside lists are not split.
 
 Read the [bulk editing guide](BULK-EDITING.md) for examples, exact matching rules, preview and confirmation, partial failures, and undo. Each operation covers matching notes in included folders across the vault regardless of your tree search or saved view. Excluded folders are skipped. The full preview shows which notes will change.
+
+## Delete properties or values
+
+| Action | Where | Result |
+| --- | --- | --- |
+| Delete property… | Property-row menu | Removes the property key and its complete value from every eligible note. |
+| Delete value… | Value-row menu | Removes matching scalars or list entries; removing the entire value also removes the property key from that note. |
+
+Both actions require an explicit confirmation after reviewing the affected and skipped notes. They share preview, conflict skipping, and one-step undo with other edits. Property deletion also cleans up selections, saved views, pins, expanded properties, and hidden-property references after a fully successful batch. Read [property deletion](PROPERTY-RENAMING.md#delete-a-property) and [value deletion](BULK-EDITING.md#delete-a-value) for eligibility and undo details.
 
 ## Data access and privacy
 
@@ -282,6 +292,8 @@ The interface provides labelled controls, visible focus, expand/collapse state, 
 | Split into list is missing | Confirm the property is configured as Text, the selected value is text, and the property is not tags, aliases, or cssclasses. After a type change, refresh the property index. |
 | A template note still appears | Use a vault-relative path with the exact folder capitalization. Templates excludes Templates/Note.md, not Other/Templates/Note.md. Core Search is independent of this setting. |
 | Rename property is missing | Confirm you are using version 1.2.0 or later and open the property-row menu, not a value-row menu. |
+| Delete value is missing | Empty `(empty)` and object rows do not offer deletion. To remove the whole property, use **Delete property…** on its property row. |
+| A property disappeared after deleting its last value | Deleting an entire value removes the property key from that note. Undo restores it while the key name remains free. |
 | An edit is skipped, fails, or cannot be undone | See [edit troubleshooting and limits](BULK-EDITING.md#troubleshooting-and-limits). |
 
 For development and release information, see the [documentation index](README.md).

@@ -4,7 +4,7 @@
 import { fold } from './index';
 import type { PropertyValueKind } from './frontmatter-values';
 
-export type ValueEditMode = 'rename' | 'merge' | 'wikilink' | 'split';
+export type ValueEditMode = 'rename' | 'merge' | 'wikilink' | 'split' | 'delete';
 
 export interface ValueEditRequest {
   readonly property: string;
@@ -15,7 +15,7 @@ export interface ValueEditRequest {
   readonly delimiter?: string;
 }
 
-export interface ValueTransform { readonly changed: number; readonly value: unknown }
+export interface ValueTransform { readonly changed: number; readonly value: unknown; readonly remove?: boolean }
 
 /** Find the original frontmatter key for a folded property id. */
 export function propertyKey(frontmatter: Record<string, unknown>, property: string): string | undefined {
@@ -37,7 +37,8 @@ export function applyToFrontmatter(frontmatter: Record<string, unknown>, request
   if (key === undefined) return 0;
   const result = transformValue(frontmatter[key], request, false);
   if (!result.changed) return 0;
-  frontmatter[key] = result.value;
+  if (result.remove) delete frontmatter[key];
+  else frontmatter[key] = result.value;
   return result.changed;
 }
 
@@ -85,6 +86,7 @@ export function sameValue(a: unknown, b: unknown): boolean {
 
 function transformValue(raw: unknown, request: ValueEditRequest, inList: boolean): ValueTransform {
   if (Array.isArray(raw)) {
+    if (request.mode === 'delete') return deleteFromList(raw, request);
     let changed = 0;
     let value = raw.map(item => {
       const result = transformValue(item, request, true);
@@ -97,8 +99,28 @@ function transformValue(raw: unknown, request: ValueEditRequest, inList: boolean
     return changed ? { changed, value } : { changed: 0, value: raw };
   }
   if (!matches(raw, request)) return { changed: 0, value: raw };
+  if (request.mode === 'delete') return { changed: 1, value: raw, remove: true };
   const value = transformScalar(raw, request, inList);
   return sameValue(value, raw) ? { changed: 0, value: raw } : { changed: 1, value };
+}
+
+/** Remove matching scalars recursively; an emptied list is pruned from its parent. */
+function deleteFromList(items: readonly unknown[], request: ValueEditRequest): ValueTransform {
+  let changed = 0;
+  const value: unknown[] = [];
+  for (const item of items) {
+    if (Array.isArray(item)) {
+      const result = deleteFromList(item, request);
+      changed += result.changed;
+      if (result.remove) continue;
+      value.push(result.value);
+    } else if (matches(item, request)) {
+      changed++;
+    } else {
+      value.push(item);
+    }
+  }
+  return changed ? { changed, value, remove: value.length === 0 } : { changed: 0, value: items };
 }
 
 function matches(raw: unknown, request: ValueEditRequest): boolean {
@@ -128,6 +150,8 @@ function transformScalar(raw: unknown, request: ValueEditRequest, inList: boolea
       const parts = raw.split(delimiter).map(part => part.trim()).filter(Boolean);
       return parts.length > 1 ? parts : raw;
     }
+    case 'delete':
+      return raw;
   }
 }
 

@@ -83,3 +83,56 @@ it('keeps undo available for a previous edit even after its folder is excluded',
   expect((await editor.undo()).restored).toBe(1);
   expect(data['a.md'].status).toBe('doing');
 });
+it('deletes scalar keys and matching list entries, then restores them', async () => {
+  const { data, editor } = setup();
+  const remove = { ...request, mode: 'delete' as const };
+  const preview = editor.preview(remove, Object.keys(data));
+  expect(preview.total).toBe(2);
+  expect(preview.changes.find(change => change.path === 'a.md')).toMatchObject({ remove: true, after: '(removed)' });
+  expect(preview.changes.find(change => change.path === 'b.md')).toMatchObject({ remove: false, after: '["active"]' });
+  await editor.apply(preview);
+  expect(data['a.md']).toEqual({ other: 1 });
+  expect(data['b.md']).toEqual({ status: ['active'] });
+  expect((await editor.undo()).restored).toBe(2);
+  expect(data['a.md']).toEqual({ status: 'doing', other: 1 });
+  expect(data['b.md']).toEqual({ status: ['doing', 'active'] });
+});
+it('removes nested list entries, prunes emptied lists, and drops a property when no values remain', async () => {
+  const { data, editor } = setup();
+  data['a.md'] = { tags: ['x', ['y', 'x'], []] };
+  data['b.md'] = { tags: [['x']] };
+  const preview = editor.preview({ property: 'tags', kind: 'string', value: 'x', mode: 'delete' }, ['a.md', 'b.md']);
+  expect(preview.total).toBe(2);
+  await editor.apply(preview);
+  expect(data['a.md']).toEqual({ tags: [['y'], []] });
+  expect(data['b.md']).toEqual({});
+  await editor.undo();
+  expect(data['a.md']).toEqual({ tags: ['x', ['y', 'x'], []] });
+  expect(data['b.md']).toEqual({ tags: [['x']] });
+});
+it('skips stale values before deleting and refuses to overwrite recreated keys during undo', async () => {
+  const { data, editor } = setup();
+  const remove = { ...request, mode: 'delete' as const };
+  const preview = editor.preview(remove, Object.keys(data));
+  data['a.md'].status = 'done';
+  expect(await editor.apply(preview)).toMatchObject({ updated: 1, unchanged: 1 });
+  expect(data['a.md'].status).toBe('done');
+  data['b.md'].status = ['later'];
+  expect(await editor.undo()).toMatchObject({ restored: 0, skipped: 1 });
+  expect(data['b.md'].status).toEqual(['later']);
+  expect(editor.canUndo()).toBe(true);
+});
+it('retries a skipped scalar deletion only after the recreated key is removed again', async () => {
+  const { data, editor } = setup();
+  await editor.apply(editor.preview({ ...request, mode: 'delete' }, ['a.md']));
+  data['a.md'].Status = 'recreated';
+  expect(await editor.undo()).toMatchObject({ restored: 0, skipped: 1 });
+  expect(data['a.md']).toEqual({ other: 1, Status: 'recreated' });
+  delete data['a.md'].Status;
+  expect((await editor.undo()).restored).toBe(1);
+  expect(data['a.md']).toEqual({ status: 'doing', other: 1 });
+});
+it('does not delete empty or object values', () => {
+  expect(previewValue(null, { ...request, kind: 'empty', mode: 'delete' }).changed).toBe(0);
+  expect(previewValue({ nested: 1 }, { ...request, mode: 'delete' }).changed).toBe(0);
+});

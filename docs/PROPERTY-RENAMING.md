@@ -1,6 +1,6 @@
 # Rename property names
 
-This feature is available starting in **1.2.0**. It changes a property's **name**, for example `author` → `authors`, while preserving each note's value and stored type. It does not merge properties.
+This feature is available starting in **1.2.0**. It changes a property's **name**, for example `author` → `authors`, while preserving each note's value and stored type. It does not merge properties. Property deletion is covered below and was added after 1.2.1.
 
 [Back to the user guide](USER-GUIDE.md)
 
@@ -51,6 +51,24 @@ Run **Supercharged Properties: Undo last property edit** from the command palett
 Undo restores each note's original key spelling and value only if the destination still contains the batch's value and the original name is free. New ambiguous keys or later changes are skipped. Other properties remain untouched. Failed or skipped entries remain available for retry; retrying never forces an overwrite.
 
 Another successful property-name or value batch replaces the previous undo. Undo is cleared by plugin reload, disable, or restart. It restores values and keys, not YAML formatting. Renamed or deleted note paths cannot be recovered through their old paths. There is no redo.
+
+## Delete a property
+
+Right-click the **property row** and choose **Delete property…**. Review every eligible note and the separate **Skipped notes** list, then click **Delete from N notes** to confirm.
+
+Deletion removes the property key and its complete value from each eligible note, including lists, nested lists, objects, text, numbers, booleans, and empty values. Other properties and the note body are not edited. The action covers matching notes in included folders across the vault, including notes hidden by search or saved views. Excluded folders are omitted from previews and checked again before writes.
+
+The plugin skips a note when:
+
+- Multiple keys match the property name, such as both `Author` and `author` in one note.
+- The note or its cached metadata is unavailable.
+- The key or its value changed after preview, or a new folded-key collision appeared.
+
+Immediately before each write, the exact key and its previewed value are checked again. A batch may partially succeed; its notice reports deleted, skipped, and failed counts, with path-specific failure notices.
+
+After a batch with no conflicts, skips, or failures, references to the deleted property are also removed from the active selection, saved views, pins, expanded-property preferences, and hidden-property preferences. A saved view that becomes empty is removed, and the active view is cleared if it was removed. Partial or conflicting batches leave preferences unchanged so skipped notes remain covered.
+
+Deletion shares the **Undo last property edit** slot with renames and value edits. Undo restores the original key spelling and value only while no key with the same folded name exists. A later recreated key is skipped and the entry remains available for retry. Another successful batch replaces the previous undo; reload, disable, or restart clears it. Undo restores keys and values, not YAML formatting, and cannot recover notes deleted or renamed at the file level.
 
 ## Saved views and display preferences
 

@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Delete a property name from matching notes, or delete a matching value from scalar and list frontmatter. Both actions reuse preview, explicit confirmation, conflict skipping, and the shared one-step undo. A fully successful property deletion also removes stale selections, saved views, pins, expansion, and hiding references.
+
 ## [1.2.1] - 2026-11-15
 
 ### Fixed
