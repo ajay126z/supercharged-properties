@@ -45,9 +45,9 @@ Each edit shows the affected notes before you confirm. Property-name conflicts a
 
 Bulk edits apply to matching notes in included folders, even when a search or saved view shows only some of them. Folder exclusions limit these edits; display filters do not.
 
-![Merge property values with preview and undo](docs/media/03-merge-and-undo.gif)
-
 ![Rename a property while preserving its values](docs/media/04-rename-property.gif)
+
+![Merge property values with preview and undo](docs/media/03-merge-and-undo.gif)
 
 ### Undo and edit limits
 
