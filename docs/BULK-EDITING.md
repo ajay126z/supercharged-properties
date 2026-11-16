@@ -170,6 +170,8 @@ status: [active]
 
 If no values remain after deleting list entries, the property key is removed. Empty `(empty)` rows and nested object values do not offer deletion. Deleting a property name, rather than a value, is covered in the [property-renaming guide](PROPERTY-RENAMING.md#delete-a-property).
 
+When deletion would remove the whole property key, notes with multiple spellings of the same property name (such as `status` and `Status`) are omitted from the preview. If this ambiguity appears after preview, the note is skipped on Apply.
+
 Delete is destructive but shares the same preview, conflict checks, and undo as the other value actions. Undo restores the previous scalar or list structure; it does not restore YAML formatting or comments.
 
 ## How matching works

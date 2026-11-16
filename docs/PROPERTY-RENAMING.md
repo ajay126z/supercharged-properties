@@ -66,7 +66,7 @@ The plugin skips a note when:
 
 Immediately before each write, the exact key and its previewed value are checked again. A batch may partially succeed; its notice reports deleted, skipped, and failed counts, with path-specific failure notices.
 
-After a batch with no conflicts, skips, or failures, references to the deleted property are also removed from the active selection, saved views, pins, expanded-property preferences, and hidden-property preferences. A saved view that becomes empty is removed, and the active view is cleared if it was removed. Partial or conflicting batches leave preferences unchanged so skipped notes remain covered.
+Deleting a property preserves the active selection, saved views, pins, expanded-property preferences, and hidden-property preferences. A saved view containing only that property remains available, even while no notes match. Undo restores the property into its previous views and selection. You can remove unused references manually.
 
 Deletion shares the **Undo last property edit** slot with renames and value edits. Undo restores the original key spelling and value only while no key with the same folded name exists. A later recreated key is skipped and the entry remains available for retry. Another successful batch replaces the previous undo; reload, disable, or restart clears it. Undo restores keys and values, not YAML formatting, and cannot recover notes deleted or renamed at the file level.
 

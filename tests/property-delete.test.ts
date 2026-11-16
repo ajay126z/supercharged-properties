@@ -2,7 +2,6 @@ import { expect, it, vi } from 'vitest';
 vi.mock('obsidian', () => ({ TFile: class {} }));
 import { TFile, type App } from 'obsidian';
 import { ValueEditor } from '../src/value-editor';
-import { forgetDeletedProperty } from '../src/property-delete';
 
 function setup(data: Record<string, any>) {
   const files = Object.fromEntries(Object.keys(data).map(path => [path, Object.assign(new TFile(), { path })]));
@@ -53,23 +52,4 @@ it('skips a property delete when a folded-key ambiguity appears after preview', 
   expect(await editor.apply(plan)).toMatchObject({ updated: 1, unchanged: 1 });
   expect(data.a).toEqual({ author: 1, Author: 1 });
   expect(data.b).toEqual({});
-});
-
-it('removes deleted property references from selections, profiles, pins, expansion and hiding', () => {
-  const prefs = {
-    scope: ['author', 'status'],
-    pinned: ['author', 'status'],
-    expanded: ['author'],
-    hidden: 'author\nsecret',
-    profiles: [{ id: '1', name: 'Writing', keys: ['author', 'status'] }, { id: '2', name: 'Only author', keys: ['author'] }],
-    activeProfile: '2' as string | null
-  };
-  expect(forgetDeletedProperty(prefs, ' author ')).toBe(true);
-  expect(prefs.scope).toEqual(['status']);
-  expect(prefs.pinned).toEqual(['status']);
-  expect(prefs.expanded).toEqual([]);
-  expect(prefs.hidden).toBe('secret');
-  expect(prefs.profiles).toEqual([{ id: '1', name: 'Writing', keys: ['status'] }]);
-  expect(prefs.activeProfile).toBeNull();
-  expect(forgetDeletedProperty(prefs, 'author')).toBe(false);
 });

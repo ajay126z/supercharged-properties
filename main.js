@@ -480,6 +480,7 @@ var ValueEditor = class {
       const result = previewValue(raw, request);
       if (!result.changed) continue;
       const remove = result.remove === true;
+      if (remove && matchingKeys(frontmatter, request.property).length !== 1) continue;
       changes.push({ path, key: propertyKey(frontmatter, request.property), original: cloneValue(raw), replacement: remove ? void 0 : cloneValue(result.value), remove, before: JSON.stringify(raw), after: remove ? "(removed)" : JSON.stringify(result.value) });
     }
     return { total: changes.length, changes };
@@ -502,7 +503,7 @@ var ValueEditor = class {
       }
       const key = keys[0];
       const original = cloneValue(frontmatter[key]);
-      changes.push({ path, key, original, replacement: void 0, remove: true, propertyDelete: true, before: JSON.stringify(original), after: "(removed)" });
+      changes.push({ path, key, original, replacement: void 0, remove: true, before: JSON.stringify(original), after: "(removed)" });
     }
     return { property, total: changes.length, changes, conflicts };
   }
@@ -557,7 +558,7 @@ var ValueEditor = class {
           await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
             if (!this.includesPath(change.path)) return;
             if (!Object.prototype.hasOwnProperty.call(frontmatter, change.key) || !sameValue(frontmatter[change.key], change.original)) return;
-            if (change.propertyDelete && matchingKeys(frontmatter, change.key).length !== 1) return;
+            if (change.remove && matchingKeys(frontmatter, change.key).length !== 1) return;
             if (change.targetKey !== void 0 && !canRename(frontmatter, change.key, change.targetKey)) return;
             const remove = change.remove === true;
             snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: remove ? void 0 : cloneValue(change.replacement), targetKey: change.targetKey, remove };
@@ -771,55 +772,6 @@ var PropertyDeleteModal = class extends import_obsidian4.Modal {
     this.contentEl.replaceChildren();
   }
 };
-
-// src/property-delete.ts
-function forgetDeletedProperty(prefs, name) {
-  const target = fold(name);
-  const matches2 = (key) => fold(key) === target;
-  let changed = false;
-  if (prefs.scope) {
-    const scope = prefs.scope.filter((key) => !matches2(key));
-    if (scope.length !== prefs.scope.length) {
-      prefs.scope = scope;
-      changed = true;
-    }
-  }
-  const removeKeys = (keys) => keys.filter((key) => !matches2(key));
-  const pinned = removeKeys(prefs.pinned);
-  if (pinned.length !== prefs.pinned.length) {
-    prefs.pinned = pinned;
-    changed = true;
-  }
-  const expanded = removeKeys(prefs.expanded);
-  if (expanded.length !== prefs.expanded.length) {
-    prefs.expanded = expanded;
-    changed = true;
-  }
-  const hidden = prefs.hidden.split("\n");
-  const visible = hidden.filter((line) => !matches2(line));
-  if (visible.length !== hidden.length) {
-    prefs.hidden = visible.join("\n");
-    changed = true;
-  }
-  const profiles = [];
-  for (const profile of prefs.profiles) {
-    const keys = removeKeys(profile.keys);
-    if (keys.length !== profile.keys.length) {
-      profile.keys = keys;
-      changed = true;
-    }
-    if (keys.length) profiles.push(profile);
-    else changed = true;
-  }
-  if (profiles.length !== prefs.profiles.length) {
-    prefs.profiles = profiles;
-    if (prefs.activeProfile && !profiles.some((profile) => profile.id === prefs.activeProfile)) {
-      prefs.activeProfile = null;
-      changed = true;
-    }
-  }
-  return changed;
-}
 
 // src/value-dialog.ts
 var import_obsidian5 = require("obsidian");
@@ -1127,8 +1079,6 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian6.Plugin {
         new import_obsidian6.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
         for (const failure of result.failures) new import_obsidian6.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
-        const complete = preview.conflicts.length === 0 && result.failures.length === 0 && result.unchanged === 0;
-        if (complete && forgetDeletedProperty(this.prefs, property.id)) await this.save();
       }
     }).open();
   }

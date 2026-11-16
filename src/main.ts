@@ -11,7 +11,6 @@ import { ValueEditor, type ValueEditPreview, type ValueEditResult } from './valu
 import { PropertyRenameModal } from './property-rename-dialog';
 import { PropertyDeleteModal } from './property-delete-dialog';
 import { includeRenamedProperty } from './property-rename';
-import { forgetDeletedProperty } from './property-delete';
 import { ValueEditModal } from './value-dialog';
 import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-operations';
 import type { PropertyValueKind } from './frontmatter-values';
@@ -182,8 +181,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
         new Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 10000);
         for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
         this.rebuild();
-        const complete = preview.conflicts.length === 0 && result.failures.length === 0 && result.unchanged === 0;
-        if (complete && forgetDeletedProperty(this.prefs, property.id)) await this.save();
+        // Retain view references so undo (or a recreated property) restores visibility.
       }
     }).open();
   }

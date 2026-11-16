@@ -53,7 +53,7 @@ Bulk edits apply to matching notes in included folders, even when a search or sa
 
 ### Undo and edit limits
 
-Use **Supercharged Properties: Undo last property edit** to undo the last successful batch. Undo preserves later edits by skipping conflicting values, including property keys recreated after a deletion. It is available until the plugin reloads or another successful batch replaces it.
+Use **Supercharged Properties: Undo last property edit** to undo the last successful batch. Undo preserves later edits by skipping conflicting values, including property keys recreated after a deletion. It is available until the plugin reloads or another successful batch replaces it. Deleting a property preserves your saved views and selections, so they still apply after undo.
 
 Edits can change property formatting, including YAML comments and quoting; undo restores names and values, not the original formatting. Renaming a property does not update its configured type, templates, or queries that reference its old name. See the [editing guide](docs/BULK-EDITING.md) and [property-renaming guide](docs/PROPERTY-RENAMING.md) for details.
 

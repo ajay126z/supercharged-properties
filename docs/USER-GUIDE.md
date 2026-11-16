@@ -238,7 +238,7 @@ Read the [bulk editing guide](BULK-EDITING.md) for examples, exact matching rule
 | Delete property… | Property-row menu | Removes the property key and its complete value from every eligible note. |
 | Delete value… | Value-row menu | Removes matching scalars or list entries; removing the entire value also removes the property key from that note. |
 
-Both actions require an explicit confirmation after reviewing the affected and skipped notes. They share preview, conflict skipping, and one-step undo with other edits. Property deletion also cleans up selections, saved views, pins, expanded properties, and hidden-property references after a fully successful batch. Read [property deletion](PROPERTY-RENAMING.md#delete-a-property) and [value deletion](BULK-EDITING.md#delete-a-value) for eligibility and undo details.
+Both actions require an explicit confirmation after reviewing the affected and skipped notes. They share preview, conflict skipping, and one-step undo with other edits. Property deletion preserves selections, saved views, pins, expanded properties, and hidden-property references so undo restores the property into its previous views. Read [property deletion](PROPERTY-RENAMING.md#delete-a-property) and [value deletion](BULK-EDITING.md#delete-a-value) for eligibility and undo details.
 
 ## Data access and privacy
 

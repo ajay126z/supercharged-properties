@@ -136,3 +136,30 @@ it('does not delete empty or object values', () => {
   expect(previewValue(null, { ...request, kind: 'empty', mode: 'delete' }).changed).toBe(0);
   expect(previewValue({ nested: 1 }, { ...request, mode: 'delete' }).changed).toBe(0);
 });
+
+it.each(['doing', ['doing'], [['doing']]])('omits ambiguous whole-key value deletion from preview: %j', async original => {
+  const { data, editor } = setup();
+  data['a.md'] = { status: original, Status: 'keep' };
+  const preview = editor.preview({ ...request, mode: 'delete' }, ['a.md']);
+  expect(preview.total).toBe(0);
+  expect((await editor.apply(preview)).updated).toBe(0);
+  expect(data['a.md']).toEqual({ status: original, Status: 'keep' });
+});
+it.each(['doing', ['doing']])('skips whole-key value deletion if ambiguity appears after preview: %j', async original => {
+  const { data, editor } = setup();
+  data['a.md'] = { status: original };
+  const preview = editor.preview({ ...request, mode: 'delete' }, ['a.md', 'b.md']);
+  data['a.md'].Status = 'keep';
+  expect(await editor.apply(preview)).toMatchObject({ updated: 1, unchanged: 1 });
+  expect(data['a.md']).toEqual({ status: original, Status: 'keep' });
+  expect(await editor.undo()).toMatchObject({ restored: 1, skipped: 0 });
+  expect(data['b.md'].status).toEqual(['doing', 'active']);
+});
+it('can still delete part of a list and undo with a pre-existing case variant', async () => {
+  const { data, editor } = setup();
+  data['b.md'].Status = 'keep';
+  expect((await editor.apply(editor.preview({ ...request, mode: 'delete' }, ['b.md']))).updated).toBe(1);
+  expect(data['b.md']).toEqual({ status: ['active'], Status: 'keep' });
+  expect(await editor.undo()).toMatchObject({ restored: 1, skipped: 0 });
+  expect(data['b.md']).toEqual({ status: ['doing', 'active'], Status: 'keep' });
+});

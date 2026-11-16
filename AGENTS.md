@@ -22,7 +22,7 @@ export PATH="$HOME/.nvm/versions/node/v24.22.2/bin:$PATH"
 ```sh
 npm run lint       # ESLint with eslint-plugin-obsidianmd, zero warnings allowed
 npm run build      # tsc --noEmit, then esbuild -> main.js
-npm test           # Vitest, 16 files / 131 tests
+npm test           # Vitest, 17 files / 137 tests
 npm test -- tests/view.test.ts             # one suite
 npm test -- tests/search.test.ts -t quotes # one test by name
 npm run validate   # lint -> build -> test -> release validation
@@ -40,7 +40,7 @@ Run `npm run lint` and `npm test` after source changes. `npm run build` regenera
 3. `PropertiesView` (`src/main.ts`) renders the toolbar, picker, profile selector, summary, and tree. Rendering is full-rebuild with scroll/focus restoration.
 4. Incremental events (`metadataCache.changed`, vault create/delete/rename) update or remove single notes. Metadata resolution and folder renames schedule a debounced full rebuild (150 ms); view rendering is separately debounced (100 ms).
 
-Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply()`, then `rebuild()`. The preview includes every matching note in included folders even when search or property scope hides it. `apply()` re-checks the original value inside `processFrontMatter`, so notes changed after preview are skipped rather than overwritten. One successful batch replaces the session-scoped undo snapshot; undo also skips later conflicting edits. Property renames additionally skip folded-key collisions and reject the reserved `position` key. Value deletion removes a scalar key or matching list entries; property deletion removes the key from every eligible note and re-checks folded-key ambiguity at apply time. A fully successful property deletion also clears stale selection, profile, pin, expansion, and hidden references; undo restores a deleted key only while no folded matching key exists.
+Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply()`, then `rebuild()`. The preview includes every matching note in included folders even when search or property scope hides it. `apply()` re-checks the original value inside `processFrontMatter`, so notes changed after preview are skipped rather than overwritten. One successful batch replaces the session-scoped undo snapshot; undo also skips later conflicting edits. Property renames additionally skip folded-key collisions and reject the reserved `position` key. Value deletion removes a scalar key or matching list entries; property deletion removes the key from every eligible note and re-checks folded-key ambiguity at apply time. Property deletion preserves selection, profile, pin, expansion, and hidden references for undo. Value deletions that remove the whole key skip folded-key ambiguity in preview and at apply time; undo restores a deleted key only while no folded matching key exists.
 
 Supporting modules:
 
@@ -52,7 +52,6 @@ Supporting modules:
 - `src/property-types.ts` - resolves property type icons from the vault's `types.json` through public adapter APIs, with built-in and text fallbacks. `supportsTextSplit` gates the text-only Split edit.
 - `src/value-operations.ts` - pure frontmatter transforms for rename, merge, wikilink, split, and delete edits.
 - `src/property-rename.ts` - property-name validation, folded collision checks, and preference carry-over after a rename.
-- `src/property-delete.ts` - removes deleted-property references from selections, saved views, pins, expansion, and hiding.
 - `src/value-editor.ts` - preview/apply/undo over public `processFrontMatter`, including property deletion, with a busy guard that rejects overlapping batches.
 - `src/value-dialog.ts`, `src/property-rename-dialog.ts`, `src/property-delete-dialog.ts` - preview and confirmation modals.
 - `styles.css` - all view styling, using Obsidian theme variables. Keep selectors prefixed with `pv-`.
