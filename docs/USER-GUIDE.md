@@ -63,7 +63,7 @@ Open Supercharged Properties, expand `status`, then expand `doing` to find the n
 | --- | --- |
 | Property label or chevron | Expands or collapses that property's values. |
 | Value label or chevron | Shows or hides notes containing that value. |
-| Note row | Opens the note; Ctrl/Cmd-click opens a new tab. In mobile selection mode, tapping toggles selection. Right-click (desktop) or long-press (mobile) opens text-property actions. |
+| Note row | Opens the note; Ctrl/Cmd-click opens a new tab. In mobile selection mode, tapping toggles selection. Right-click (desktop) or long-press (mobile) opens supported property-editing actions. |
 | Note-selection checkbox | Toggles selection without opening the note. Available during selection mode on desktop and mobile. |
 | Expand all properties | Expands currently visible properties. It does not open every value's note list. |
 | Collapse all properties | Collapses branches and clears the tree search. |
@@ -231,9 +231,9 @@ In 1.2.0, right-click a property row and choose **Rename property…**. Review a
 
 ## Change a property on selected notes
 
-Right-click a note on desktop or long-press it on mobile, then choose **Change status…** (using the parent property's name). Choose an existing value, enter a new one, or set the property empty. **Select notes…** starts a selection within the property. Selection mode shows checkboxes and highlighted rows on both desktop and mobile. Click a checkbox to toggle a note without opening it. Desktop shortcuts remain: Alt/Option-click toggles individual notes, Shift-click adds a range, and Escape clears the selection. Plain clicks open notes and clear desktop multi-selection; Ctrl/Cmd-click opens a new tab. Mobile selection uses checkboxes and tap-to-toggle rows. Normal taps open notes outside selection mode; scrolling cancels a pending long-press.
+Right-click a note on desktop or long-press it on mobile, then choose **Change status…** (using the parent property's name). Choose or enter a typed scalar value, set the property empty, add/remove List items, or choose **Remove property** to delete the entire key and all its values from selected notes. **Select notes…** starts a selection within the property. Selection mode shows checkboxes and highlighted rows on both desktop and mobile. Click a checkbox to toggle a note without opening it. Desktop shortcuts remain: Alt/Option-click toggles individual notes, Shift-click adds a range, and Escape clears the selection. Plain clicks open notes and clear desktop multi-selection; Ctrl/Cmd-click opens a new tab. Mobile selection uses checkboxes and tap-to-toggle rows. Normal taps open notes outside selection mode; scrolling cancels a pending long-press.
 
-This action supports Text properties with text or empty scalar values. It previews only the selected notes and shares **Undo last property edit** with other edits. See [changing selected notes](NOTE-VALUE-EDITING.md) for the complete workflow, eligibility, and safeguards.
+This action supports Text, Number, Checkbox, Date, and Date & time properties, plus add/remove operations for flat List properties. Aliases and cssclasses support text-list items; tags remain unsupported. It previews only the selected notes and shares **Undo last property edit** with other edits. See [changing selected notes](NOTE-VALUE-EDITING.md) for the complete workflow, eligibility, and safeguards.
 
 ## Edit values across notes
 
@@ -304,7 +304,7 @@ The interface provides labelled controls, visible focus, expand/collapse state, 
 | Split into list is missing | Confirm the property is configured as Text, the selected value is text, and the property is not tags, aliases, or cssclasses. After a type change, refresh the property index. |
 | A template note still appears | Use a vault-relative path with the exact folder capitalization. Templates excludes Templates/Note.md, not Other/Templates/Note.md. Core Search is independent of this setting. |
 | Rename property is missing | Confirm you are using version 1.2.0 or later and open the property-row menu, not a value-row menu. |
-| Change status… is missing | Open the note-row menu under a Text property. List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses are not supported by selected-note editing. |
+| Change status… is missing | Open the note-row menu under a supported property. Text, Number, Checkbox, Date, Date & time, List, aliases, and cssclasses are supported. The special tags property and unknown property types are excluded. |
 | Some selected notes do not change | Inspect the preview for unchanged values, excluded folders, missing/ambiguous keys, and unsupported stored values. Changes made after preview are skipped at Apply. |
 | Shift-click does not deselect notes when moving back | Shift-click adds to the selection. Use a checkbox or Alt/Option-click to deselect individual notes. |
 | Delete value is missing | Empty `(empty)` and object rows do not offer deletion. To remove the whole property, use **Delete property…** on its property row. |

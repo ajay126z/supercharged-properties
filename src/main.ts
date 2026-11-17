@@ -6,7 +6,7 @@ import { excludedFolders, isFolderExcluded } from './folder-exclusions';
 import { SortOrder, sortOptions, sortOrder, sortNodes } from './sorting';
 import { propertyQuery } from './search';
 import { loadProfiles, sameKeys, PropertyProfile } from './profiles';
-import { PropertyTypeResolver, supportsTextSplit, supportsTextAssignment } from './property-types';
+import { PropertyTypeResolver, supportsTextSplit, noteEditType } from './property-types';
 import { ValueEditor, type ValueEditPreview, type ValueEditResult } from './value-editor';
 import { PropertyRenameModal } from './property-rename-dialog';
 import { PropertyDeleteModal } from './property-delete-dialog';
@@ -16,6 +16,7 @@ import { NoteValueModal } from './note-value-dialog';
 import { attachNoteMenu } from './note-menu';
 import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-operations';
 import type { PropertyValueKind } from './frontmatter-values';
+import { noteEditError, textOnlyList, type ListItem } from './note-value-operations';
 
 const VIEW = 'supercharged-properties';
 interface Preferences { counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
@@ -47,7 +48,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     };
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
-    this.valueEditor = new ValueEditor(this.app, path => this.includesPath(path), id => supportsTextAssignment({ id }, this.typeResolver));
+    this.valueEditor = new ValueEditor(this.app, path => this.includesPath(path), id => noteEditType({ id }, this.typeResolver));
     this.registerView(VIEW, leaf => new PropertiesView(leaf, this));
     this.addRibbonIcon('list-tree', 'Open Supercharged Properties', () => { void this.open(); });
     this.addCommand({ id: 'open', name: 'Open sidebar', callback: () => { void this.open(); } });
@@ -189,21 +190,31 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
   }
 
   changeNoteValue(property: PropertyNode, paths: readonly string[], complete: () => void): void {
-    if (!supportsTextAssignment(property, this.typeResolver)) return;
+    const type = noteEditType(property, this.typeResolver);
+    if (!type) return;
     const selected = [...new Set(paths)];
-    const values = [...property.values.values()]
-      .filter(value => (JSON.parse(value.id) as string[])[0] === 'string')
-      .map(value => value.label).sort(natural);
+    const values: ListItem[] = [];
+    for (const node of property.values.values()) {
+      const [kind] = JSON.parse(node.id) as string[];
+      if (kind !== 'string' && kind !== 'number') continue;
+      const value = kind === 'number' ? Number(node.label) : node.label;
+      if (type === 'list') {
+        if (!textOnlyList(property.id) || typeof value === 'string') values.push(value);
+      } else if (!noteEditError({ type, mode: 'set', value }, property.id)) values.push(value);
+    }
+    values.sort((a, b) => natural(String(a), String(b)));
     new NoteValueModal(this.app, {
       property: property.label,
       count: selected.length,
+      type,
       values,
-      preview: replacement => this.valueEditor.previewNoteValue(property.id, replacement, selected),
+      preview: edit => this.valueEditor.previewNoteEdit(property.id, edit, selected),
       apply: async preview => {
         // Refresh configured types before the write as the dialog may have remained open.
         await this.typeResolver.load();
         const result = await this.valueEditor.apply(preview);
-        new Notice(`Updated ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 10000);
+        const action = preview.changes.some(change => change.remove) ? 'Removed property from' : 'Updated';
+        new Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 10000);
         for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
         this.rebuild();
         complete();
@@ -653,7 +664,7 @@ export class PropertiesView extends ItemView {
       button.dataset.pvFocus = rowId;
       button.dataset.notePath = path;
       button.classList.toggle('is-selected', this.selectedNotes?.property === property.id && this.selectedNotes.paths.has(path));
-      if (supportsTextAssignment(property, this.plugin.typeResolver)) {
+      if (noteEditType(property, this.plugin.typeResolver)) {
         button.setAttribute('aria-haspopup', 'menu');
         this.noteMenuDisposers.push(attachNoteMenu(button, point => this.showNoteMenu(point, property, path, rowId)));
         button.addEventListener('keydown', event => {
@@ -678,7 +689,7 @@ export class PropertiesView extends ItemView {
       if (folder) el(button, 'small', 'pv-note-path', folder);
       button.addEventListener('click', event => {
         const modifiedOpen = event.ctrlKey || event.metaKey;
-        if (supportsTextAssignment(property, this.plugin.typeResolver)) {
+        if (noteEditType(property, this.plugin.typeResolver)) {
           if (!modifiedOpen && event.shiftKey) {
             event.preventDefault();
             this.selectNoteRange(property, rowId, path);
@@ -744,7 +755,7 @@ export class PropertiesView extends ItemView {
     if (this.noteAnchor?.context !== this.noteSelectionContext()) this.noteAnchor = undefined;
     let selection = this.selectedNotes;
     const property = selection && this.plugin.index.properties.get(selection.property);
-    if (selection && (!property || !supportsTextAssignment(property, this.plugin.typeResolver) || selection.context !== this.noteSelectionContext())) {
+    if (selection && (!property || !noteEditType(property, this.plugin.typeResolver) || selection.context !== this.noteSelectionContext())) {
       this.selectedNotes = selection = undefined;
     }
     this.selectionBar.replaceChildren();

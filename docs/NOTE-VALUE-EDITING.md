@@ -1,6 +1,6 @@
 # Change a property on selected notes
 
-Use note-row actions to change one text property on one or more notes. For example, move selected notes from `status: todo` and `status: active` to `status: closed` without changing every note that uses those values.
+Use note-row actions to edit one property on one or more notes. For example, move selected notes from `status: todo` and `status: active` to `status: closed` without changing every note that uses those values.
 
 This guide covers the unreleased selected-note editing feature after 1.2.1. It shares the preview, confirmation, and session-scoped undo used by other property edits.
 
@@ -9,7 +9,7 @@ This guide covers the unreleased selected-note editing feature after 1.2.1. It s
 1. Expand a property and one of its values to show the notes.
 2. **Desktop:** right-click a note. **Mobile:** long-press the note. With keyboard focus on the note, press **Shift+F10** or the context-menu key.
 3. Choose **Change status…** (the menu uses the parent property's name).
-4. Choose an existing value, **Add new value…**, or **Set empty (keep property)**.
+4. For scalar properties, choose an existing value, enter a new typed value, choose **Set empty (keep property)**, or choose **Remove property**. For a List property, choose **Add values**, **Remove values**, or **Remove property**.
 5. Review each affected path and its before/after values, plus any skipped notes.
 6. Press **Apply to N notes** to confirm.
 
@@ -47,16 +47,58 @@ Desktop users can also start with **Select notes…** in the right-click menu, t
 
 **Cancel** exits selection mode. Changing the tree search, search mode, property scope, hidden properties, or folder exclusions clears the selection. Deleted or moved paths are removed from selection when the index refreshes. Collapsing a branch keeps its selected notes, which remain included in the selection-bar count. Finishing an edit exits selection mode; canceling its dialog keeps the selection.
 
-## Supported values
+## Supported property types
 
-The initial version supports **Text** properties whose stored value is a string or `null` (empty). Empty strings can also be changed. Lists, objects, numbers, booleans, and missing properties are skipped rather than converted. Actions are unavailable for configured List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses properties.
+The dialog follows the property's configured type. It does not change the type assigned in Obsidian.
 
-- **Existing value:** select a value used by this property.
-- **Add new value:** enter nonblank text. Surrounding whitespace is trimmed. Numeric-looking text remains text; this action does not change the property's type.
-- **Set empty:** writes `status: null`, keeping the property key. It does not delete the property.
-- **Literal `empty`:** selecting or entering this word writes the text `empty`, not `null`.
+| Property type | Controls and stored result |
+| --- | --- |
+| Text | Choose existing text or enter new text. Numeric-looking text remains a string. |
+| Number | Choose an existing number or enter an integer/decimal, including negatives and scientific notation. Values are stored as YAML numbers. Blank input, expressions, non-finite values, and integers outside JavaScript's safe range are rejected. |
+| Checkbox / boolean | Explicitly choose True (checked), False (unchecked), or Set empty. Values are stored as booleans, not the strings `"true"` or `"false"`. |
+| Date | Choose an existing valid date or use the date picker. Dates are stored as `YYYY-MM-DD`; impossible dates are rejected. |
+| Date & time | Choose an existing valid local timestamp or use the date/time picker. Values use `YYYY-MM-DDTHH:mm`, optionally with seconds and milliseconds. No timezone conversion is performed. |
+| List | Add or remove multiple text/number items while preserving the other items. See below. |
+| aliases / cssclasses | Add or remove text list items. |
+| tags | Selected-note editing remains unavailable for this special property. |
 
-A selected note already containing the destination is counted as unchanged. No-change previews cannot be applied.
+For scalar properties, **Set empty** writes `null` and keeps the key. **Remove property** deletes the key and its entire value from only the selected notes. Literal text `empty` is a string, not null. Number and checkbox properties must contain their corresponding scalar type or an empty value; a numeric-looking string is not silently converted into a number. Text and date properties accept stored strings or empty values. Empty strings are also eligible. Missing properties, lists under scalar properties, and objects are skipped.
+
+## Add or remove list values
+
+1. Open **Change topics…** on a note under a List property, or select several notes and open the action from the selection bar.
+2. Choose **Add values** or **Remove values** to edit individual items. Choose **Remove property** to delete the entire key and list instead.
+3. Check one or more **Existing list values**, enter **Values, one per line**, or combine both. Existing items show whether they are text or numbers.
+4. For entered values, choose **Text** or **Number**. The type control is hidden for aliases and cssclasses, which require text.
+5. Review each note's complete before/after list, then confirm.
+
+Each nonblank input line represents one item; surrounding whitespace is trimmed. Commas remain part of text. Complete wikilinks such as `[[Project A]]` are text items. Duplicate requested items are processed once.
+
+- **Add** appends missing items in the requested order and leaves existing items, duplicates, and their order intact.
+- **Remove** deletes every exact match and preserves the order of remaining items. Matching is case-sensitive and type-sensitive: `"1"` and `1` are different items, as are `"Active"` and `"active"`.
+- Removing the final item with **Remove values** writes `[]`; it does not delete the property key. Use **Remove property** when you want the key deleted.
+- Adding to null or an empty string initializes a list. Removing from an empty value is a no-op.
+- Flat lists of strings and finite numbers are supported. Nested lists, objects, boolean/null list entries, and scalar nonempty values under a List property are skipped. Existing numeric entries under aliases/cssclasses are also skipped.
+
+For example, adding `review` to `[work, draft]` and `[personal]` produces `[work, draft, review]` and `[personal, review]`. Removing `draft` from those notes leaves `[work, review]` and `[personal, review]`.
+
+A note already containing the scalar destination, all requested additions, or none of the requested removals is counted as unchanged. No-change previews cannot be applied.
+
+## Remove the property from selected notes
+
+Choose **Remove property** in the scalar destination picker or List operation picker. The preview lists the entire stored value as **(property removed)** and explains that all values under that key will be deleted. Confirm with **Remove property from N notes**; opening the dialog or choosing the option does not write anything.
+
+| Current value | Set empty / Remove values | Remove property |
+| --- | --- | --- |
+| Text, Number, Checkbox, Date, Date & time | Set empty retains the key with `null`. | Deletes the key and value. |
+| Empty scalar (`null` or empty text) | Set empty keeps the key. | Deletes the key. |
+| List with one item | Removing that item leaves `[]`. | Deletes the key and item. |
+| List with multiple items | Removes only the requested items. | Deletes the key and every item. |
+| Empty list (`[]`) | Removing items makes no change. | Deletes the key. |
+
+Whole-property removal also works when the stored value does not match its configured supported type, since it removes the whole field rather than converting its contents. This includes lists containing nested/object values that cannot be edited item by item. Unknown configured property types and tags remain outside this selected-note action.
+
+Only selected notes are affected. Other properties, the note body, saved views, and pins are retained. A single key spelled `Status` is removed and restored with that exact spelling. Notes containing both `status` and `Status` are skipped as ambiguous. If a key with the same normalized name is recreated after deletion, undo skips it rather than overwriting it; after resolving that conflict, undo can be retried.
 
 ## Safeguards and undo
 

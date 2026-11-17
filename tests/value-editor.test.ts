@@ -213,7 +213,7 @@ it('reports excluded, missing and ambiguous assignments and skips newly stale ke
 it('rechecks type and folder eligibility before assigning and preserves prior undo on zero writes', async () => {
   const { data, app } = setup();
   let text = true, included = true;
-  const editor = new ValueEditor(app as any, () => included, () => text);
+  const editor = new ValueEditor(app as any, () => included, () => text ? 'text' : undefined);
   await editor.apply(editor.previewNoteValue('status', 'active', ['a.md']));
   let preview = editor.previewNoteValue('status', 'closed', ['a.md']);
   text = false;
@@ -225,4 +225,115 @@ it('rechecks type and folder eligibility before assigning and preserves prior un
   expect(await editor.apply(preview)).toMatchObject({ updated: 0, unchanged: 1 });
   expect((await editor.undo()).restored).toBe(1);
   expect(data['a.md'].status).toBe('doing');
+});
+
+it.each([
+  ['number', 3, -2.5], ['checkbox', true, false], ['date', '2026-01-01', '2026-12-31'],
+  ['datetime', '2026-01-01T08:00', '2026-12-31T23:59:30']
+] as const)('applies and undoes selected-note %s values without string coercion', async (type, original, value) => {
+  const { data, app } = setup(); data['a.md'] = { status: original, other: 'keep' };
+  const editor = new ValueEditor(app as any, () => true, () => type);
+  const plan = editor.previewNoteEdit('status', { type, mode: 'set', value }, ['a.md']);
+  expect(plan).toMatchObject({ total: 1, conflicts: [] });
+  expect((await editor.apply(plan)).updated).toBe(1);
+  expect(data['a.md']).toEqual({ status: value, other: 'keep' });
+  expect((await editor.undo()).restored).toBe(1);
+  expect(data['a.md'].status).toBe(original);
+  await editor.apply(editor.previewNoteEdit('status', { type, mode: 'set', value: null }, ['a.md']));
+  expect(data['a.md'].status).toBeNull(); await editor.undo(); expect(data['a.md'].status).toBe(original);
+});
+it('calculates list edits per note, skips no-ops, preserves unselected notes, and restores exact arrays', async () => {
+  const { data, app } = setup();
+  data['a.md'] = { status: ['a', 'b', 'a'] }; data['b.md'] = { status: ['b', 'c'] };
+  const editor = new ValueEditor(app as any, () => true, () => 'list');
+  const remove = editor.previewNoteEdit('status', { type: 'list', mode: 'remove', values: ['a'] }, ['a.md', 'b.md', 'a.md']);
+  expect(remove).toMatchObject({ total: 1, unchanged: 1 });
+  await editor.apply(remove); expect(data['a.md'].status).toEqual(['b']); expect(data['b.md'].status).toEqual(['b', 'c']);
+  await editor.undo(); expect(data['a.md'].status).toEqual(['a', 'b', 'a']);
+  await editor.apply(editor.previewNoteEdit('status', { type: 'list', mode: 'add', values: ['a', 'd'] }, ['a.md', 'b.md']));
+  expect(data['a.md'].status).toEqual(['a', 'b', 'a', 'd']); expect(data['b.md'].status).toEqual(['b', 'c', 'a', 'd']);
+  await editor.undo(); expect(data['a.md'].status).toEqual(['a', 'b', 'a']); expect(data['b.md'].status).toEqual(['b', 'c']);
+});
+it('snapshots list previews and rejects subsequent array mutation, ambiguity, or configured-type changes', async () => {
+  const { data, app } = setup(); data['a.md'] = { status: ['a'] };
+  let type: 'list' | 'text' = 'list';
+  const editor = new ValueEditor(app as any, () => true, () => type);
+  const request = { type: 'list' as const, mode: 'add' as const, values: ['b'] };
+  const plan = editor.previewNoteEdit('status', request, ['a.md']); data['a.md'].status.push('later');
+  expect(await editor.apply(plan)).toMatchObject({ updated: 0, unchanged: 1 });
+  const next = editor.previewNoteEdit('status', request, ['a.md']); data['a.md'].Status = ['other'];
+  expect(await editor.apply(next)).toMatchObject({ updated: 0, unchanged: 1 });
+  delete data['a.md'].Status; type = 'text';
+  expect(await editor.apply(next)).toMatchObject({ updated: 0, unchanged: 1 });
+});
+it('keeps successful list writes undoable after partial failures and protects later edits', async () => {
+  const { data, app } = setup(); data['a.md'] = { status: [] }; data['b.md'] = { status: ['a'] };
+  const editor = new ValueEditor(app as any, () => true, () => 'list');
+  app.fileManager.processFrontMatter.mockRejectedValueOnce(new Error('write failed'));
+  expect(await editor.apply(editor.previewNoteEdit('status', { type: 'list', mode: 'remove', values: ['a'] }, ['b.md', 'a.md']))).toMatchObject({ updated: 0 });
+  app.fileManager.processFrontMatter.mockRejectedValueOnce(new Error('write failed'));
+  expect(await editor.apply(editor.previewNoteEdit('status', { type: 'list', mode: 'add', values: ['b'] }, ['a.md', 'b.md']))).toMatchObject({ updated: 1, failures: [{ path: 'a.md' }] });
+  data['b.md'].status.push('later'); expect(await editor.undo()).toMatchObject({ restored: 0, skipped: 1 });
+  data['b.md'].status.pop(); expect((await editor.undo()).restored).toBe(1); expect(data['b.md'].status).toEqual(['a']);
+});
+
+it.each([
+  ['text', 'active'], ['text', ''], ['text', null], ['number', 0], ['checkbox', false],
+  ['date', '2026-11-16'], ['datetime', '2026-11-16T10:30'],
+  ['list', ['one']], ['list', ['one', 'two', 3]], ['list', []], ['list', null],
+  ['list', ['one', { nested: 'object' }]]
+] as const)('removes the entire selected %s property and undoes its exact stored value: %j', async (type, original) => {
+  const { data, app } = setup(); data['a.md'] = { Status: structuredClone(original), other: 'keep' };
+  const unselected = structuredClone(data['b.md']);
+  const editor = new ValueEditor(app as any, () => true, () => type);
+  const plan = editor.previewNoteEdit('status', { type, mode: 'delete' }, ['a.md']);
+  expect(plan).toMatchObject({ total: 1, conflicts: [], changes: [{ key: 'Status', remove: true, after: '(property removed)' }] });
+  expect(app.fileManager.processFrontMatter).not.toHaveBeenCalled();
+  expect((await editor.apply(plan)).updated).toBe(1);
+  expect(data['a.md']).toEqual({ other: 'keep' }); expect(data['b.md']).toEqual(unselected);
+  data['a.md'].other = 'later';
+  expect((await editor.undo()).restored).toBe(1);
+  expect(data['a.md']).toEqual({ Status: original, other: 'later' });
+});
+it('distinguishes removing all list values from removing the property itself', async () => {
+  const { data, app } = setup(); data['a.md'] = { status: ['one'], other: 1 };
+  const editor = new ValueEditor(app as any, () => true, () => 'list');
+  await editor.apply(editor.previewNoteEdit('status', { type: 'list', mode: 'remove', values: ['one'] }, ['a.md']));
+  expect(data['a.md']).toEqual({ status: [], other: 1 });
+  await editor.apply(editor.previewNoteEdit('status', { type: 'list', mode: 'delete' }, ['a.md']));
+  expect(data['a.md']).toEqual({ other: 1 });
+  await editor.undo(); expect(data['a.md']).toEqual({ status: [], other: 1 });
+});
+it('skips ambiguous, missing, stale and excluded selected-property removals', async () => {
+  const { data, app } = setup(); let excluded = false;
+  const editor = new ValueEditor(app as any, path => !(excluded && path === 'a.md'), () => 'text');
+  const request = { type: 'text' as const, mode: 'delete' as const };
+  data['a.md'].Status = 'collision';
+  expect(editor.previewNoteEdit('status', request, ['a.md']).conflicts[0].message).toContain('Ambiguous');
+  delete data['a.md'].Status;
+  const plan = editor.previewNoteEdit('status', request, ['a.md']);
+  data['a.md'].status = 'later'; expect(await editor.apply(plan)).toMatchObject({ updated: 0, unchanged: 1 });
+  data['a.md'].status = 'doing'; data['a.md'].Status = 'collision';
+  expect(await editor.apply(plan)).toMatchObject({ updated: 0, unchanged: 1 }); delete data['a.md'].Status;
+  excluded = true; expect(await editor.apply(plan)).toMatchObject({ updated: 0, unchanged: 1 });
+  excluded = false; delete data['a.md'].status;
+  expect(editor.previewNoteEdit('status', request, ['a.md']).conflicts[0].message).toContain('missing');
+});
+it('restores deleted keys with their original casing, but never overwrites recreated case variants', async () => {
+  const { data, app } = setup(); data['a.md'] = { Status: 'active' }; data['b.md'] = { status: 'closed' };
+  const editor = new ValueEditor(app as any, () => true, () => 'text');
+  await editor.apply(editor.previewNoteEdit('status', { type: 'text', mode: 'delete' }, ['a.md', 'b.md']));
+  data['a.md'].status = 'recreated';
+  expect(await editor.undo()).toMatchObject({ restored: 1, skipped: 1 });
+  expect(data['a.md']).toEqual({ status: 'recreated' }); expect(data['b.md']).toEqual({ status: 'closed' });
+  delete data['a.md'].status;
+  expect((await editor.undo()).restored).toBe(1); expect(data['a.md']).toEqual({ Status: 'active' });
+});
+it('rechecks the configured type for removal and retains prior undo when no keys are removed', async () => {
+  const { data, app } = setup(); let type: 'text' | 'number' = 'text';
+  const editor = new ValueEditor(app as any, () => true, () => type);
+  await editor.apply(editor.previewNoteValue('status', 'active', ['a.md']));
+  const plan = editor.previewNoteEdit('status', { type: 'text', mode: 'delete' }, ['a.md']);
+  type = 'number'; expect(await editor.apply(plan)).toMatchObject({ updated: 0, unchanged: 1 });
+  expect((await editor.undo()).restored).toBe(1); expect(data['a.md'].status).toBe('doing');
 });

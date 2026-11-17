@@ -45,7 +45,9 @@ Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply(
 Supporting modules:
 
 - `src/note-menu.ts` - desktop/keyboard context menus and touch long-press with movement, scroll, and click guards.
-- `src/note-value-dialog.ts` - selected-note text assignment, explicit empty values, preview, and mobile viewport fitting.
+- `src/note-value-operations.ts` - typed scalar validation, calendar-date validation, exact list add/remove transforms, and number parsing.
+- `src/note-value-input.ts` - type-specific scalar controls and multi-value list controls.
+- `src/note-value-dialog.ts` - selected-note typed scalar and list editing, explicit empty values, preview, and mobile viewport fitting.
 - `src/modal-layout.ts` - sizes the selected-note dialog container to the visual viewport without measuring centered content; keeps mobile dialogs spacious and keyboard-safe.
 - `src/mobile-layout.ts` - fits touch views to the visual viewport while the keyboard is open, with listener cleanup on view close.
 - `src/sorting.ts` - sort modes and natural ordering with deterministic ID tie-breaks.
@@ -55,7 +57,7 @@ Supporting modules:
 - `src/property-types.ts` - resolves property type icons from the vault's `types.json` through public adapter APIs, with built-in and text fallbacks. `supportsTextSplit` gates the text-only Split edit.
 - `src/value-operations.ts` - pure frontmatter transforms for rename, merge, wikilink, split, and delete edits.
 - `src/property-rename.ts` - property-name validation, folded collision checks, and preference carry-over after a rename.
-- `src/value-editor.ts` - preview/apply/undo over public `processFrontMatter`, including property deletion and selected-note text assignment, with a busy guard that rejects overlapping batches.
+- `src/value-editor.ts` - preview/apply/undo over public `processFrontMatter`, including property deletion and selected-note typed scalar and list editing, with a busy guard that rejects overlapping batches.
 - `src/value-dialog.ts`, `src/property-rename-dialog.ts`, `src/property-delete-dialog.ts` - preview and confirmation modals.
 - `styles.css` - all view styling, using Obsidian theme variables. Keep selectors prefixed with `pv-`.
 

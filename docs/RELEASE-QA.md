@@ -192,6 +192,13 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] Selection stays within one property. Range selection includes only displayed rows, and search/scope changes clear selection.
 - [ ] Existing, custom, and empty destinations update only selected paths; literal `empty` remains text, while Set empty retains the key with null.
 - [ ] Preview reports unsupported values, missing/ambiguous keys, exclusions, and unchanged notes; stale notes and type changes are skipped before writing.
+- [ ] Number, Checkbox, Date, and Date & time controls preserve YAML types; invalid inputs are blocked and empty values retain the key.
+- [ ] List Add preserves existing items/order and avoids new duplicates; Remove deletes exact typed matches and leaves `[]` after the last removal.
+- [ ] List previews handle each selected note independently, skip nested/object/mismatched values, and keep aliases/cssclasses text-only.
+- [ ] Changing the configured property type after preview prevents the old typed edit from being applied.
+- [ ] Remove property is explicit for every supported scalar/list type, shows a destructive preview, and removes keys only after confirmation.
+- [ ] Check empty scalars, false/zero, one-item lists, multi-item lists, and empty lists; Remove values still retains `[]` while Remove property deletes the key.
+- [ ] Whole-property removal skips ambiguous or stale keys; undo restores original spelling/values and never overwrites recreated case variants.
 - [ ] Undo restores successful selected-note changes and preserves later edits; zero-write batches retain the previous undo.
 - [ ] The mobile dialog opens at a usable height for one and many notes, its preview scrolls, and focused inputs and actions remain visible above the keyboard.
 - [ ] Closing the keyboard restores the dialog height, and closing the dialog removes its viewport listeners.

@@ -2,12 +2,15 @@
 import { Modal, Notice, type App } from 'obsidian';
 import { fitModalViewport } from './modal-layout';
 import type { NoteValuePreview } from './value-editor';
+import { createNoteValueInput } from './note-value-input';
+import type { ListItem, NoteEditType, NoteValueEdit } from './note-value-operations';
 
 interface Options {
   property: string;
   count: number;
-  values: readonly string[];
-  preview: (replacement: string | null) => NoteValuePreview;
+  type: NoteEditType;
+  values: readonly ListItem[];
+  preview: (edit: NoteValueEdit) => NoteValuePreview;
   apply: (preview: NoteValuePreview) => Promise<void>;
 }
 
@@ -52,20 +55,8 @@ export class NoteValueModal extends Modal {
       fields.removeEventListener('focusin', revealFocusedField);
     };
     fields.createEl('p', { text: `Property: ${this.options.property} · ${this.options.count} selected note${this.options.count === 1 ? '' : 's'}` });
-    const label = fields.createEl('label', { cls: 'pv-edit-field' });
-    label.createSpan({ text: 'Destination value' });
-    const select = label.createEl('select');
-    select.setAttribute('aria-label', 'Destination value');
-    select.createEl('option', { text: 'Choose a value…' }).value = '';
-    for (const [index, value] of this.options.values.entries()) select.createEl('option', { text: value }).value = `value:${index}`;
-    select.createEl('option', { text: 'Add new value…' }).value = 'custom';
-    select.createEl('option', { text: 'Set empty (keep property)' }).value = 'empty';
-    const custom = fields.createEl('label', { cls: 'pv-edit-field' });
-    custom.hidden = true;
-    custom.createSpan({ text: 'New value' });
-    const input = custom.createEl('input', { type: 'text', cls: 'pv-edit-input' });
-    input.setAttribute('aria-label', 'New value');
-    fields.createEl('p', { cls: 'pv-edit-hint', text: 'Only the selected notes change. Text properties with text or empty values are supported. Set empty keeps the property key. Undo last property edit restores successful changes until reload or another successful edit. YAML formatting may change.' });
+    const editor = createNoteValueInput(fields, this.options, () => render());
+    fields.createEl('p', { cls: 'pv-edit-hint', text: 'Only the selected notes change. Incompatible stored values are skipped. Undo last property edit restores successful changes until reload or another successful edit. YAML formatting may change.' });
     const previewEl = fields.createDiv({ cls: 'pv-edit-preview' });
     previewEl.setAttribute('aria-live', 'polite');
     const actions = content.createDiv({ cls: 'pv-edit-actions' });
@@ -79,21 +70,18 @@ export class NoteValueModal extends Modal {
       this.displayed = undefined;
       apply.disabled = true;
       apply.textContent = 'Apply';
-      custom.hidden = select.value !== 'custom';
-      let replacement: string | null;
-      if (select.value === 'empty') replacement = null;
-      else if (select.value === 'custom') {
-        replacement = input.value.trim();
-        if (!replacement || replacement.includes('\0')) {
-          previewEl.createEl('p', { text: 'Enter text or choose Set empty.' }); return;
-        }
-      } else if (select.value.startsWith('value:')) replacement = this.options.values[Number(select.value.slice(6))];
-      else return;
-      const preview = this.options.preview(replacement);
+      apply.classList.remove('mod-warning');
+      const result = editor.read();
+      if (result.error) { previewEl.createEl('p', { text: result.error }); return; }
+      if (!result.edit) return;
+      const preview = this.options.preview(result.edit);
       this.displayed = preview;
       apply.disabled = this.busy || preview.total === 0;
-      apply.textContent = `Apply to ${preview.total} note${preview.total === 1 ? '' : 's'}`;
-      previewEl.createEl('p', { text: `${preview.total} will change; ${preview.unchanged} already match; ${preview.conflicts.length} will be skipped.` });
+      const removingProperty = result.edit.mode === 'delete';
+      apply.classList.toggle('mod-warning', removingProperty);
+      apply.textContent = `${removingProperty ? 'Remove property from' : 'Apply to'} ${preview.total} note${preview.total === 1 ? '' : 's'}`;
+      if (removingProperty) previewEl.createEl('p', { cls: 'pv-edit-hint', text: `The entire ${this.options.property} property and all its values will be removed from the selected notes. Other properties and the note body are preserved.` });
+      previewEl.createEl('p', { text: `${preview.total} ${removingProperty ? 'will lose this property' : 'will change'}; ${preview.unchanged} already match; ${preview.conflicts.length} will be skipped.` });
       for (const change of preview.changes) {
         const row = previewEl.createDiv({ cls: 'pv-edit-change' });
         row.createSpan({ cls: 'pv-edit-path', text: change.path });
@@ -101,17 +89,17 @@ export class NoteValueModal extends Modal {
       }
       for (const conflict of preview.conflicts) previewEl.createEl('p', { cls: 'pv-edit-change', text: `${conflict.path}: ${conflict.message}` });
     };
-    select.addEventListener('change', render);
-    input.addEventListener('input', render);
     apply.addEventListener('click', () => {
       if (this.busy || apply.disabled || !this.displayed) return;
       this.busy = true;
-      select.disabled = input.disabled = cancel.disabled = apply.disabled = true;
-      apply.textContent = 'Updating…';
-      input.blur();
+      editor.setDisabled(true);
+      cancel.disabled = apply.disabled = true;
+      apply.textContent = this.displayed.changes.some(change => change.remove) ? 'Removing…' : 'Updating…';
+      editor.blur();
       void this.options.apply(this.displayed).then(() => this.close()).catch(() => {
         this.busy = false;
-        select.disabled = input.disabled = cancel.disabled = false;
+        editor.setDisabled(false);
+        cancel.disabled = false;
         render();
         new Notice('Could not change property values. Review the preview before retrying.');
       });

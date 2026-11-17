@@ -600,3 +600,11 @@ it('keeps plain mobile taps toggling notes in the long-press selection flow', ()
   click('B.md'); expect(checkedNotes()).toEqual(['Select D.md for status']);
   expect(openFile).not.toHaveBeenCalled(); expect(document.querySelectorAll('.pv-note-checkbox')).toHaveLength(5);
 });
+it.each(['number', 'checkbox', 'date', 'datetime', 'multitext'])('exposes note editing and selection for %s properties', type => {
+  plugin.typeResolver.typeFor = () => type; plugin.changeNoteValue = vi.fn(); view.render();
+  click('Expand status'); click('Show notes with status: Done (1)');
+  noteMenu('Projects/One.md').find((item: any) => item.title === 'Change status…').run();
+  expect(plugin.changeNoteValue).toHaveBeenLastCalledWith(plugin.index.properties.get('status'), ['Projects/One.md'], expect.any(Function));
+  noteMenu('Projects/One.md').find((item: any) => item.title === 'Select notes…').run();
+  expect(document.querySelector('.pv-note-checkbox')).not.toBeNull();
+});

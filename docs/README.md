@@ -7,7 +7,7 @@ These guides describe **1.2.1** plus unreleased property/value deletion and sele
 | Guide | Covers |
 | --- | --- |
 | [User guide](USER-GUIDE.md) | Installation, browsing, types and counts, local search, property selection, folder exclusions, saved views, sorting, pinning, hiding, Search integration, copying, settings, commands, privacy, and troubleshooting. |
-| [Change selected notes](NOTE-VALUE-EDITING.md) | Single-note and multi-note text edits, existing/new/empty values, selection checkboxes, desktop shortcuts, mobile long-press, previews, conflicts, and undo. |
+| [Change selected notes](NOTE-VALUE-EDITING.md) | Single-note and multi-note typed scalar edits, list add/remove, existing/new/empty values, selection checkboxes, desktop shortcuts, mobile long-press, previews, conflicts, and undo. |
 | [Bulk value editing](BULK-EDITING.md) | Rename, delete, merge, wikilink conversion, text-only splitting, eligibility, preview, confirmation, conflicts, and one-step undo. |
 | [Property-name renaming](PROPERTY-RENAMING.md) | Key renaming and deletion, case corrections, collision handling, preserved values, preference updates, and shared undo. |
 

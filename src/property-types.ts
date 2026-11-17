@@ -3,6 +3,7 @@
 
 import { normalizePath, type App } from 'obsidian';
 import { fold, PropertyNode } from './index';
+import type { NoteEditType } from './note-value-operations';
 
 const TYPE_ICONS: ReadonlyMap<string, string> = new Map([
   ['text', 'text'],
@@ -63,9 +64,13 @@ export class PropertyTypeResolver {
   }
 }
 
-/** Text-only actions never convert built-in list properties or other configured types. */
-export function supportsTextAssignment(property: Pick<PropertyNode, 'id'>, resolver: Pick<PropertyTypeResolver, 'typeFor'>): boolean {
-  return !BUILTIN_TYPES.has(fold(property.id)) && resolver.typeFor(property) === 'text';
+/** Resolve selected-note editing independently of the text-only Split operation. */
+export function noteEditType(property: Pick<PropertyNode, 'id'>, resolver: Pick<PropertyTypeResolver, 'typeFor'>): NoteEditType | undefined {
+  const id = fold(property.id), type = resolver.typeFor(property);
+  if (id === 'tags' || type === 'tags') return undefined;
+  if (id === 'aliases' || id === 'cssclasses' || ['multitext', 'list', 'aliases'].includes(type)) return 'list';
+  if (['text', 'number', 'checkbox', 'date', 'datetime'].includes(type)) return type as NoteEditType;
+  return undefined;
 }
 
 /** Split is a text-property operation, never a special built-in property operation. */

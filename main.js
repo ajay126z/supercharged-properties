@@ -305,8 +305,12 @@ var PropertyTypeResolver = class {
     return TYPE_ICONS.get(this.typeFor(property)) ?? "text";
   }
 };
-function supportsTextAssignment(property, resolver) {
-  return !BUILTIN_TYPES.has(fold(property.id)) && resolver.typeFor(property) === "text";
+function noteEditType(property, resolver) {
+  const id = fold(property.id), type = resolver.typeFor(property);
+  if (id === "tags" || type === "tags") return void 0;
+  if (id === "aliases" || id === "cssclasses" || ["multitext", "list", "aliases"].includes(type)) return "list";
+  if (["text", "number", "checkbox", "date", "datetime"].includes(type)) return type;
+  return void 0;
 }
 function supportsTextSplit(property, resolver) {
   return !BUILTIN_TYPES.has(fold(property.id)) && resolver.typeFor(property) === "text";
@@ -314,6 +318,69 @@ function supportsTextSplit(property, resolver) {
 
 // src/value-editor.ts
 var import_obsidian2 = require("obsidian");
+
+// src/note-value-operations.ts
+function textOnlyList(property) {
+  return ["aliases", "cssclasses"].includes(fold(property));
+}
+function parseNoteNumber(text) {
+  const value = text.trim();
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) return void 0;
+  const number = Number(value);
+  if (!Number.isFinite(number) || Number.isInteger(number) && !Number.isSafeInteger(number)) return void 0;
+  return number === 0 ? 0 : number;
+}
+function validNoteDate(text, withTime = false) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?$/.exec(text);
+  if (!match || withTime !== (match[4] !== void 0)) return false;
+  const [, yearText, monthText, dayText, hours, minutes, seconds] = match;
+  const year = Number(yearText), month = Number(monthText), day = Number(dayText);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1] && (!withTime || Number(hours) < 24 && Number(minutes) < 60 && Number(seconds ?? 0) < 60);
+}
+function noteEditError(edit, property) {
+  if (edit.mode === "delete") return;
+  if (edit.type === "list") {
+    if (!["add", "remove"].includes(edit.mode) || !edit.values.length) return "Choose at least one list value.";
+    if (edit.values.some((value) => typeof value === "string" ? !value.trim() || value.includes("\0") : typeof value !== "number" || !Number.isFinite(value))) return "Use nonblank text or finite numbers for list values.";
+    if (textOnlyList(property) && edit.values.some((value) => typeof value !== "string")) return "Aliases and CSS classes require text list values.";
+    return;
+  }
+  if (edit.mode !== "set") return "Choose a supported property operation.";
+  if (edit.value === null) return;
+  switch (edit.type) {
+    case "text":
+      return typeof edit.value === "string" && !!edit.value.trim() && !edit.value.includes("\0") ? void 0 : "Enter text or choose Set empty.";
+    case "checkbox":
+      return typeof edit.value === "boolean" ? void 0 : "Choose true, false, or Set empty.";
+    case "number":
+      return typeof edit.value === "number" && Number.isFinite(edit.value) && (!Number.isInteger(edit.value) || Number.isSafeInteger(edit.value)) ? void 0 : "Enter a finite number within the supported precision.";
+    case "date":
+      return typeof edit.value === "string" && validNoteDate(edit.value) ? void 0 : "Choose a valid date (YYYY-MM-DD).";
+    case "datetime":
+      return typeof edit.value === "string" && validNoteDate(edit.value, true) ? void 0 : "Choose a valid local date and time.";
+  }
+}
+function transformNoteValue(original, edit, property) {
+  const error = noteEditError(edit, property);
+  if (error) return { error };
+  if (edit.mode === "delete") return { remove: true };
+  if (edit.type === "list") {
+    const empty2 = original === null || original === "";
+    if (!empty2 && (!Array.isArray(original) || !original.every((item) => typeof item === "string" || typeof item === "number" && Number.isFinite(item)))) return { error: "Only flat text/number lists or empty values are supported." };
+    const items = empty2 ? [] : original;
+    if (textOnlyList(property) && items.some((item) => typeof item !== "string")) return { error: "This property requires a text list." };
+    if (edit.mode === "remove") return { value: empty2 ? original : items.filter((item) => !edit.values.includes(item)) };
+    const result = [...items];
+    for (const item of edit.values) if (!result.includes(item)) result.push(item);
+    return { value: result };
+  }
+  const empty = original === null || original === "";
+  const compatible = edit.type === "number" ? typeof original === "number" && Number.isFinite(original) : edit.type === "checkbox" ? typeof original === "boolean" : typeof original === "string";
+  if (!empty && !compatible) return { error: `Stored value does not match the ${edit.type} property type.` };
+  return { value: edit.value };
+}
 
 // src/property-rename.ts
 function propertyNameError(name) {
@@ -462,10 +529,10 @@ function coerce(kind, replacement) {
 
 // src/value-editor.ts
 var ValueEditor = class {
-  constructor(app, includesPath = () => true, supportsTextAssignment2 = () => true) {
+  constructor(app, includesPath = () => true, noteEditType2 = () => "text") {
     this.app = app;
     this.includesPath = includesPath;
-    this.supportsTextAssignment = supportsTextAssignment2;
+    this.noteEditType = noteEditType2;
     this.busy = false;
   }
   canUndo() {
@@ -489,8 +556,11 @@ var ValueEditor = class {
     }
     return { total: changes.length, changes };
   }
-  /** Assign a text value to explicit note paths, retaining each note's original key spelling. */
   previewNoteValue(property, replacement, paths) {
+    return this.previewNoteEdit(property, { type: "text", mode: "set", value: replacement }, paths);
+  }
+  /** Preview typed edits on explicit paths, retaining each note's original key spelling. */
+  previewNoteEdit(property, edit, paths) {
     const changes = [], conflicts = [];
     let unchanged = 0;
     for (const path of new Set(paths)) {
@@ -499,12 +569,13 @@ var ValueEditor = class {
         skip("Folder is excluded.");
         continue;
       }
-      if (!this.supportsTextAssignment(property)) {
-        skip("Only text properties are supported.");
+      if (this.noteEditType(property) !== edit.type) {
+        skip("Property type changed or is unsupported.");
         continue;
       }
-      if (replacement !== null && (!replacement.trim() || replacement.includes("\0"))) {
-        skip("Enter text or choose Set empty.");
+      const error = noteEditError(edit, property);
+      if (error) {
+        skip(error);
         continue;
       }
       const file = this.file(path);
@@ -519,15 +590,16 @@ var ValueEditor = class {
         continue;
       }
       const key = keys[0], original = frontmatter[key];
-      if (original !== null && typeof original !== "string") {
-        skip("Only text or empty scalar values are supported.");
+      const result = transformNoteValue(original, edit, property);
+      if (result.error) {
+        skip(result.error);
         continue;
       }
-      if (sameValue(original, replacement)) {
+      if (!result.remove && sameValue(original, result.value)) {
         unchanged++;
         continue;
       }
-      changes.push({ path, key, original, replacement, textAssignment: true, before: JSON.stringify(original), after: JSON.stringify(replacement) });
+      changes.push({ path, key, original: cloneValue(original), replacement: cloneValue(result.value), remove: result.remove === true, noteEditType: edit.type, before: JSON.stringify(original), after: result.remove ? "(property removed)" : JSON.stringify(result.value) });
     }
     return { total: changes.length, changes, conflicts, unchanged };
   }
@@ -604,8 +676,8 @@ var ValueEditor = class {
           await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
             if (!this.includesPath(change.path)) return;
             if (!Object.prototype.hasOwnProperty.call(frontmatter, change.key) || !sameValue(frontmatter[change.key], change.original)) return;
-            if ((change.remove || change.textAssignment) && matchingKeys(frontmatter, change.key).length !== 1) return;
-            if (change.textAssignment && !this.supportsTextAssignment(change.key)) return;
+            if ((change.remove || change.noteEditType) && matchingKeys(frontmatter, change.key).length !== 1) return;
+            if (change.noteEditType && this.noteEditType(change.key) !== change.noteEditType) return;
             if (change.targetKey !== void 0 && !canRename(frontmatter, change.key, change.targetKey)) return;
             const remove = change.remove === true;
             snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: remove ? void 0 : cloneValue(change.replacement), targetKey: change.targetKey, remove };
@@ -1006,6 +1078,114 @@ function fitModalViewport(container) {
   };
 }
 
+// src/note-value-input.ts
+function createNoteValueInput(parent, options, changed) {
+  const controls = [];
+  const field = (name) => {
+    const label = parent.createEl("label", { cls: "pv-edit-field" });
+    label.createSpan({ text: name });
+    return label;
+  };
+  const select = (label, name, choices) => {
+    const element = label.createEl("select");
+    element.setAttribute("aria-label", name);
+    for (const [value, text] of choices) element.createEl("option", { text }).value = value;
+    element.addEventListener("change", changed);
+    controls.push(element);
+    return element;
+  };
+  const validate = (edit) => {
+    const error = noteEditError(edit, options.property);
+    return error ? { error } : { edit };
+  };
+  let read;
+  if (options.type === "list") {
+    const operation = select(field("List operation"), "List operation", [["add", "Add values"], ["remove", "Remove values"], ["delete", "Remove property"]]);
+    const choices = parent.createEl("fieldset", { cls: "pv-list-choices" });
+    choices.createEl("legend", { text: "Existing list values" });
+    const selected = /* @__PURE__ */ new Map();
+    for (const value of options.values) {
+      const label = choices.createEl("label", { cls: "pv-list-choice" });
+      const checkbox = label.createEl("input");
+      checkbox.type = "checkbox";
+      const description = `${JSON.stringify(value)} (${typeof value === "number" ? "number" : "text"})`;
+      label.createSpan({ text: description });
+      checkbox.setAttribute("aria-label", `Select list value ${description}`);
+      selected.set(checkbox, value);
+      controls.push(checkbox);
+      checkbox.addEventListener("change", changed);
+    }
+    if (!options.values.length) choices.createEl("p", { text: "No existing values. Enter values below." });
+    const itemTypeLabel = field("Entered value type");
+    itemTypeLabel.hidden = textOnlyList(options.property);
+    const itemType = select(itemTypeLabel, "Entered value type", [["text", "Text"], ["number", "Number"]]);
+    const input = field("Values, one per line").createEl("textarea", { cls: "pv-edit-input" });
+    input.rows = 3;
+    input.setAttribute("aria-label", "Values, one per line");
+    input.placeholder = "One value per line";
+    controls.push(input);
+    input.addEventListener("input", changed);
+    const hint = parent.createEl("p", { cls: "pv-edit-hint", text: "Choose existing items, enter values, or both. Text matching is case-sensitive; numbers and text stay distinct. Add keeps existing items and skips duplicates. Remove deletes all exact matches and keeps an empty list when no items remain." });
+    read = () => {
+      const removingProperty = operation.value === "delete";
+      choices.hidden = input.parentElement.hidden = hint.hidden = removingProperty;
+      itemTypeLabel.hidden = removingProperty || textOnlyList(options.property);
+      if (removingProperty) return validate({ type: "list", mode: "delete" });
+      const values = [...selected].filter(([checkbox]) => checkbox.checked).map(([, value]) => value);
+      for (const line of input.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)) {
+        if (itemType.value === "number") {
+          const number = parseNoteNumber(line);
+          if (number === void 0) return { error: `Invalid number: ${line}` };
+          values.push(number);
+        } else values.push(line);
+      }
+      return validate({ type: "list", mode: operation.value === "remove" ? "remove" : "add", values: [...new Set(values)] });
+    };
+  } else {
+    const type = options.type;
+    const choices = [["", "Choose a value\u2026"]];
+    if (type === "checkbox") choices.push(["true", "True (checked)"], ["false", "False (unchecked)"]);
+    else {
+      for (const [index, value] of options.values.entries()) choices.push([`value:${index}`, String(value)]);
+      choices.push(["custom", type === "date" || type === "datetime" ? "Choose a date\u2026" : "Enter new value\u2026"]);
+    }
+    choices.push(["empty", "Set empty (keep property)"], ["delete", "Remove property"]);
+    const destination = select(field("Destination value"), "Destination value", choices);
+    const custom = field(type === "date" ? "New date" : type === "datetime" ? "New date and time" : "New value");
+    const input = custom.createEl("input", { cls: "pv-edit-input" });
+    input.type = type === "number" ? "number" : type === "date" ? "date" : type === "datetime" ? "datetime-local" : "text";
+    input.setAttribute("aria-label", type === "date" ? "New date" : type === "datetime" ? "New date and time" : "New value");
+    if (type === "number") input.step = "any";
+    if (type === "date" || type === "datetime") {
+      input.min = type === "date" ? "0001-01-01" : "0001-01-01T00:00";
+      input.max = type === "date" ? "9999-12-31" : "9999-12-31T23:59:59";
+      if (type === "datetime") input.step = "0.001";
+    }
+    controls.push(input);
+    input.addEventListener("input", changed);
+    input.addEventListener("change", changed);
+    read = () => {
+      custom.hidden = destination.value !== "custom";
+      if (destination.value === "delete") return validate({ type, mode: "delete" });
+      let value;
+      if (destination.value === "empty") value = null;
+      else if (type === "checkbox" && ["true", "false"].includes(destination.value)) value = destination.value === "true";
+      else if (destination.value === "custom") {
+        if (type === "number") {
+          const number = parseNoteNumber(input.value);
+          if (number === void 0) return { error: "Enter a finite integer or decimal number, or choose Set empty." };
+          value = number;
+        } else value = type === "datetime" ? input.value.trim().replace(/\.0+$/, "") : input.value.trim();
+      } else if (destination.value.startsWith("value:")) value = options.values[Number(destination.value.slice(6))];
+      else return {};
+      return validate({ type, mode: "set", value });
+    };
+  }
+  return { read, setDisabled: (disabled) => controls.forEach((control) => {
+    control.disabled = disabled;
+  }), blur: () => controls.forEach((control) => control.blur()) };
+}
+
 // src/note-value-dialog.ts
 var NoteValueModal = class extends import_obsidian6.Modal {
   constructor(app, options) {
@@ -1047,20 +1227,8 @@ var NoteValueModal = class extends import_obsidian6.Modal {
       fields.removeEventListener("focusin", revealFocusedField);
     };
     fields.createEl("p", { text: `Property: ${this.options.property} \xB7 ${this.options.count} selected note${this.options.count === 1 ? "" : "s"}` });
-    const label = fields.createEl("label", { cls: "pv-edit-field" });
-    label.createSpan({ text: "Destination value" });
-    const select = label.createEl("select");
-    select.setAttribute("aria-label", "Destination value");
-    select.createEl("option", { text: "Choose a value\u2026" }).value = "";
-    for (const [index, value] of this.options.values.entries()) select.createEl("option", { text: value }).value = `value:${index}`;
-    select.createEl("option", { text: "Add new value\u2026" }).value = "custom";
-    select.createEl("option", { text: "Set empty (keep property)" }).value = "empty";
-    const custom = fields.createEl("label", { cls: "pv-edit-field" });
-    custom.hidden = true;
-    custom.createSpan({ text: "New value" });
-    const input = custom.createEl("input", { type: "text", cls: "pv-edit-input" });
-    input.setAttribute("aria-label", "New value");
-    fields.createEl("p", { cls: "pv-edit-hint", text: "Only the selected notes change. Text properties with text or empty values are supported. Set empty keeps the property key. Undo last property edit restores successful changes until reload or another successful edit. YAML formatting may change." });
+    const editor = createNoteValueInput(fields, this.options, () => render());
+    fields.createEl("p", { cls: "pv-edit-hint", text: "Only the selected notes change. Incompatible stored values are skipped. Undo last property edit restores successful changes until reload or another successful edit. YAML formatting may change." });
     const previewEl = fields.createDiv({ cls: "pv-edit-preview" });
     previewEl.setAttribute("aria-live", "polite");
     const actions = content.createDiv({ cls: "pv-edit-actions" });
@@ -1074,22 +1242,21 @@ var NoteValueModal = class extends import_obsidian6.Modal {
       this.displayed = void 0;
       apply.disabled = true;
       apply.textContent = "Apply";
-      custom.hidden = select.value !== "custom";
-      let replacement;
-      if (select.value === "empty") replacement = null;
-      else if (select.value === "custom") {
-        replacement = input.value.trim();
-        if (!replacement || replacement.includes("\0")) {
-          previewEl.createEl("p", { text: "Enter text or choose Set empty." });
-          return;
-        }
-      } else if (select.value.startsWith("value:")) replacement = this.options.values[Number(select.value.slice(6))];
-      else return;
-      const preview = this.options.preview(replacement);
+      apply.classList.remove("mod-warning");
+      const result = editor.read();
+      if (result.error) {
+        previewEl.createEl("p", { text: result.error });
+        return;
+      }
+      if (!result.edit) return;
+      const preview = this.options.preview(result.edit);
       this.displayed = preview;
       apply.disabled = this.busy || preview.total === 0;
-      apply.textContent = `Apply to ${preview.total} note${preview.total === 1 ? "" : "s"}`;
-      previewEl.createEl("p", { text: `${preview.total} will change; ${preview.unchanged} already match; ${preview.conflicts.length} will be skipped.` });
+      const removingProperty = result.edit.mode === "delete";
+      apply.classList.toggle("mod-warning", removingProperty);
+      apply.textContent = `${removingProperty ? "Remove property from" : "Apply to"} ${preview.total} note${preview.total === 1 ? "" : "s"}`;
+      if (removingProperty) previewEl.createEl("p", { cls: "pv-edit-hint", text: `The entire ${this.options.property} property and all its values will be removed from the selected notes. Other properties and the note body are preserved.` });
+      previewEl.createEl("p", { text: `${preview.total} ${removingProperty ? "will lose this property" : "will change"}; ${preview.unchanged} already match; ${preview.conflicts.length} will be skipped.` });
       for (const change of preview.changes) {
         const row = previewEl.createDiv({ cls: "pv-edit-change" });
         row.createSpan({ cls: "pv-edit-path", text: change.path });
@@ -1097,17 +1264,17 @@ var NoteValueModal = class extends import_obsidian6.Modal {
       }
       for (const conflict of preview.conflicts) previewEl.createEl("p", { cls: "pv-edit-change", text: `${conflict.path}: ${conflict.message}` });
     };
-    select.addEventListener("change", render);
-    input.addEventListener("input", render);
     apply.addEventListener("click", () => {
       if (this.busy || apply.disabled || !this.displayed) return;
       this.busy = true;
-      select.disabled = input.disabled = cancel.disabled = apply.disabled = true;
-      apply.textContent = "Updating\u2026";
-      input.blur();
+      editor.setDisabled(true);
+      cancel.disabled = apply.disabled = true;
+      apply.textContent = this.displayed.changes.some((change) => change.remove) ? "Removing\u2026" : "Updating\u2026";
+      editor.blur();
       void this.options.apply(this.displayed).then(() => this.close()).catch(() => {
         this.busy = false;
-        select.disabled = input.disabled = cancel.disabled = false;
+        editor.setDisabled(false);
+        cancel.disabled = false;
         render();
         new import_obsidian6.Notice("Could not change property values. Review the preview before retrying.");
       });
@@ -1245,7 +1412,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian7.Plugin {
     };
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
-    this.valueEditor = new ValueEditor(this.app, (path) => this.includesPath(path), (id) => supportsTextAssignment({ id }, this.typeResolver));
+    this.valueEditor = new ValueEditor(this.app, (path) => this.includesPath(path), (id) => noteEditType({ id }, this.typeResolver));
     this.registerView(VIEW, (leaf) => new PropertiesView(leaf, this));
     this.addRibbonIcon("list-tree", "Open Supercharged Properties", () => {
       void this.open();
@@ -1385,18 +1552,30 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian7.Plugin {
     }).open();
   }
   changeNoteValue(property, paths, complete) {
-    if (!supportsTextAssignment(property, this.typeResolver)) return;
+    const type = noteEditType(property, this.typeResolver);
+    if (!type) return;
     const selected = [...new Set(paths)];
-    const values = [...property.values.values()].filter((value) => JSON.parse(value.id)[0] === "string").map((value) => value.label).sort(natural);
+    const values = [];
+    for (const node of property.values.values()) {
+      const [kind] = JSON.parse(node.id);
+      if (kind !== "string" && kind !== "number") continue;
+      const value = kind === "number" ? Number(node.label) : node.label;
+      if (type === "list") {
+        if (!textOnlyList(property.id) || typeof value === "string") values.push(value);
+      } else if (!noteEditError({ type, mode: "set", value }, property.id)) values.push(value);
+    }
+    values.sort((a, b) => natural(String(a), String(b)));
     new NoteValueModal(this.app, {
       property: property.label,
       count: selected.length,
+      type,
       values,
-      preview: (replacement) => this.valueEditor.previewNoteValue(property.id, replacement, selected),
+      preview: (edit) => this.valueEditor.previewNoteEdit(property.id, edit, selected),
       apply: async (preview) => {
         await this.typeResolver.load();
         const result = await this.valueEditor.apply(preview);
-        new import_obsidian7.Notice(`Updated ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
+        const action = preview.changes.some((change) => change.remove) ? "Removed property from" : "Updated";
+        new import_obsidian7.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
         for (const failure of result.failures) new import_obsidian7.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
         complete();
@@ -1928,7 +2107,7 @@ var PropertiesView = class extends import_obsidian7.ItemView {
       button.dataset.pvFocus = rowId;
       button.dataset.notePath = path;
       button.classList.toggle("is-selected", this.selectedNotes?.property === property.id && this.selectedNotes.paths.has(path));
-      if (supportsTextAssignment(property, this.plugin.typeResolver)) {
+      if (noteEditType(property, this.plugin.typeResolver)) {
         button.setAttribute("aria-haspopup", "menu");
         this.noteMenuDisposers.push(attachNoteMenu(button, (point) => this.showNoteMenu(point, property, path, rowId)));
         button.addEventListener("keydown", (event) => {
@@ -1954,7 +2133,7 @@ var PropertiesView = class extends import_obsidian7.ItemView {
       if (folder) el2(button, "small", "pv-note-path", folder);
       button.addEventListener("click", (event) => {
         const modifiedOpen = event.ctrlKey || event.metaKey;
-        if (supportsTextAssignment(property, this.plugin.typeResolver)) {
+        if (noteEditType(property, this.plugin.typeResolver)) {
           if (!modifiedOpen && event.shiftKey) {
             event.preventDefault();
             this.selectNoteRange(property, rowId, path);
@@ -2009,7 +2188,7 @@ var PropertiesView = class extends import_obsidian7.ItemView {
     if (this.noteAnchor?.context !== this.noteSelectionContext()) this.noteAnchor = void 0;
     let selection = this.selectedNotes;
     const property = selection && this.plugin.index.properties.get(selection.property);
-    if (selection && (!property || !supportsTextAssignment(property, this.plugin.typeResolver) || selection.context !== this.noteSelectionContext())) {
+    if (selection && (!property || !noteEditType(property, this.plugin.typeResolver) || selection.context !== this.noteSelectionContext())) {
       this.selectedNotes = selection = void 0;
     }
     this.selectionBar.replaceChildren();

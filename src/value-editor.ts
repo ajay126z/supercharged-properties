@@ -2,6 +2,7 @@
 // Supercharged Properties: preview and apply frontmatter value edits.
 
 import { App, TFile } from 'obsidian';
+import { noteEditError, transformNoteValue, type NoteEditType, type NoteValueEdit } from './note-value-operations';
 import { canRename, matchingKeys, propertyNameError, setOwnValue } from './property-rename';
 import {
   cloneValue,
@@ -12,7 +13,7 @@ import {
   type ValueEditRequest
 } from './value-operations';
 
-export interface ValueEditChange { readonly path: string; readonly before: string; readonly after: string; readonly key: string; readonly original: unknown; readonly replacement: unknown; readonly targetKey?: string; readonly remove?: boolean; readonly textAssignment?: boolean }
+export interface ValueEditChange { readonly path: string; readonly before: string; readonly after: string; readonly key: string; readonly original: unknown; readonly replacement: unknown; readonly targetKey?: string; readonly remove?: boolean; readonly noteEditType?: NoteEditType }
 export interface ValueEditPreview { readonly total: number; readonly changes: ValueEditChange[] }
 export interface PropertyRenamePreview extends ValueEditPreview { readonly source: string; readonly target: string; readonly conflicts: ValueEditFailure[]; readonly error?: string }
 export interface PropertyDeletePreview extends ValueEditPreview { readonly property: string; readonly conflicts: ValueEditFailure[] }
@@ -28,7 +29,7 @@ export class ValueEditor {
   private busy = false;
   private last: LastEdit | undefined;
 
-  constructor(private readonly app: App, private readonly includesPath: (path: string) => boolean = () => true, private readonly supportsTextAssignment: (property: string) => boolean = () => true) {}
+  constructor(private readonly app: App, private readonly includesPath: (path: string) => boolean = () => true, private readonly noteEditType: (property: string) => NoteEditType | undefined = () => 'text') {}
 
   canUndo(): boolean { return !!this.last && !this.busy; }
 
@@ -51,24 +52,30 @@ export class ValueEditor {
     return { total: changes.length, changes };
   }
 
-  /** Assign a text value to explicit note paths, retaining each note's original key spelling. */
   previewNoteValue(property: string, replacement: string | null, paths: Iterable<string>): NoteValuePreview {
+    return this.previewNoteEdit(property, { type: 'text', mode: 'set', value: replacement }, paths);
+  }
+
+  /** Preview typed edits on explicit paths, retaining each note's original key spelling. */
+  previewNoteEdit(property: string, edit: NoteValueEdit, paths: Iterable<string>): NoteValuePreview {
     const changes: ValueEditChange[] = [], conflicts: ValueEditFailure[] = [];
     let unchanged = 0;
     for (const path of new Set(paths)) {
       const skip = (message: string) => conflicts.push({ path, message });
       if (!this.includesPath(path)) { skip('Folder is excluded.'); continue; }
-      if (!this.supportsTextAssignment(property)) { skip('Only text properties are supported.'); continue; }
-      if (replacement !== null && (!replacement.trim() || replacement.includes('\0'))) { skip('Enter text or choose Set empty.'); continue; }
+      if (this.noteEditType(property) !== edit.type) { skip('Property type changed or is unsupported.'); continue; }
+      const error = noteEditError(edit, property);
+      if (error) { skip(error); continue; }
       const file = this.file(path);
       const frontmatter = file ? this.frontmatter(file) : undefined;
       if (!frontmatter) { skip('Note or metadata unavailable.'); continue; }
       const keys = matchingKeys(frontmatter, property);
       if (keys.length !== 1) { skip(keys.length ? 'Ambiguous property keys.' : 'Property is missing.'); continue; }
       const key = keys[0], original = frontmatter[key];
-      if (original !== null && typeof original !== 'string') { skip('Only text or empty scalar values are supported.'); continue; }
-      if (sameValue(original, replacement)) { unchanged++; continue; }
-      changes.push({ path, key, original, replacement, textAssignment: true, before: JSON.stringify(original), after: JSON.stringify(replacement) });
+      const result = transformNoteValue(original, edit, property);
+      if (result.error) { skip(result.error); continue; }
+      if (!result.remove && sameValue(original, result.value)) { unchanged++; continue; }
+      changes.push({ path, key, original: cloneValue(original), replacement: cloneValue(result.value), remove: result.remove === true, noteEditType: edit.type, before: JSON.stringify(original), after: result.remove ? '(property removed)' : JSON.stringify(result.value) });
     }
     return { total: changes.length, changes, conflicts, unchanged };
   }
@@ -127,8 +134,8 @@ export class ValueEditor {
           await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
             if (!this.includesPath(change.path)) return;
             if (!Object.prototype.hasOwnProperty.call(frontmatter, change.key) || !sameValue(frontmatter[change.key], change.original)) return;
-            if ((change.remove || change.textAssignment) && matchingKeys(frontmatter, change.key).length !== 1) return;
-            if (change.textAssignment && !this.supportsTextAssignment(change.key)) return;
+            if ((change.remove || change.noteEditType) && matchingKeys(frontmatter, change.key).length !== 1) return;
+            if (change.noteEditType && this.noteEditType(change.key) !== change.noteEditType) return;
             if (change.targetKey !== undefined && !canRename(frontmatter, change.key, change.targetKey)) return;
             const remove = change.remove === true;
             snapshot = { path: change.path, key: change.key, before: cloneValue(change.original), after: remove ? undefined : cloneValue(change.replacement), targetKey: change.targetKey, remove };

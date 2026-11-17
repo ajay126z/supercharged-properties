@@ -218,4 +218,4 @@ Version 1.2.0 respects **Settings → Supercharged Properties → Excluded folde
 
 ## Change selected notes instead
 
-To assign one destination to specific notes, right-click a note on desktop or long-press on mobile and choose **Change property…** (the menu uses the actual property name). **Select notes…** supports several notes within the same property. This text-only action can combine notes from different starting values and supports explicit empty values. See [changing selected notes](NOTE-VALUE-EDITING.md).
+To assign one destination to specific notes, right-click a note on desktop or long-press on mobile and choose **Change property…** (the menu uses the actual property name). **Select notes…** supports several notes within the same property. Selected-note editing supports typed Text, Number, Checkbox, Date, and Date & time assignments, plus List add/remove operations. Scalar edits support explicit empty values. See [changing selected notes](NOTE-VALUE-EDITING.md).

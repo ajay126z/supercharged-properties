@@ -86,3 +86,11 @@ it('keeps working when types.json is malformed or unreadable', async () => {
   await resolver.load();
   expect(resolver.typeFor(property('rating'))).toBe('text');
 });
+
+it('resolves selected-note types while retaining the special tags restriction', async () => {
+  const { noteEditType } = await import('../src/property-types');
+  const resolver = resolverFor(typesFile({ rating: 'number', done: 'checkbox', due: 'date', updated: 'datetime', topics: 'multitext', invalid: 'unknown' }));
+  await resolver.load();
+  expect(['title', 'rating', 'done', 'due', 'updated', 'topics', 'aliases', 'cssclasses', 'tags', 'invalid'].map(id => noteEditType({ id }, resolver)))
+    .toEqual(['text', 'number', 'checkbox', 'date', 'datetime', 'list', 'list', 'list', undefined, undefined]);
+});
