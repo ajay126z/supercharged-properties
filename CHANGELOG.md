@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-16
+
 ### Fixed
 
 - Give the Change property dialog a stable, spacious mobile layout. Fit the outer modal to the visible viewport, keep its preview scrollable and actions reachable above the keyboard, and restore its full height after keyboard dismissal.

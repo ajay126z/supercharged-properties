@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. Property-name and value edits write frontmatter only after you review a preview and confirm.
 
-This guide describes **1.2.1** and unreleased property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
+This guide describes **1.3.0**, including property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 ## Contents
 
@@ -233,7 +233,7 @@ In 1.2.0, right-click a property row and choose **Rename property…**. Review a
 
 Right-click a note on desktop or long-press it on mobile, then choose **Change status…** (using the parent property's name). Choose or enter a typed scalar value, set the property empty, add/remove List items, or choose **Remove property** to delete the entire key and all its values from selected notes. **Select notes…** starts a selection within the property. Selection mode shows checkboxes and highlighted rows on both desktop and mobile. Click a checkbox to toggle a note without opening it. Desktop shortcuts remain: Alt/Option-click toggles individual notes, Shift-click adds a range, and Escape clears the selection. Plain clicks open notes and clear desktop multi-selection; Ctrl/Cmd-click opens a new tab. Mobile selection uses checkboxes and tap-to-toggle rows. Normal taps open notes outside selection mode; scrolling cancels a pending long-press.
 
-This action supports Text, Number, Checkbox, Date, and Date & time properties, plus add/remove operations for flat List properties. Aliases and cssclasses support text-list items; tags remain unsupported. It previews only the selected notes and shares **Undo last property edit** with other edits. See [changing selected notes](NOTE-VALUE-EDITING.md) for the complete workflow, eligibility, and safeguards.
+This action supports Text, Number, Checkbox, Date, and Date & time properties, plus add/remove operations for flat List properties. Aliases and cssclasses support text-list items; tags remain unsupported. **Set empty (keep property)** retains a scalar key with `null`. List **Remove values** retains the key with `[]` when the last item is removed; **Remove property** deletes the entire key for lists of any size, including empty lists. It previews only the selected notes and shares **Undo last property edit** with other edits. See [changing selected notes](NOTE-VALUE-EDITING.md) for the complete workflow, eligibility, and safeguards.
 
 ## Edit values across notes
 

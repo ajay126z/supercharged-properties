@@ -2,12 +2,12 @@
 
 ## For users
 
-These guides describe **1.2.1** plus unreleased property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
+These guides describe **1.3.0**, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
 | [User guide](USER-GUIDE.md) | Installation, browsing, types and counts, local search, property selection, folder exclusions, saved views, sorting, pinning, hiding, Search integration, copying, settings, commands, privacy, and troubleshooting. |
-| [Change selected notes](NOTE-VALUE-EDITING.md) | Single-note and multi-note typed scalar edits, list add/remove, existing/new/empty values, selection checkboxes, desktop shortcuts, mobile long-press, previews, conflicts, and undo. |
+| [Change selected notes](NOTE-VALUE-EDITING.md) | Single-note and multi-note typed scalar edits, list add/remove, whole-property removal, existing/new/empty values, selection checkboxes, desktop shortcuts, mobile long-press, previews, conflicts, and undo. |
 | [Bulk value editing](BULK-EDITING.md) | Rename, delete, merge, wikilink conversion, text-only splitting, eligibility, preview, confirmation, conflicts, and one-step undo. |
 | [Property-name renaming](PROPERTY-RENAMING.md) | Key renaming and deletion, case corrections, collision handling, preserved values, preference updates, and shared undo. |
 
@@ -15,6 +15,9 @@ These guides describe **1.2.1** plus unreleased property/value deletion and sele
 
 - [Change status on one note](NOTE-VALUE-EDITING.md#change-one-note)
 - [Select and update multiple notes](NOTE-VALUE-EDITING.md#change-multiple-notes)
+- [Set numbers, checkboxes, dates, and times](NOTE-VALUE-EDITING.md#examples-of-typed-edits)
+- [Add or remove list items](NOTE-VALUE-EDITING.md#add-or-remove-list-values)
+- [Remove a property from selected notes](NOTE-VALUE-EDITING.md#remove-the-property-from-selected-notes)
 
 - [Keep template notes out of the tree](USER-GUIDE.md#exclude-template-or-other-folders)
 - [Understand how filters affect edits and copied links](USER-GUIDE.md#how-display-controls-affect-scope)
@@ -37,6 +40,7 @@ These guides describe **1.2.1** plus unreleased property/value deletion and sele
 
 ## Release notes
 
+- [1.3.0](releases/1.3.0.md)
 - [1.2.1](releases/1.2.1.md)
 - [1.2.0](releases/1.2.0.md)
 - [1.1.0](releases/1.1.0.md)

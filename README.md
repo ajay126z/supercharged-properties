@@ -29,9 +29,28 @@ Choose the properties you want to see, save views for different projects, and ex
 
 ## Change selected notes
 
-Right-click a note on desktop or long-press it on mobile and choose **Change status…** to update its parent property. Text, Number, Checkbox, Date, and Date & time use type-specific controls. List properties support adding or removing values while preserving the other items. Scalar values can also be set empty, and **Remove property** deletes the entire key and value from selected notes for any supported type. Choose **Select notes…** to update several notes under the same property, including notes in different value groups. On desktop, Alt/Option-click toggles individual notes and Shift-click adds a displayed range, matching Obsidian's File explorer. Selection mode shows checkboxes beside notes on both desktop and mobile, with selected rows highlighted. The mobile change dialog uses the available screen space and keeps its actions above the keyboard. Review the preview before applying; one-step undo restores the last successful batch.
+Update one note or several notes under the same property. For example, move selected tasks from `status: todo` and `status: active` to `status: closed`.
 
-See [changing selected notes](docs/NOTE-VALUE-EDITING.md) for supported types and selection behavior.
+1. Right-click a note on desktop or long-press it on mobile.
+2. Choose **Change status…** (the action uses your property's name). To edit several notes, choose **Select notes…**, select the notes, then choose **Change status…** in the selection bar.
+3. Choose the change, review the before/after preview, and confirm.
+
+| Property type | What you can change |
+| --- | --- |
+| Text | Choose an existing value or enter new text. |
+| Number | Set a number, such as a rating or estimate. |
+| Checkbox | Set checked or unchecked. |
+| Date / Date & time | Choose a date or local date and time. |
+| List | Add or remove multiple text or number items while keeping the other items. |
+| aliases / cssclasses | Add or remove text list items. |
+
+**Set empty (keep property)** clears a scalar value while keeping its key. **Remove property** deletes the entire key and value from the selected notes, including every item in a list. Removing individual list values leaves an empty list if the last item is removed. Selected-note editing is unavailable for tags.
+
+Selection shows checkboxes and highlighted rows on desktop and mobile. On desktop, **Alt/Option-click** toggles notes and **Shift-click** adds a displayed range. On mobile, use the checkboxes or tap rows in selection mode. You can select notes from different value groups under the same property. The mobile dialog keeps its actions above the keyboard.
+
+Only the selected notes are changed. Review the preview before applying; **Undo last property edit** restores the last successful batch. See [changing selected notes](docs/NOTE-VALUE-EDITING.md) for examples, supported values, and selection behavior.
+
+![Change selected note values with preview and undo](docs/media/06-edit-selected-values.gif)
 
 ## Clean up properties across notes
 
@@ -109,7 +128,7 @@ Your notes stay in your vault. The plugin does not send vault data to external s
 ## Help and documentation
 
 - [User guide](docs/USER-GUIDE.md) — browsing, search, saved views, exclusions, keyboard controls, and troubleshooting.
-- [Change selected notes](docs/NOTE-VALUE-EDITING.md) — single-note edits, selection checkboxes, desktop shortcuts, mobile long-press, and undo.
+- [Change selected notes](docs/NOTE-VALUE-EDITING.md) — typed values, list additions/removals, whole-property removal, desktop and mobile selection, and undo.
 - [Bulk value editing](docs/BULK-EDITING.md) — rename, delete, merge, link conversion, splitting, and undo.
 - [Property-name renaming](docs/PROPERTY-RENAMING.md) — renaming, deletion, previews, conflicts, and effects on saved views.
 - [Changelog](CHANGELOG.md) — changes by version.

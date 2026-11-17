@@ -2,7 +2,9 @@
 
 Use note-row actions to edit one property on one or more notes. For example, move selected notes from `status: todo` and `status: active` to `status: closed` without changing every note that uses those values.
 
-This guide covers the unreleased selected-note editing feature after 1.2.1. It shares the preview, confirmation, and session-scoped undo used by other property edits.
+Selected-note editing is available in **1.3.0**. It shares the preview, confirmation, and session-scoped undo used by other property edits.
+
+![Select notes, edit their status, preview changes, and undo](media/06-edit-selected-values.gif)
 
 ## Change one note
 
@@ -11,7 +13,7 @@ This guide covers the unreleased selected-note editing feature after 1.2.1. It s
 3. Choose **Change status…** (the menu uses the parent property's name).
 4. For scalar properties, choose an existing value, enter a new typed value, choose **Set empty (keep property)**, or choose **Remove property**. For a List property, choose **Add values**, **Remove values**, or **Remove property**.
 5. Review each affected path and its before/after values, plus any skipped notes.
-6. Press **Apply to N notes** to confirm.
+6. Press **Apply to N notes** to confirm a value change, or **Remove property from N notes** to confirm whole-property removal.
 
 The property is fixed to the note's parent property in this view. Opening the menu under `status` changes only `status`; other properties and the note body are preserved. Suggestions come only from that property's indexed values in included folders. Adding a new value changes the selected notes and makes the new value appear in the tree.
 
@@ -63,6 +65,21 @@ The dialog follows the property's configured type. It does not change the type a
 | tags | Selected-note editing remains unavailable for this special property. |
 
 For scalar properties, **Set empty** writes `null` and keeps the key. **Remove property** deletes the key and its entire value from only the selected notes. Literal text `empty` is a string, not null. Number and checkbox properties must contain their corresponding scalar type or an empty value; a numeric-looking string is not silently converted into a number. Text and date properties accept stored strings or empty values. Empty strings are also eligible. Missing properties, lists under scalar properties, and objects are skipped.
+
+## Examples of typed edits
+
+Select notes under the property you want to change, then use its **Change…** action:
+
+| Task | Choice | Result on each selected eligible note |
+| --- | --- | --- |
+| Set an estimate | Under Number property `estimate`, enter `2.5`. | `estimate: 2.5` |
+| Mark tasks complete | Under Checkbox property `complete`, choose True. | `complete: true` |
+| Set a due date | Under Date property `due`, choose November 20, 2026. | `due: 2026-11-20` |
+| Schedule a local time | Under Date & time property `scheduled`, choose November 20, 2026 at 09:30. | `scheduled: 2026-11-20T09:30` |
+| Clear a status | Under Text property `status`, choose Set empty (keep property). | `status: null` |
+| Remove a status | Under `status`, choose Remove property. | The `status` field is absent. |
+
+These examples show the resulting values; Obsidian may format or quote YAML differently. Setting a scalar replaces its existing value. List additions and removals work on each note's own list, so notes can keep different remaining items.
 
 ## Add or remove list values
 
