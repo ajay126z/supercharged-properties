@@ -246,3 +246,10 @@ Run this checklist against a build candidate before publishing. Automated checks
 - Confirm replacement filters and Clear collapse the list; zero matches disable the count and returning matches stay collapsed.
 - Confirm the list remains independent of tree search and property selection, with distinct controls in separate tabs.
 - Check a 320px-wide pane and reduced keyboard height: Clear and the count fit, note rows remain tappable, and the tree retains visible space.
+
+## Mobile tap regression
+
+- In All properties, a custom saved view, and a Value filter, tap a tree note and confirm it opens. Also tap a note in the expandable filter note list.
+- Long-press a note: the menu opens without opening the note. Dismiss it and confirm the next short tap opens normally.
+- Scroll through notes: no menu or accidental note opening. Confirm tapping a note after scrolling works.
+- In note-selection mode, short taps still toggle selection rather than opening notes.

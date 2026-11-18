@@ -736,3 +736,20 @@ it('collapses the note list when replacing the filter and keeps counts visible w
   click('Expand tags');filterValue('Show notes with tags: work (1)');
   expect((document.querySelector('.pv-filter-notes') as HTMLElement).hidden).toBe(true);
 });
+
+it.each(['all', 'custom', 'filtered'])('opens a note on a mobile tap in the %s view after touch pointerleave', mode => {
+  document.body.classList.add('is-mobile');
+  if (mode === 'custom') {
+    plugin.prefs.scope=['status'];plugin.prefs.profiles=[{id:'tasks',name:'Tasks',keys:['status']}];plugin.prefs.activeProfile='tasks';
+  }
+  view.render();
+  if (mode === 'filtered') {
+    click('Expand tags');filterValue('Show notes with tags: work (1)');
+  }
+  click('Expand status');click('Show notes with status: Done (1)');
+  const note=document.querySelector<HTMLButtonElement>('.pv-file')!;
+  for(const type of ['pointerdown','pointerup','pointerleave']) {
+    note.dispatchEvent(Object.assign(new Event(type),{pointerType:'touch',pointerId:1,isPrimary:true,clientX:10,clientY:20}));
+  }
+  note.click();expect(openFile).toHaveBeenCalledOnce();
+});

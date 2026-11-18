@@ -1508,7 +1508,8 @@ function attachNoteMenu(element, open) {
     cancel();
     start = void 0;
   };
-  const abort = () => {
+  const abort = (event) => {
+    if (!start || start.id !== event.pointerId) return;
     moved = true;
     suppressed = true;
     up();

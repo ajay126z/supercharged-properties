@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore mobile note taps in all, custom, and filtered property views. A touch pointer leaving after release no longer suppresses its click; long-press and scroll gestures still prevent accidental opening.
+
 ## [1.4.1] - 2026-11-17
 
 ### Changed

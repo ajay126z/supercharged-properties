@@ -46,3 +46,21 @@ it('handles a native touch menu firing before the timer', () => {
   vi.advanceTimersByTime(500); pointer('pointerup'); button.click();
   expect(open).toHaveBeenCalledOnce(); expect(click).not.toHaveBeenCalled();
 });
+
+it('allows the click when touch pointerleave follows pointerup', () => {
+  pointer('pointerdown'); vi.advanceTimersByTime(100);
+  pointer('pointerup'); pointer('pointerleave'); button.click();
+  expect(click).toHaveBeenCalledOnce(); expect(open).not.toHaveBeenCalled();
+});
+it('still suppresses a long-press click when pointerleave follows pointerup', () => {
+  pointer('pointerdown'); vi.advanceTimersByTime(500);
+  pointer('pointerup'); pointer('pointerleave'); button.click();
+  expect(open).toHaveBeenCalledOnce(); expect(click).not.toHaveBeenCalled();
+});
+it('still suppresses a scrolling gesture but allows the next tap', () => {
+  pointer('pointerdown'); pointer('pointermove', 80, 90);
+  pointer('pointerup'); pointer('pointerleave'); button.click();
+  expect(click).not.toHaveBeenCalled();
+  pointer('pointerdown'); pointer('pointerup'); pointer('pointerleave'); button.click();
+  expect(click).toHaveBeenCalledOnce();
+});

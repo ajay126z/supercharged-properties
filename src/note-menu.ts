@@ -34,7 +34,11 @@ export function attachNoteMenu(element: HTMLElement, open: (point: { x: number; 
     }
   };
   const up = () => { cancel(); start = undefined; };
-  const abort = () => { moved = true; suppressed = true; up(); };
+  const abort = (event: PointerEvent) => {
+    // Touch can leave after pointerup but before click. Only cancel an active press.
+    if (!start || start.id !== event.pointerId) return;
+    moved = true; suppressed = true; up();
+  };
   const context = (event: MouseEvent) => {
     event.preventDefault(); cancel();
     if (opened || moved) return;
