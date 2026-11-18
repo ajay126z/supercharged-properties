@@ -141,7 +141,7 @@ On mobile, note rows have larger touch targets. The list scrolls within a limite
 
 Results follow the live index: notes enter or leave the group as metadata changes. If the filtered value disappears, the filter remains visible with **0 notes** and **No notes match this filter.** Choose Clear or restore the value. When notes match but their other properties are hidden or excluded by search/selection, the tree instead says **No matching properties. Adjust your search or selection.**
 
-Filtering and clearing return keyboard focus to the property-picker button and clear note selection. Live updates remove selected notes that no longer match. On narrow screens the filter label truncates while Clear remains reachable; its full text is available as a tooltip.
+Filtering and clearing return keyboard focus to the property-picker button and clear note selection. Live updates remove selected notes that no longer match. The filter label wraps to show the full property and value. On narrow screens, the note-count and Clear buttons move below the label when needed, so they do not cover the text.
 
 **Open in Search** and **Copy search query** remain vault-wide. They do not include the Value filter. **Copy matching note links** does respect it. Tree search, sorting, hidden/pinned properties, counts settings, and saved views continue to work within the filtered tree.
 

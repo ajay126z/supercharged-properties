@@ -134,13 +134,14 @@
 
 .pv-note-edit .pv-edit-actions button { max-width:100%; white-space:normal; overflow-wrap:anywhere; height:auto; }
 
-.pv-filter-bar { display:flex; align-items:center; gap:6px; flex-shrink:0; padding:5px 12px; border-bottom:1px solid var(--background-modifier-border); background:var(--background-secondary); color:var(--text-muted); font-size:var(--font-ui-smaller, 11px); }
+.pv-filter-bar { display:flex; flex-wrap:wrap; align-items:center; gap:6px; flex-shrink:0; padding:5px 12px; border-bottom:1px solid var(--background-modifier-border); background:var(--background-secondary); color:var(--text-muted); font-size:var(--font-ui-smaller, 11px); }
 .pv-filter-bar[hidden] { display:none; }
-.pv-filter-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pv-filter-label { flex:1 1 180px; min-width:0; white-space:normal; overflow-wrap:anywhere; }
 .pv-filter-bar button { flex-shrink:0; font-size:var(--font-ui-smaller, 11px); }
 .is-mobile .pv-filter-bar button { min-height:40px; }
 @media (pointer:coarse) { .pv-filter-bar button { min-height:40px; } }
 
+.pv-filter-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; margin-inline-start:auto; }
 .pv-filter-toggle { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
 .pv-filter-toggle .pv-icon svg { width:12px; height:12px; }
 .pv-filter-toggle:disabled { opacity:0.5; cursor:default; }

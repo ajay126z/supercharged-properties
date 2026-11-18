@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Wrap the Value filter label so long property names and values remain visible on mobile and narrow panes; move the note-count and Clear buttons to the next line when needed.
+
 ### Added
 
 - Expand the Value filter note count to browse matching notes with folder labels, native opening shortcuts, keyboard navigation, and desktop hover preview. Load additional notes in batches of 200; live updates preserve focus and scroll, with a compact mobile layout.

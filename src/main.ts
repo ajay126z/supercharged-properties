@@ -367,9 +367,10 @@ export class PropertiesView extends ItemView {
     this.filterBar = el(this.contentEl, 'div', 'pv-filter-bar');
     this.filterBar.hidden = true;
     this.filterLabel = el(this.filterBar, 'span', 'pv-filter-label');
-    const clearFilter = this.button(this.filterBar, 'Clear', 'Clear property filter', () => this.setFilter(null));
+    const filterActions = el(this.filterBar, 'div', 'pv-filter-actions');
+    const clearFilter = this.button(filterActions, 'Clear', 'Clear property filter', () => this.setFilter(null));
     const filterNotes = el(this.contentEl, 'div', 'pv-filter-notes');
-    this.filterNoteList = new FilterNoteList(this.app, this.filterBar, filterNotes, clearFilter, this, VIEW);
+    this.filterNoteList = new FilterNoteList(this.app, filterActions, filterNotes, clearFilter, this, VIEW);
     this.summary = el(this.contentEl, 'div', 'pv-summary'); this.summary.setAttribute('aria-live', 'polite');
     this.selectionBar = el(this.contentEl, 'div', 'pv-note-selection');
     this.selectionBar.hidden = true;

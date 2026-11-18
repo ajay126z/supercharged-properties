@@ -1903,9 +1903,10 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.filterBar = el2(this.contentEl, "div", "pv-filter-bar");
     this.filterBar.hidden = true;
     this.filterLabel = el2(this.filterBar, "span", "pv-filter-label");
-    const clearFilter = this.button(this.filterBar, "Clear", "Clear property filter", () => this.setFilter(null));
+    const filterActions = el2(this.filterBar, "div", "pv-filter-actions");
+    const clearFilter = this.button(filterActions, "Clear", "Clear property filter", () => this.setFilter(null));
     const filterNotes = el2(this.contentEl, "div", "pv-filter-notes");
-    this.filterNoteList = new FilterNoteList(this.app, this.filterBar, filterNotes, clearFilter, this, VIEW);
+    this.filterNoteList = new FilterNoteList(this.app, filterActions, filterNotes, clearFilter, this, VIEW);
     this.summary = el2(this.contentEl, "div", "pv-summary");
     this.summary.setAttribute("aria-live", "polite");
     this.selectionBar = el2(this.contentEl, "div", "pv-note-selection");
