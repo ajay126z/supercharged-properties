@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-18
+
 ### Fixed
 
 - Wait for the core Search pane to load before applying Open in Search queries, avoiding the incorrect enable-Search notice when the vault has just opened.
@@ -153,7 +155,8 @@ Initial public release.
 
 - Released under the MIT License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
 
-[Unreleased]: https://github.com/ajay126z/supercharged-properties/compare/1.4.1...HEAD
+[Unreleased]: https://github.com/ajay126z/supercharged-properties/compare/1.4.2...HEAD
+[1.4.2]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.4.2
 [1.4.1]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.4.1
 [1.4.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.4.0
 [1.3.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.3.0
