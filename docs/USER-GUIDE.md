@@ -114,6 +114,8 @@ Search operates within your current property selection and excludes hidden prope
 
 ## Value filter
 
+![Filter notes by a value and explore the matching note list](media/07-value-filter-notes.gif)
+
 Use a Value filter to answer cross-property questions, such as “Which topics appear in completed notes?” This feature is unreleased, following 1.3.0.
 
 1. Expand a property such as `status`.

@@ -19,7 +19,16 @@ Choose the properties you want to see, save views for different projects, and ex
 
 ## Explore notes sharing a value
 
-Right-click a value (or long-press on mobile) and choose **Filter by this value**. For example, filter `status = done` to see which topics and note types occur among completed notes. The tree recalculates counts and note links for matching notes and hides the filter property. The filter bar shows the current condition and a **Clear** button. Expand the note count to see and open matching notes, with folder names to distinguish similar titles. Larger groups offer **Show more** after the first 200 notes.
+Explore the rest of your metadata within a group of notes—for example, see which topics and authors occur among notes with `status: active`.
+
+1. Right-click a value on desktop or long-press it on mobile, then choose **Filter by this value**.
+2. Browse the remaining properties. Counts and note links now reflect only matching notes; the filter property stays in the bar above the tree.
+3. Expand the **note count** to see the matching note names and folders. Click a name to open it, or Ctrl/Cmd-click to open a new tab. Larger groups offer **Show more** after the first 200 notes.
+4. Choose **Clear** to return to the full tree.
+
+On mobile and narrow panes, the property and value wrap so the full condition stays readable. The note-count and Clear buttons move together below the label when needed.
+
+![Filter by a value, reveal matching notes, and open a note](docs/media/07-value-filter-notes.gif)
 
 One filter is active per tab; choosing another replaces it. Notes entering or leaving that value update the results automatically. The filter is temporary and is not saved in a view. **Open in Search** and **Copy search query** remain vault-wide and do not include the value filter. See [Value filter](docs/USER-GUIDE.md#value-filter) for edit scope and examples. This feature is unreleased, following 1.3.0.
 
