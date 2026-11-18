@@ -13,6 +13,7 @@ import { PropertyDeleteModal } from './property-delete-dialog';
 import { includeRenamedProperty } from './property-rename';
 import { ValueEditModal } from './value-dialog';
 import { NoteValueModal } from './note-value-dialog';
+import { FilterNoteList } from './filter-note-list';
 import { attachNoteMenu } from './note-menu';
 import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-operations';
 import type { PropertyValueKind } from './frontmatter-values';
@@ -50,6 +51,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
     this.valueEditor = new ValueEditor(this.app, path => this.includesPath(path), id => noteEditType({ id }, this.typeResolver));
+    this.registerHoverLinkSource(VIEW, { display: 'Supercharged Properties', defaultMod: true });
     this.registerView(VIEW, leaf => new PropertiesView(leaf, this));
     this.addRibbonIcon('list-tree', 'Open Supercharged Properties', () => { void this.open(); });
     this.addCommand({ id: 'open', name: 'Open sidebar', callback: () => { void this.open(); } });
@@ -280,6 +282,7 @@ export class PropertiesView extends ItemView {
   private filter: ValueFilter | null = null;
   private filterBar!: HTMLElement;
   private filterLabel!: HTMLElement;
+  private filterNoteList!: FilterNoteList;
   private scopeButton!: HTMLButtonElement;
   private scopePanel!: HTMLElement;
   private scopeChoices!: HTMLElement;
@@ -364,7 +367,9 @@ export class PropertiesView extends ItemView {
     this.filterBar = el(this.contentEl, 'div', 'pv-filter-bar');
     this.filterBar.hidden = true;
     this.filterLabel = el(this.filterBar, 'span', 'pv-filter-label');
-    this.button(this.filterBar, 'Clear', 'Clear property filter', () => this.setFilter(null));
+    const clearFilter = this.button(this.filterBar, 'Clear', 'Clear property filter', () => this.setFilter(null));
+    const filterNotes = el(this.contentEl, 'div', 'pv-filter-notes');
+    this.filterNoteList = new FilterNoteList(this.app, this.filterBar, filterNotes, clearFilter, this, VIEW);
     this.summary = el(this.contentEl, 'div', 'pv-summary'); this.summary.setAttribute('aria-live', 'polite');
     this.selectionBar = el(this.contentEl, 'div', 'pv-note-selection');
     this.selectionBar.hidden = true;
@@ -547,6 +552,7 @@ export class PropertiesView extends ItemView {
   }
   private setFilter(filter: ValueFilter | null): void {
     this.filter = filter;
+    this.filterNoteList.reset();
     this.selectedNotes = undefined;
     this.noteAnchor = undefined;
     this.render();
@@ -634,10 +640,11 @@ export class PropertiesView extends ItemView {
     const noteCount = `${n} ${n === 1 ? 'note' : 'notes'}`;
     this.filterBar.hidden = !this.filter;
     if (this.filter) {
-      const text = `Filtered by ${this.filter.propertyLabel} = ${this.filter.label} · ${noteCount}`;
+      const text = `Filtered by ${this.filter.propertyLabel} = ${this.filter.label}`;
       this.filterLabel.textContent = text;
       this.filterLabel.title = this.filterBar.title = text;
     }
+    this.filterNoteList.update(valuePaths);
     this.summary.textContent = `${visible} properties · ${this.filter ? `Filtered (${noteCount})` : scope === null ? 'Entire vault' : 'Custom selection'}`;
     if (!visible) {
       const message = this.filter && n === 0 ? 'No notes match this filter.'

@@ -235,3 +235,14 @@ Run this checklist against a build candidate before publishing. Automated checks
 - Check long labels and Clear at narrow widths with the keyboard open.
 
 - For a single Note-A with author AJ, rating 4, and topic design: author AJ must show 1 before filtering, the filter bar must show 1 note, and the summary must show 2 properties · Filtered (1 note). Repeated metadata updates, renaming, and moving the note must retain one matching path.
+
+## Filter note list (unreleased)
+
+- Expand the count; confirm names, folder labels, numeric-aware sorting, and duplicate-name disambiguation.
+- Open notes with click/tap, Ctrl/Cmd-click, and keyboard Enter; missing paths must never create a note.
+- With Page preview enabled, check desktop hover according to the configured modifier requirement; touch must not trigger hover previews.
+- Load more than 200 notes, verify the full count, and use Show more to reach the remaining notes.
+- Move focus and scroll within the list, then edit/rename/delete a matching note; verify stable focus and scroll or sensible fallback.
+- Confirm replacement filters and Clear collapse the list; zero matches disable the count and returning matches stay collapsed.
+- Confirm the list remains independent of tree search and property selection, with distinct controls in separate tabs.
+- Check a 320px-wide pane and reduced keyboard height: Clear and the count fit, note rows remain tappable, and the tree retains visible space.

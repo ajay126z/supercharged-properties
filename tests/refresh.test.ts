@@ -5,7 +5,7 @@ vi.mock('obsidian', () => ({
   Plugin: class {
     app: any; cleanups: Array<() => void> = [];
     loadData = async () => null;
-    registerView() {} addRibbonIcon() {} addCommand() {} addSettingTab() {}
+    registerHoverLinkSource() {} registerView() {} addRibbonIcon() {} addCommand() {} addSettingTab() {}
     registerEvent(ref: { off: () => void }) { this.cleanups.push(ref.off); }
     register(fn: () => void) { this.cleanups.push(fn); }
   },

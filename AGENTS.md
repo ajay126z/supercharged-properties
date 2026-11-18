@@ -46,6 +46,8 @@ Value filters live only on `PropertiesView`. Each render derives `PropertyIndex.
 
 Supporting modules:
 
+- `src/filter-note-list.ts` - read-only filter count disclosure, sorted note rows, progressive loading, native opening/hover, and focus/scroll restoration. Uses the same live path set as the filter count; it does not join tree selection.
+
 - `src/note-menu.ts` - desktop/keyboard context menus and touch long-press with movement, scroll, and click guards.
 - `src/note-value-operations.ts` - typed scalar validation, calendar-date validation, exact list add/remove transforms, and number parsing.
 - `src/note-value-input.ts` - type-specific scalar controls and multi-value list controls.

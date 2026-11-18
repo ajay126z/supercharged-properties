@@ -120,13 +120,24 @@ Use a Value filter to answer cross-property questions, such as “Which topics a
 2. Right-click a value such as `done`, long-press it on mobile, or focus its label and press **Shift+F10** or the menu key.
 3. Choose **Filter by this value**. The `(empty)` row is supported too: it includes existing null values, blank strings, and empty lists, not notes missing that property.
 4. Explore the remaining properties. Counts and copied note links now describe only matching notes. The filter property is omitted from the tree and property picker; its name and value remain in the filter bar.
-5. Choose **Clear** in the filter bar to return to unfiltered notes. Your search and property selection remain in place.
+5. Click or tap the note count to reveal a scrollable list of matching notes. Select a name to open it.
+6. Choose **Clear** in the filter bar to return to unfiltered notes. Your search and property selection remain in place.
 
 For example, with three recipes and two tasks, filter `type = recipe` to compare only recipe statuses and cuisines. Renaming a `wip` status while this filter is active changes matching recipes, leaving tasks untouched. Property-name renames and property deletions also respect the filtered group. Merge targets come from values present in that group. As always, inspect the before/after preview before confirming. The dialog previews the paths from the row you opened; subsequent edits still use the existing value/conflict safeguards and undo.
 
 Only one condition is active. Choosing another value replaces the condition and resolves its matches across all included notes; it does not intersect with the previous filter. Separate tabs have independent filters. Saved views retain their complete property selections and do not save the condition. Closing and recreating the view or reloading the plugin clears it.
 
 Counts are distinct note paths, not property assignments or list items. For one note with `author: AJ`, `rating: 4`, and `topic: design`, filtering `author = AJ` shows **1 note** in the bar and **2 properties · Filtered (1 note)** in the summary. The two properties are rating and topic.
+
+The expandable note list sorts by note name, with numeric ordering (Note 2 before Note 10) and full path as a tie-breaker. Folder labels and full-path tooltips distinguish duplicate names. It initially shows up to 200 notes; **Show more** loads the next batch. The count always includes the whole subset, even before all rows are loaded. Tree search does not narrow this list.
+
+Click or tap a name to open that note in the current editor. Ctrl/Cmd-click opens a new tab; Obsidian's additional opening modifiers are respected. Opening a note leaves the filter and disclosure state intact. This list is for opening notes only; use note rows in the property tree for selection and editing. On desktop, Page preview works according to Obsidian's settings (by default, hold Ctrl/Cmd while hovering). It requires the Page preview core plugin.
+
+With focus on the count, Enter/Space toggles the list and ArrowDown opens it and focuses its first note. Inside the list, Up/Down and Home/End move between loaded notes, Enter opens a note, and Escape collapses the list and returns focus to the count. Tab also reaches the note buttons and **Show more**.
+
+The list keeps its scroll position and focused path when results update. If the focused note disappears, focus moves to a nearby row; when no notes remain, the list collapses and focus moves to Clear. Applying another filter or clearing the current filter resets the list. If an empty filter later matches notes again, it stays collapsed. Each tab has independent disclosure state, which is not saved.
+
+On mobile, note rows have larger touch targets. The list scrolls within a limited part of the pane, leaving space for the property tree even when the keyboard reduces the available height.
 
 Results follow the live index: notes enter or leave the group as metadata changes. If the filtered value disappears, the filter remains visible with **0 notes** and **No notes match this filter.** Choose Clear or restore the value. When notes match but their other properties are hidden or excluded by search/selection, the tree instead says **No matching properties. Adjust your search or selection.**
 

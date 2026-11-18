@@ -620,7 +620,7 @@ it('filters counts, picker and links, preserves profiles, and clears with focus 
   plugin.prefs.profiles = [{ id: 'test', name: 'Test', keys: ['status', 'tags'] }];
   plugin.prefs.activeProfile = 'test';
   view.render(); click('Expand status'); filterValue('Show notes with status: Done (1)');
-  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('status = Done · 1 note');
+  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('status = Done');
   expect(document.querySelector('.pv-summary')!.textContent).toBe('1 properties · Filtered (1 note)');
   expect(document.querySelector('[aria-label="Toggle status (1)"]')).toBeNull();
   expect(document.querySelector('[aria-label="Toggle tags (1)"]')).not.toBeNull();
@@ -653,7 +653,7 @@ it('replaces rather than intersects filters and searches only the subset', () =>
   expect(document.querySelector('.pv-empty')).not.toBeNull();
   input.value = ''; input.dispatchEvent(new Event('input'));
   click('Expand tags'); filterValue('Show notes with tags: work (1)');
-  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('tags = work · 2 notes');
+  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('tags = work');
   expect(document.querySelector('[aria-label="Toggle status (2)"]')).not.toBeNull();
 });
 it('offers keyboard filtering on empty values but not property rows, independently per view', async () => {
@@ -663,7 +663,7 @@ it('offers keyboard filtering on empty values but not property rows, independent
   const button = document.querySelector('[aria-label="Show notes with status: (empty) (1)"]') as HTMLElement;
   button.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true }));
   (Menu as any).items.find((item: any) => item.title === 'Filter by this value').run();
-  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('(empty) · 1 note');
+  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('(empty)');
   const other = new PropertiesView({ app: view.app } as any, plugin); await other.onOpen();
   expect((other.contentEl.querySelector('.pv-filter-bar') as HTMLElement).hidden).toBe(true);
   await other.onClose();
@@ -703,14 +703,36 @@ it('shows one filtered note, separately from its two remaining properties', () =
   view.render(); click('Expand author');
   expect(document.querySelector('[aria-label="Show notes with author: AJ (1)"]')).not.toBeNull();
   filterValue('Show notes with author: AJ (1)');
-  expect(document.querySelector('.pv-filter-label')!.textContent).toBe('Filtered by author = AJ · 1 note');
+  expect(document.querySelector('.pv-filter-label')!.textContent).toBe('Filtered by author = AJ');
   expect(document.querySelector('.pv-summary')!.textContent).toBe('2 properties · Filtered (1 note)');
   expect(document.querySelector('[aria-label="Toggle rating (1)"]')).not.toBeNull();
   expect(document.querySelector('[aria-label="Toggle topic (1)"]')).not.toBeNull();
   plugin.index.remove('Note-A.md'); plugin.index.update('Renamed.md', fm); view.render();
-  expect(document.querySelector('.pv-filter-label')!.textContent).toBe('Filtered by author = AJ · 1 note');
+  expect(document.querySelector('.pv-filter-label')!.textContent).toBe('Filtered by author = AJ');
   expect(document.querySelector('.pv-summary')!.textContent).toBe('2 properties · Filtered (1 note)');
   // A genuinely different matching path counts once, even if its author is a list.
   plugin.index.update('Note-B.md', { ...fm, author: ['AJ', 'AJ'] }); view.render();
-  expect(document.querySelector('.pv-filter-label')!.textContent).toBe('Filtered by author = AJ · 2 notes');
+  expect(document.querySelector('.pv-filter-toggle')!.textContent).toBe('2 notes');
+});
+
+it('shows the full filter note list independently of tree search and resets disclosure on clear', () => {
+  click('Expand status'); filterValue('Show notes with status: Done (1)');
+  click('Show 1 filtered note');
+  expect(document.querySelectorAll('.pv-filter-note')).toHaveLength(1);
+  expect(document.querySelector('.pv-filter-note')!.textContent).toContain('One');
+  click('Toggle search'); const input=document.querySelector('.pv-filter') as HTMLInputElement;
+  input.value='no match'; input.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.pv-filter-note')).toHaveLength(1);
+  expect(document.querySelector('.pv-empty')).not.toBeNull();
+  click('Clear property filter'); expect((document.querySelector('.pv-filter-notes') as HTMLElement).hidden).toBe(true);
+  input.value='';input.dispatchEvent(new Event('input'));
+  filterValue('Show notes with status: Done (1)');
+  expect(document.querySelector('.pv-filter-toggle')!.getAttribute('aria-expanded')).toBe('false');
+});
+it('collapses the note list when replacing the filter and keeps counts visible with row counts off', () => {
+  click('Expand status'); filterValue('Show notes with status: Done (1)'); click('Show 1 filtered note');
+  plugin.prefs.counts=false;view.render();
+  expect(document.querySelector('.pv-filter-toggle')!.textContent).toBe('1 note');
+  click('Expand tags');filterValue('Show notes with tags: work (1)');
+  expect((document.querySelector('.pv-filter-notes') as HTMLElement).hidden).toBe(true);
 });

@@ -13,6 +13,7 @@ These guides describe **1.3.0** plus the unreleased Value filter, including prop
 
 ### Common tasks
 
+- [See and open notes in a filtered subset](USER-GUIDE.md#value-filter)
 - [Explore other properties among notes sharing a value](USER-GUIDE.md#value-filter)
 
 - [Change status on one note](NOTE-VALUE-EDITING.md#change-one-note)
