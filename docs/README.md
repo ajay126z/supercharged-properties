@@ -2,7 +2,7 @@
 
 ## For users
 
-These guides describe **1.3.0**, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
+These guides describe **1.3.0** plus the unreleased Value filter, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
@@ -12,6 +12,8 @@ These guides describe **1.3.0**, including property/value deletion and selected-
 | [Property-name renaming](PROPERTY-RENAMING.md) | Key renaming and deletion, case corrections, collision handling, preserved values, preference updates, and shared undo. |
 
 ### Common tasks
+
+- [Explore other properties among notes sharing a value](USER-GUIDE.md#value-filter)
 
 - [Change status on one note](NOTE-VALUE-EDITING.md#change-one-note)
 - [Select and update multiple notes](NOTE-VALUE-EDITING.md#change-multiple-notes)

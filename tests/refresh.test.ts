@@ -158,3 +158,29 @@ it('defaults malformed or absent excluded folder settings to include everything'
   const { plugin } = await setup({ excludedFolders: ['Templates'] });
   expect(plugin.prefs.excludedFolders).toBe(''); expect(plugin.includesPath('Templates/A.md')).toBe(true);
 });
+
+
+it('keeps one author path after repeated metadata updates and note renames', async () => {
+  const { plugin, vault, cache, files, metadata } = await setup();
+  const file = Object.assign(new TFile(), { path: 'Note-A.md', extension: 'md' });
+  const entry = { frontmatter: { author: 'AJ', rating: 4, topic: 'design' } };
+  files.push(file); metadata.set(file.path, entry);
+  vault.emit('create', file);
+  cache.emit('changed', file, '', entry); cache.emit('changed', file, '', entry);
+  const paths = () => [...plugin.index.properties.get('author')!.values.values()][0].paths;
+  expect(paths()).toEqual(new Set(['Note-A.md']));
+  for (const next of ['Renamed.md', 'Projects/Renamed.md']) {
+    const old = file.path;
+    file.path = next; metadata.delete(old); metadata.set(next, entry);
+    // Cache updates can arrive before the vault rename event.
+    cache.emit('changed', file, '', entry);
+    vault.emit('rename', file, old);
+    cache.emit('changed', file, '', entry);
+    expect(paths()).toEqual(new Set([next]));
+    for (const property of plugin.index.properties.values()) {
+      expect(property.paths.has(old)).toBe(false);
+      for (const value of property.values.values()) expect(value.paths.has(old)).toBe(false);
+    }
+  }
+  plugin.rebuild(); expect(paths()).toEqual(new Set(['Projects/Renamed.md']));
+});

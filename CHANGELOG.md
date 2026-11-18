@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Value filter: narrow each property view to notes sharing a value, with live subset counts, note links, a clearable filter bar, keyboard menus, and mobile long-press. Value edits, property renames, and property deletion respect the subset. Saved views retain their full keys; Obsidian Search queries remain vault-wide.
+
 ## [1.3.0] - 2026-11-16
 
 ### Fixed

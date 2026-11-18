@@ -18,7 +18,7 @@ Preview values use JSON-style notation: `"false"` is text, `false` is a boolean,
 
 Apply is disabled when the input is invalid, the preview is updating, or no notes would change. Closing or cancelling the dialog before Apply does not write notes. Once Apply starts, closing the dialog does not cancel the running batch.
 
-**Scope:** each action covers the indexed notes for the selected value in included folders across the vault. Excluded folders are omitted from previews and checked again before writes. Search, saved views, and collapsed branches do not restrict the edit to visible notes. There is no per-note inclusion checkbox. Inspect the full preview before confirming.
+**Scope:** each action covers the indexed notes for the selected value in included folders. With an active [Value filter](USER-GUIDE.md#value-filter), only matching notes in that subset are included, and merge targets come from values in the subset. Without a Value filter, the action covers matching notes across the vault. Excluded folders are omitted from previews and checked again before writes. Search, saved views, and collapsed branches do not restrict the edit to visible notes. There is no per-note inclusion checkbox. Inspect the full preview before confirming.
 
 Before writing each note, the plugin compares the current property value with the previewed value. If it changed, the note is skipped. Other property changes do not block the edit. The completion notice reports updated, skipped, and failed notes; failures also identify the affected paths.
 

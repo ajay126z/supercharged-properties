@@ -49,3 +49,36 @@ describe('property membership', () => {
     expect(index.properties.size).toBe(3);
   });
 });
+
+describe('scoped index', () => {
+  it('intersects distinct paths, drops empty rows and preserves typed identities without changing the source', () => {
+    const index = new PropertyIndex();
+    index.update('a.md', { Status: 'Done', tags: ['work', 'work'], flag: false, object: { x: 1 } });
+    index.update('b.md', { Status: 'Pending', tags: ['work', 'other'], flag: 'false' });
+    const result = index.scoped(new Set(['a.md']), 'status');
+    expect(result.properties.has('status')).toBe(false);
+    expect(result.properties.get('tags')!.paths.size).toBe(1);
+    expect(result.properties.get('tags')!.values.size).toBe(1);
+    expect([...result.properties.get('flag')!.values.keys()]).toEqual(['["boolean","false"]']);
+    expect(result.properties.get('object')!.values.size).toBe(0);
+    expect(result.properties.get('object')!.paths.size).toBe(1);
+    expect(index.scoped(new Set(['a.md'])).properties.get('status')!.label).toBe('Status');
+    result.properties.get('tags')!.paths.clear();
+    [...result.properties.get('tags')!.values.values()][0].paths.clear();
+    expect(index.properties.get('tags')!.paths.size).toBe(2);
+    expect([...index.properties.get('tags')!.values.values()][0].paths.size).toBe(2);
+    expect(index.scoped(new Set()).properties.size).toBe(0);
+    expect(index.scoped(new Set(['missing.md'])).properties.size).toBe(0);
+  });
+});
+
+
+it('counts repeated updates and repeated author list items as one distinct note', () => {
+  const index = new PropertyIndex();
+  const fm = { author: 'AJ', rating: 4, topic: 'design' };
+  index.update('Note-A.md', fm);
+  index.update('Note-A.md', fm);
+  expect([...index.properties.get('author')!.values.values()][0].paths).toEqual(new Set(['Note-A.md']));
+  index.update('Note-A.md', { ...fm, author: ['AJ', 'AJ'] });
+  expect([...index.properties.get('author')!.values.values()][0].paths).toEqual(new Set(['Note-A.md']));
+});

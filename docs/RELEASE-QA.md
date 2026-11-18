@@ -224,3 +224,14 @@ Run this checklist against a build candidate before publishing. Automated checks
 | Date | |
 | Result | Pass / Fail |
 | Notes | |
+
+## Value filter (unreleased)
+
+- Filter a value from its desktop, keyboard, and mobile long-press menus, including `(empty)`. Confirm the filter property disappears and counts shrink.
+- Clear and replace filters; confirm separate tabs stay independent and saved views retain their keys.
+- Search inside a filter and copy links; confirm outside notes are absent. Core Search queries remain vault-wide.
+- Preview and apply a filtered value edit, property rename, and property deletion; confirm outside notes are unchanged, then undo.
+- Change or delete the filter value externally; confirm live updates and the clearable zero-note state.
+- Check long labels and Clear at narrow widths with the keyboard open.
+
+- For a single Note-A with author AJ, rating 4, and topic design: author AJ must show 1 before filtering, the filter bar must show 1 note, and the summary must show 2 properties · Filtered (1 note). Repeated metadata updates, renaming, and moving the note must retain one matching path.

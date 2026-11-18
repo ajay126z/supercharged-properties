@@ -102,7 +102,7 @@ function readList(input) {
 // src/index.ts
 var fold = (text) => text.trim().normalize("NFC").toLowerCase();
 var natural = (a, b) => a.localeCompare(b, void 0, { numeric: true, sensitivity: "base" });
-var PropertyIndex = class {
+var PropertyIndex = class _PropertyIndex {
   constructor() {
     this.properties = /* @__PURE__ */ new Map();
     this.memberships = /* @__PURE__ */ new Map();
@@ -149,6 +149,23 @@ var PropertyIndex = class {
       }
     }
     this.memberships.set(path, membership);
+  }
+  /** Derive a read-only index for a note subset. Do not update the result. */
+  scoped(paths, excludeKey) {
+    const result = new _PropertyIndex();
+    const intersect = (source) => new Set([...source].filter((path) => paths.has(path)));
+    for (const [key, property] of this.properties) {
+      if (key === excludeKey) continue;
+      const propertyPaths = intersect(property.paths);
+      if (!propertyPaths.size) continue;
+      const values = /* @__PURE__ */ new Map();
+      for (const [id, value] of property.values) {
+        const valuePaths = intersect(value.paths);
+        if (valuePaths.size) values.set(id, { ...value, paths: valuePaths });
+      }
+      result.properties.set(key, { ...property, paths: propertyPaths, values });
+    }
+    return result;
   }
 };
 
@@ -1526,7 +1543,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian7.Plugin {
   renameProperty(property) {
     new PropertyRenameModal(this.app, {
       property: property.label,
-      preview: (target) => this.valueEditor.previewPropertyRename(property.id, target, this.index.properties.get(property.id)?.paths ?? []),
+      preview: (target) => this.valueEditor.previewPropertyRename(property.id, target, property.paths),
       apply: async (preview) => {
         const result = await this.valueEditor.apply(preview);
         if (result.updated) {
@@ -1542,7 +1559,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian7.Plugin {
   deleteProperty(property) {
     new PropertyDeleteModal(this.app, {
       property: property.label,
-      preview: () => this.valueEditor.previewPropertyDelete(property.id, this.index.properties.get(property.id)?.paths ?? []),
+      preview: () => this.valueEditor.previewPropertyDelete(property.id, property.paths),
       apply: async (preview) => {
         const result = await this.valueEditor.apply(preview);
         new import_obsidian7.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
@@ -1625,6 +1642,7 @@ var PropertiesView = class extends import_obsidian7.ItemView {
     this.noteMenuDisposers = [];
     this.query = "";
     this.searchScope = "any";
+    this.filter = null;
     this.scopeQuery = "";
     this.visibleKeys = [];
     this.allExpanded = false;
@@ -1727,6 +1745,10 @@ var PropertiesView = class extends import_obsidian7.ItemView {
     this.searchToggle.setAttribute("aria-expanded", "false");
     this.scopePanel = el2(toolbar, "div", "pv-scope-panel");
     this.scopePanel.hidden = true;
+    this.filterBar = el2(this.contentEl, "div", "pv-filter-bar");
+    this.filterBar.hidden = true;
+    this.filterLabel = el2(this.filterBar, "span", "pv-filter-label");
+    this.button(this.filterBar, "Clear", "Clear property filter", () => this.setFilter(null));
     this.summary = el2(this.contentEl, "div", "pv-summary");
     this.summary.setAttribute("aria-live", "polite");
     this.selectionBar = el2(this.contentEl, "div", "pv-note-selection");
@@ -1858,12 +1880,12 @@ var PropertiesView = class extends import_obsidian7.ItemView {
     this.profileDelete = this.button(buttons, "Delete", "Delete active profile", () => this.manageProfile("delete"));
     this.syncProfiles();
   }
-  syncProfiles() {
+  syncProfiles(index = this.activeIndex()) {
     const profiles = this.plugin.prefs.profiles;
     const active = profiles.find((profile) => profile.id === this.plugin.prefs.activeProfile);
     this.profileSelect.replaceChildren();
     const hidden = new Set(this.plugin.prefs.hidden.split("\n").map(fold).filter(Boolean));
-    const count = (keys) => new Set([...keys].filter((key) => this.plugin.index.properties.has(key) && !hidden.has(key))).size;
+    const count = (keys) => new Set([...keys].filter((key) => index.properties.has(key) && !hidden.has(key))).size;
     el2(this.profileSelect, "option", "", `All properties (${count(this.plugin.index.properties.keys())})`).value = "all";
     if (this.plugin.prefs.scope !== null && !active) el2(this.profileSelect, "option", "", `Custom selection (${count(this.plugin.prefs.scope)})`).value = "custom";
     for (const profile of profiles) {
@@ -1930,13 +1952,13 @@ var PropertiesView = class extends import_obsidian7.ItemView {
     this.plugin.refresh();
     this.render();
   }
-  renderScopeChoices() {
+  renderScopeChoices(index = this.activeIndex()) {
     if (!this.scopeChoices) return;
     const scroll = this.scopeChoices.scrollTop;
     this.scopeChoices.replaceChildren();
-    const choices = new Map([...this.plugin.index.properties.values()].map((property) => [property.id, property]));
+    const choices = new Map([...index.properties.values()].map((property) => [property.id, property]));
     for (const key of this.plugin.prefs.scope ?? []) {
-      if (!choices.has(key)) choices.set(key, { id: key, label: key, paths: /* @__PURE__ */ new Set(), values: /* @__PURE__ */ new Map() });
+      if (key !== this.filter?.property && !choices.has(key)) choices.set(key, { id: key, label: key, paths: /* @__PURE__ */ new Set(), values: /* @__PURE__ */ new Map() });
     }
     const properties = this.sorted(choices.values()).filter((property) => fold(property.label).includes(fold(this.scopeQuery)));
     for (const property of properties) {
@@ -1962,20 +1984,36 @@ var PropertiesView = class extends import_obsidian7.ItemView {
   matches(text, scope) {
     return (this.searchScope === "any" || this.searchScope === scope) && fold(text).includes(this.query);
   }
+  setFilter(filter) {
+    this.filter = filter;
+    this.selectedNotes = void 0;
+    this.noteAnchor = void 0;
+    this.render();
+    this.scopeButton.focus({ preventScroll: true });
+  }
+  filterPaths() {
+    if (!this.filter) return null;
+    return this.plugin.index.properties.get(this.filter.property)?.values.get(this.filter.value)?.paths ?? /* @__PURE__ */ new Set();
+  }
+  activeIndex(paths = this.filterPaths()) {
+    return this.filter ? this.plugin.index.scoped(paths ?? /* @__PURE__ */ new Set(), this.filter.property) : this.plugin.index;
+  }
   render() {
     if (!this.body) return;
-    this.syncProfiles();
+    const valuePaths = this.filterPaths();
+    const index = this.activeIndex(valuePaths);
+    this.syncProfiles(index);
     this.disposeNoteMenus();
-    this.syncNoteSelection();
+    this.syncNoteSelection(index);
     this.renderedNotes.clear();
     const focusId = this.contentEl.ownerDocument.activeElement?.dataset.pvFocus;
     const scroll = this.body.scrollTop;
     this.body.replaceChildren();
-    if (!this.scopePanel.hidden) this.renderScopeChoices();
+    if (!this.scopePanel.hidden) this.renderScopeChoices(index);
     const hidden = new Set(this.plugin.prefs.hidden.split("\n").map(fold).filter(Boolean));
     const pinned = new Set(this.plugin.prefs.pinned);
     const scope = this.plugin.prefs.scope;
-    const properties = this.sorted(this.plugin.index.properties.values()).filter((p) => !hidden.has(p.id) && (scope === null || scope.includes(p.id))).sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
+    const properties = this.sorted(index.properties.values()).filter((p) => !hidden.has(p.id) && (scope === null || scope.includes(p.id))).sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
     this.sortButton.title = `Sort: ${sortOptions[this.plugin.prefs.sort]}`;
     let visible = 0;
     this.visibleKeys = [];
@@ -2033,8 +2071,19 @@ var PropertiesView = class extends import_obsidian7.ItemView {
     this.expandToggle.setAttribute("aria-pressed", String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
     (0, import_obsidian7.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
-    this.summary.textContent = `${visible} properties \xB7 ${scope === null ? "Entire vault" : "Custom selection"}`;
-    if (!visible) el2(this.body, "div", "pv-empty", scope?.length === 0 ? "Choose properties above to start exploring." : "No matching properties. Adjust your search or selection.");
+    const n = valuePaths?.size ?? 0;
+    const noteCount = `${n} ${n === 1 ? "note" : "notes"}`;
+    this.filterBar.hidden = !this.filter;
+    if (this.filter) {
+      const text = `Filtered by ${this.filter.propertyLabel} = ${this.filter.label} \xB7 ${noteCount}`;
+      this.filterLabel.textContent = text;
+      this.filterLabel.title = this.filterBar.title = text;
+    }
+    this.summary.textContent = `${visible} properties \xB7 ${this.filter ? `Filtered (${noteCount})` : scope === null ? "Entire vault" : "Custom selection"}`;
+    if (!visible) {
+      const message2 = this.filter && n === 0 ? "No notes match this filter." : !this.filter && !this.query && scope?.length === 0 ? "Choose properties above to start exploring." : "No matching properties. Adjust your search or selection.";
+      el2(this.body, "div", "pv-empty", message2);
+    }
     this.body.scrollTop = scroll;
     if (focusId) Array.from(this.contentEl.querySelectorAll("[data-pv-focus]")).find((e) => e.dataset.pvFocus === focusId)?.focus({ preventScroll: true });
   }
@@ -2043,17 +2092,9 @@ var PropertiesView = class extends import_obsidian7.ItemView {
     const button = this.button(row, "", `${isKey ? "Toggle" : "Show notes with"} ${property.label}${isKey ? "" : ": " + node.label} (${node.paths.size})`, run);
     button.className = "pv-node";
     button.dataset.pvFocus = JSON.stringify([property.id, isKey ? null : node.id]);
-    button.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      this.showMenu(event, property, node);
-    });
-    button.addEventListener("keydown", (event) => {
-      if (event.key === "ContextMenu" || event.shiftKey && event.key === "F10") {
-        event.preventDefault();
-        const rect = button.getBoundingClientRect();
-        this.showMenu(new MouseEvent("contextmenu", { clientX: rect.left, clientY: rect.bottom }), property, node);
-      }
-    });
+    this.noteMenuDisposers.push(attachNoteMenu(button, (point) => {
+      this.showMenu(new MouseEvent("contextmenu", { clientX: point.x, clientY: point.y }), property, node);
+    }));
     if (isKey) {
       const type = this.plugin.typeResolver.typeFor(property);
       const icon = el2(button, "span", "pv-icon pv-type-icon");
@@ -2182,12 +2223,12 @@ var PropertiesView = class extends import_obsidian7.ItemView {
     this.noteMenuDisposers = [];
   }
   noteSelectionContext() {
-    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders]);
+    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders, this.filter]);
   }
-  syncNoteSelection() {
+  syncNoteSelection(index) {
     if (this.noteAnchor?.context !== this.noteSelectionContext()) this.noteAnchor = void 0;
     let selection = this.selectedNotes;
-    const property = selection && this.plugin.index.properties.get(selection.property);
+    const property = selection && index.properties.get(selection.property);
     if (selection && (!property || !noteEditType(property, this.plugin.typeResolver) || selection.context !== this.noteSelectionContext())) {
       this.selectedNotes = selection = void 0;
     }
@@ -2304,6 +2345,9 @@ ${property.label}`;
       }));
     }
     if (node !== property) {
+      menu.addItem((item) => item.setTitle("Filter by this value").setIcon("filter").onClick(() => {
+        this.setFilter({ property: property.id, value: node.id, propertyLabel: property.label, label: node.label });
+      }));
       const [kind] = JSON.parse(node.id);
       const addEdit = (title, mode, icon = "pencil") => menu.addItem((item) => item.setTitle(title).setIcon(icon).onClick(() => this.plugin.editValue(property, node, mode)));
       if (kind !== "empty") {

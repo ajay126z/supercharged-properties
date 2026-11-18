@@ -30,7 +30,7 @@ authors:
 
 Lists, nested objects, text, numbers, booleans, and empty values are preserved. Other properties and the note body are not edited. Obsidian may reformat YAML, including comments and quoting.
 
-The action covers matching notes in included folders across the vault, including those hidden by search or saved views. Excluded folders are omitted from previews and checked again before writes. There is no per-note selection. The preview lists the exact source spelling, destination, value, and path for each eligible note. Names are trimmed; blank names, line breaks, null characters, and the reserved name `position` are rejected.
+The action covers matching notes in included folders, narrowed by any active [Value filter](USER-GUIDE.md#value-filter), including those hidden by tree search or saved views. Excluded folders are omitted from previews and checked again before writes. There is no per-note selection. The preview lists the exact source spelling, destination, value, and path for each eligible note. Names are trimmed; blank names, line breaks, null characters, and the reserved name `position` are rejected.
 
 ## Matching and conflicts
 
@@ -56,7 +56,7 @@ Another successful property-name or value batch replaces the previous undo. Undo
 
 Right-click the **property row** and choose **Delete property…**. Review every eligible note and the separate **Skipped notes** list, then click **Delete from N notes** to confirm.
 
-Deletion removes the property key and its complete value from each eligible note, including lists, nested lists, objects, text, numbers, booleans, and empty values. Other properties and the note body are not edited. The action covers matching notes in included folders across the vault, including notes hidden by search or saved views. Excluded folders are omitted from previews and checked again before writes.
+Deletion removes the property key and its complete value from each eligible note, including lists, nested lists, objects, text, numbers, booleans, and empty values. Other properties and the note body are not edited. The action covers matching notes in included folders, narrowed by any active [Value filter](USER-GUIDE.md#value-filter), including notes hidden by tree search or saved views. Excluded folders are omitted from previews and checked again before writes.
 
 The plugin skips a note when:
 

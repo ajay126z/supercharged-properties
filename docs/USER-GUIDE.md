@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. Property-name and value edits write frontmatter only after you review a preview and confirm.
 
-This guide describes **1.3.0**, including property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
+This guide describes **1.3.0** plus the unreleased Value filter, including property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 ## Contents
 
@@ -12,6 +12,7 @@ This guide describes **1.3.0**, including property/value deletion and selected-n
 - [Browse properties, values, and notes](#browse-properties-values-and-notes)
 - [Understand values and counts](#understand-values-and-counts)
 - [Search the tree](#search-the-tree)
+- [Value filter](#value-filter)
 - [Choose properties](#choose-properties)
 - [Exclude template or other folders](#exclude-template-or-other-folders)
 - [How display controls affect scope](#how-display-controls-affect-scope)
@@ -107,9 +108,31 @@ Within nonempty lists, null entries contribute to `(empty)`; blank text and empt
 
 Search uses case-insensitive substring matching. It is a local tree filter, not an Obsidian query parser: enter `Projects/` to find matching paths, rather than `path:Projects`.
 
-Matching branches expand automatically. A matching property can show all its values; a matching value can show all its notes. A note-path match reveals the relevant note branch. Clear the input to return to ordinary browsing. **Escape** or hiding the search input clears the filter. Changing the property view also clears the tree search.
+Matching branches expand automatically. A matching property can show all its values; a matching value can show all its notes. A note-path match reveals the relevant note branch. Clear the input to return to ordinary browsing. **Escape** or hiding the search input clears the tree search, but keeps an active Value filter. Changing the property view also clears the tree search.
 
 Search operates within your current property selection and excludes hidden properties. It does not limit the scope of bulk edits or the row's copy-links action.
+
+## Value filter
+
+Use a Value filter to answer cross-property questions, such as “Which topics appear in completed notes?” This feature is unreleased, following 1.3.0.
+
+1. Expand a property such as `status`.
+2. Right-click a value such as `done`, long-press it on mobile, or focus its label and press **Shift+F10** or the menu key.
+3. Choose **Filter by this value**. The `(empty)` row is supported too: it includes existing null values, blank strings, and empty lists, not notes missing that property.
+4. Explore the remaining properties. Counts and copied note links now describe only matching notes. The filter property is omitted from the tree and property picker; its name and value remain in the filter bar.
+5. Choose **Clear** in the filter bar to return to unfiltered notes. Your search and property selection remain in place.
+
+For example, with three recipes and two tasks, filter `type = recipe` to compare only recipe statuses and cuisines. Renaming a `wip` status while this filter is active changes matching recipes, leaving tasks untouched. Property-name renames and property deletions also respect the filtered group. Merge targets come from values present in that group. As always, inspect the before/after preview before confirming. The dialog previews the paths from the row you opened; subsequent edits still use the existing value/conflict safeguards and undo.
+
+Only one condition is active. Choosing another value replaces the condition and resolves its matches across all included notes; it does not intersect with the previous filter. Separate tabs have independent filters. Saved views retain their complete property selections and do not save the condition. Closing and recreating the view or reloading the plugin clears it.
+
+Counts are distinct note paths, not property assignments or list items. For one note with `author: AJ`, `rating: 4`, and `topic: design`, filtering `author = AJ` shows **1 note** in the bar and **2 properties · Filtered (1 note)** in the summary. The two properties are rating and topic.
+
+Results follow the live index: notes enter or leave the group as metadata changes. If the filtered value disappears, the filter remains visible with **0 notes** and **No notes match this filter.** Choose Clear or restore the value. When notes match but their other properties are hidden or excluded by search/selection, the tree instead says **No matching properties. Adjust your search or selection.**
+
+Filtering and clearing return keyboard focus to the property-picker button and clear note selection. Live updates remove selected notes that no longer match. On narrow screens the filter label truncates while Clear remains reachable; its full text is available as a tooltip.
+
+**Open in Search** and **Copy search query** remain vault-wide. They do not include the Value filter. **Copy matching note links** does respect it. Tree search, sorting, hidden/pinned properties, counts settings, and saved views continue to work within the filtered tree.
 
 ## Choose properties
 
@@ -143,14 +166,15 @@ This setting does not change your notes or Obsidian's global Search settings. **
 
 | Control | Tree and counts | Copied note links | New bulk edits |
 | --- | --- | --- | --- |
+| Value filter | Recalculates properties, values, and counts for matching notes; hides the filter property. | Copies only matching subset links. | Narrows value edits, property renames, and property deletion to the subset. |
 | Tree search | Filters displayed branches; row counts still represent their full indexed note set. | Copies the row's full indexed note set, not just visible search matches. | Does not restrict the selected row's batch to search matches. |
 | Property selection / saved view | Shows selected properties; does not filter notes within a property. | Uses the selected row's full indexed note set. | Does not narrow the selected row's notes. |
 | Hidden properties | Hides named properties without removing their indexed notes. | Available from visible rows. | Does not act as a note exclusion rule. |
 | Excluded folders | Removes notes from the index, values, and counts. | Excluded notes are omitted. | Excluded notes are omitted from previews and skipped before writes. |
 
-The table describes property/value-row bulk actions. **Change status…** from a note row edits only the explicitly selected notes. Selection checkboxes do not narrow a value-row Rename, Merge, or Delete batch. Changing the search or property scope clears note selection.
+The table describes property/value-row bulk actions. “Full indexed note set” means the row's subset when a Value filter is active. **Change status…** from a note row edits only the explicitly selected notes. Selection checkboxes do not narrow a value-row Rename, Merge, or Delete batch. Changing the search, property scope, or Value filter clears note selection.
 
-**Open in Search** and **Copy search query** generate queries for Obsidian's core Search. They do not add folder-exclusion conditions. Earlier edits can still be undone after their folders are excluded.
+**Open in Search** and **Copy search query** generate queries for Obsidian's core Search. They do not add folder-exclusion or Value filter conditions. Earlier edits can still be undone after their folders are excluded.
 
 ## Save and manage views
 

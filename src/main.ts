@@ -20,6 +20,7 @@ import { noteEditError, textOnlyList, type ListItem } from './note-value-operati
 
 const VIEW = 'supercharged-properties';
 interface Preferences { counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
+interface ValueFilter { property: string; value: string; propertyLabel: string; label: string }
 const defaults: Preferences = { counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 
 export default class SuperchargedPropertiesPlugin extends Plugin {
@@ -161,7 +162,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
   renameProperty(property: PropertyNode): void {
     new PropertyRenameModal(this.app, {
       property: property.label,
-      preview: target => this.valueEditor.previewPropertyRename(property.id, target, this.index.properties.get(property.id)?.paths ?? []),
+      preview: target => this.valueEditor.previewPropertyRename(property.id, target, property.paths),
       apply: async preview => {
         const result = await this.valueEditor.apply(preview);
         if (result.updated) {
@@ -178,7 +179,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
   deleteProperty(property: PropertyNode): void {
     new PropertyDeleteModal(this.app, {
       property: property.label,
-      preview: () => this.valueEditor.previewPropertyDelete(property.id, this.index.properties.get(property.id)?.paths ?? []),
+      preview: () => this.valueEditor.previewPropertyDelete(property.id, property.paths),
       apply: async preview => {
         const result = await this.valueEditor.apply(preview);
         new Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 10000);
@@ -276,6 +277,9 @@ export class PropertiesView extends ItemView {
   private searchScopeButton!: HTMLButtonElement;
   private body!: HTMLElement;
   private summary!: HTMLElement;
+  private filter: ValueFilter | null = null;
+  private filterBar!: HTMLElement;
+  private filterLabel!: HTMLElement;
   private scopeButton!: HTMLButtonElement;
   private scopePanel!: HTMLElement;
   private scopeChoices!: HTMLElement;
@@ -357,6 +361,10 @@ export class PropertiesView extends ItemView {
     this.searchToggle = this.iconButton(actions, 'Toggle search', 'search', () => this.toggleSearch(this.searchHeader.hidden));
     this.searchToggle.setAttribute('aria-expanded', 'false');
     this.scopePanel = el(toolbar, 'div', 'pv-scope-panel'); this.scopePanel.hidden = true;
+    this.filterBar = el(this.contentEl, 'div', 'pv-filter-bar');
+    this.filterBar.hidden = true;
+    this.filterLabel = el(this.filterBar, 'span', 'pv-filter-label');
+    this.button(this.filterBar, 'Clear', 'Clear property filter', () => this.setFilter(null));
     this.summary = el(this.contentEl, 'div', 'pv-summary'); this.summary.setAttribute('aria-live', 'polite');
     this.selectionBar = el(this.contentEl, 'div', 'pv-note-selection');
     this.selectionBar.hidden = true;
@@ -458,12 +466,12 @@ export class PropertiesView extends ItemView {
     this.profileDelete = this.button(buttons, 'Delete', 'Delete active profile', () => this.manageProfile('delete'));
     this.syncProfiles();
   }
-  private syncProfiles(): void {
+  private syncProfiles(index = this.activeIndex()): void {
     const profiles = this.plugin.prefs.profiles;
     const active = profiles.find(profile => profile.id === this.plugin.prefs.activeProfile);
     this.profileSelect.replaceChildren();
     const hidden = new Set(this.plugin.prefs.hidden.split('\n').map(fold).filter(Boolean));
-    const count = (keys: Iterable<string>) => new Set([...keys].filter(key => this.plugin.index.properties.has(key) && !hidden.has(key))).size;
+    const count = (keys: Iterable<string>) => new Set([...keys].filter(key => index.properties.has(key) && !hidden.has(key))).size;
     el(this.profileSelect, 'option', '', `All properties (${count(this.plugin.index.properties.keys())})`).value = 'all';
     if (this.plugin.prefs.scope !== null && !active) el(this.profileSelect, 'option', '', `Custom selection (${count(this.plugin.prefs.scope)})`).value = 'custom';
     for (const profile of profiles) {
@@ -509,13 +517,13 @@ export class PropertiesView extends ItemView {
     }
     void this.plugin.save(); this.plugin.refresh(); this.render();
   }
-  private renderScopeChoices(): void {
+  private renderScopeChoices(index = this.activeIndex()): void {
     if (!this.scopeChoices) return;
     const scroll = this.scopeChoices.scrollTop;
     this.scopeChoices.replaceChildren();
-    const choices = new Map([...this.plugin.index.properties.values()].map(property => [property.id, property]));
+    const choices = new Map([...index.properties.values()].map(property => [property.id, property]));
     for (const key of this.plugin.prefs.scope ?? []) {
-      if (!choices.has(key)) choices.set(key, { id: key, label: key, paths: new Set(), values: new Map() });
+      if (key !== this.filter?.property && !choices.has(key)) choices.set(key, { id: key, label: key, paths: new Set(), values: new Map() });
     }
     const properties = this.sorted(choices.values()).filter(property => fold(property.label).includes(fold(this.scopeQuery)));
     for (const property of properties) {
@@ -537,19 +545,38 @@ export class PropertiesView extends ItemView {
   private matches(text: string, scope: string): boolean {
     return (this.searchScope === 'any' || this.searchScope === scope) && fold(text).includes(this.query);
   }
+  private setFilter(filter: ValueFilter | null): void {
+    this.filter = filter;
+    this.selectedNotes = undefined;
+    this.noteAnchor = undefined;
+    this.render();
+    this.scopeButton.focus({ preventScroll: true });
+  }
+
+  private filterPaths(): Set<string> | null {
+    if (!this.filter) return null;
+    return this.plugin.index.properties.get(this.filter.property)?.values.get(this.filter.value)?.paths ?? new Set<string>();
+  }
+
+  private activeIndex(paths = this.filterPaths()): PropertyIndex {
+    return this.filter ? this.plugin.index.scoped(paths ?? new Set<string>(), this.filter.property) : this.plugin.index;
+  }
+
   render(): void {
     if (!this.body) return;
-    this.syncProfiles();
+    const valuePaths = this.filterPaths();
+    const index = this.activeIndex(valuePaths);
+    this.syncProfiles(index);
     this.disposeNoteMenus();
-    this.syncNoteSelection();
+    this.syncNoteSelection(index);
     this.renderedNotes.clear();
     const focusId = (this.contentEl.ownerDocument.activeElement as HTMLElement | null)?.dataset.pvFocus;
     const scroll = this.body.scrollTop; this.body.replaceChildren();
-    if (!this.scopePanel.hidden) this.renderScopeChoices();
+    if (!this.scopePanel.hidden) this.renderScopeChoices(index);
     const hidden = new Set(this.plugin.prefs.hidden.split('\n').map(fold).filter(Boolean));
     const pinned = new Set(this.plugin.prefs.pinned);
     const scope = this.plugin.prefs.scope;
-    const properties = this.sorted(this.plugin.index.properties.values()).filter(p => !hidden.has(p.id) && (scope === null || scope.includes(p.id)))
+    const properties = this.sorted(index.properties.values()).filter(p => !hidden.has(p.id) && (scope === null || scope.includes(p.id)))
       .sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
     this.sortButton.title = `Sort: ${sortOptions[this.plugin.prefs.sort]}`;
     let visible = 0;
@@ -603,8 +630,21 @@ export class PropertiesView extends ItemView {
     this.expandToggle.setAttribute('aria-pressed', String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
     setIcon(this.expandToggle, this.allExpanded ? 'fold-vertical' : 'list-tree');
-    this.summary.textContent = `${visible} properties · ${scope === null ? 'Entire vault' : 'Custom selection'}`;
-    if (!visible) el(this.body, 'div', 'pv-empty', scope?.length === 0 ? 'Choose properties above to start exploring.' : 'No matching properties. Adjust your search or selection.');
+    const n = valuePaths?.size ?? 0;
+    const noteCount = `${n} ${n === 1 ? 'note' : 'notes'}`;
+    this.filterBar.hidden = !this.filter;
+    if (this.filter) {
+      const text = `Filtered by ${this.filter.propertyLabel} = ${this.filter.label} · ${noteCount}`;
+      this.filterLabel.textContent = text;
+      this.filterLabel.title = this.filterBar.title = text;
+    }
+    this.summary.textContent = `${visible} properties · ${this.filter ? `Filtered (${noteCount})` : scope === null ? 'Entire vault' : 'Custom selection'}`;
+    if (!visible) {
+      const message = this.filter && n === 0 ? 'No notes match this filter.'
+        : !this.filter && !this.query && scope?.length === 0 ? 'Choose properties above to start exploring.'
+        : 'No matching properties. Adjust your search or selection.';
+      el(this.body, 'div', 'pv-empty', message);
+    }
     this.body.scrollTop = scroll;
     if (focusId) Array.from(this.contentEl.querySelectorAll<HTMLElement>('[data-pv-focus]')).find(e => e.dataset.pvFocus === focusId)?.focus({ preventScroll: true });
   }
@@ -612,13 +652,9 @@ export class PropertiesView extends ItemView {
     const isKey = node === property;
     const button = this.button(row, '', `${isKey ? 'Toggle' : 'Show notes with'} ${property.label}${isKey ? '' : ': ' + node.label} (${node.paths.size})`, run);
     button.className = 'pv-node'; button.dataset.pvFocus = JSON.stringify([property.id, isKey ? null : node.id]);
-    button.addEventListener('contextmenu', event => { event.preventDefault(); this.showMenu(event, property, node); });
-    button.addEventListener('keydown', event => {
-      if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
-        event.preventDefault(); const rect = button.getBoundingClientRect();
-        this.showMenu(new MouseEvent('contextmenu', { clientX: rect.left, clientY: rect.bottom }), property, node);
-      }
-    });
+    this.noteMenuDisposers.push(attachNoteMenu(button, point => {
+      this.showMenu(new MouseEvent('contextmenu', { clientX: point.x, clientY: point.y }), property, node);
+    }));
     if (isKey) {
       const type = this.plugin.typeResolver.typeFor(property);
       const icon = el(button, 'span', 'pv-icon pv-type-icon');
@@ -748,13 +784,13 @@ export class PropertiesView extends ItemView {
   }
 
   private noteSelectionContext(): string {
-    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders]);
+    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders, this.filter]);
   }
 
-  private syncNoteSelection(): void {
+  private syncNoteSelection(index: PropertyIndex): void {
     if (this.noteAnchor?.context !== this.noteSelectionContext()) this.noteAnchor = undefined;
     let selection = this.selectedNotes;
-    const property = selection && this.plugin.index.properties.get(selection.property);
+    const property = selection && index.properties.get(selection.property);
     if (selection && (!property || !noteEditType(property, this.plugin.typeResolver) || selection.context !== this.noteSelectionContext())) {
       this.selectedNotes = selection = undefined;
     }
@@ -848,6 +884,9 @@ export class PropertiesView extends ItemView {
       }));
     }
     if (node !== property) {
+      menu.addItem(item => item.setTitle('Filter by this value').setIcon('filter').onClick(() => {
+        this.setFilter({ property: property.id, value: node.id, propertyLabel: property.label, label: node.label });
+      }));
       const [kind] = JSON.parse(node.id) as [PropertyValueKind, string];
       const addEdit = (title: string, mode: ValueEditMode, icon = 'pencil') => menu.addItem(item => item.setTitle(title).setIcon(icon).onClick(() => this.plugin.editValue(property, node, mode)));
       if (kind !== 'empty') {

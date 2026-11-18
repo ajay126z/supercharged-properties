@@ -12,9 +12,16 @@ Choose the properties you want to see, save views for different projects, and ex
 - **Find what you need.** Search property names, values, note names, or folder paths. Open matching notes in Obsidian Search or copy their links.
 - **See how properties are used.** Note counts show how common each property or value is. Type icons help distinguish text, lists, numbers, dates, and checkboxes.
 - **Choose your order.** Sort alphabetically or by how many notes use a property or value.
+- **Value filter.** Explore other properties only among notes sharing a value, with counts and note links recalculated for that group.
 - **Stay up to date.** The view refreshes as your notes change.
 
 ![Browse properties and search matching notes](docs/media/01-browse-and-search.gif)
+
+## Explore notes sharing a value
+
+Right-click a value (or long-press on mobile) and choose **Filter by this value**. For example, filter `status = done` to see which topics and note types occur among completed notes. The tree recalculates counts and note links for matching notes and hides the filter property. The filter bar shows the current condition and a **Clear** button.
+
+One filter is active per tab; choosing another replaces it. Notes entering or leaving that value update the results automatically. The filter is temporary and is not saved in a view. **Open in Search** and **Copy search query** remain vault-wide and do not include the value filter. See [Value filter](docs/USER-GUIDE.md#value-filter) for edit scope and examples. This feature is unreleased, following 1.3.0.
 
 ## Keep your view focused
 
@@ -70,7 +77,7 @@ Right-click a property or value to make changes across matching notes:
 
 Each edit shows the affected notes before you confirm. Property-name and deletion conflicts, and changes made since the preview, are skipped rather than overwritten. Browsing and organizing the view do not change your notes.
 
-Bulk edits apply to matching notes in included folders, even when a search or saved view shows only some of them. Folder exclusions limit these edits; display filters do not.
+Bulk edits apply to matching notes in included folders. An active **Value filter** narrows value edits, property renames, and property deletions to that group of notes. Tree search and saved views do not further narrow the affected notes. Review the preview before confirming.
 
 ![Rename a property while preserving its values](docs/media/04-rename-property.gif)
 

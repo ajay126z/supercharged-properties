@@ -119,7 +119,7 @@ Only selected notes are affected. Other properties, the note body, saved views, 
 
 ## Safeguards and undo
 
-Only explicitly selected note paths are considered. Excluded folders, unavailable notes, missing properties, unsupported values, and ambiguous spellings such as both `status` and `Status` are reported in the preview. Before writing, the plugin rechecks exclusions, the configured type, the exact original value, and property-name ambiguity. Changes since preview are skipped.
+Only explicitly selected note paths are considered. With an active [Value filter](USER-GUIDE.md#value-filter), note selection and suggested values stay within its subset. Applying or clearing a Value filter clears note selection. Excluded folders, unavailable notes, missing properties, unsupported values, and ambiguous spellings such as both `status` and `Status` are reported in the preview. Before writing, the plugin rechecks exclusions, the configured type, the exact original value, and property-name ambiguity. Changes since preview are skipped.
 
 Successful writes can coexist with skipped notes or failures; the completion notice reports the counts and path-specific failures. The tree refreshes after the operation. Saved views, pins, selections of properties, and hiding preferences are preserved.
 

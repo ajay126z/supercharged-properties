@@ -608,3 +608,109 @@ it.each(['number', 'checkbox', 'date', 'datetime', 'multitext'])('exposes note e
   noteMenu('Projects/One.md').find((item: any) => item.title === 'Select notes…').run();
   expect(document.querySelector('.pv-note-checkbox')).not.toBeNull();
 });
+
+function filterValue(label: string) {
+  const button = document.querySelector(`[aria-label="${label}"]`) as HTMLElement;
+  button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+  (Menu as any).items.find((item: any) => item.title === 'Filter by this value').run();
+}
+it('filters counts, picker and links, preserves profiles, and clears with focus restoration', async () => {
+  plugin.index.update('Two.md', { status: 'Pending', tags: ['work'] });
+  plugin.prefs.scope = ['status', 'tags'];
+  plugin.prefs.profiles = [{ id: 'test', name: 'Test', keys: ['status', 'tags'] }];
+  plugin.prefs.activeProfile = 'test';
+  view.render(); click('Expand status'); filterValue('Show notes with status: Done (1)');
+  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('status = Done · 1 note');
+  expect(document.querySelector('.pv-summary')!.textContent).toBe('1 properties · Filtered (1 note)');
+  expect(document.querySelector('[aria-label="Toggle status (1)"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Toggle tags (1)"]')).not.toBeNull();
+  expect(document.querySelector('.pv-profile-select')!.textContent).not.toContain('(modified)');
+  click('Choose properties to show'); expect(document.querySelector('[aria-label="Include status"]')).toBeNull();
+  click('Expand tags');
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+  document.querySelector('[aria-label="Show notes with tags: work (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
+  (Menu as any).items.find((item: any) => item.title === 'Copy matching note links').run();
+  expect(writeText).toHaveBeenCalledWith('[[Projects/One]]');
+  click('Clear property filter');
+  expect((document.querySelector('.pv-filter-bar') as HTMLElement).hidden).toBe(true);
+  expect(document.querySelector('[aria-label="Toggle tags (2)"]')).not.toBeNull();
+  expect(document.activeElement?.getAttribute('aria-label')).toBe('Choose properties to show');
+});
+it('keeps a missing filter clearable and distinguishes no other visible properties', () => {
+  click('Expand status'); filterValue('Show notes with status: Done (1)');
+  plugin.prefs.hidden = 'tags'; view.render();
+  expect(document.querySelector('.pv-empty')!.textContent).toContain('No matching properties');
+  plugin.index.remove('Projects/One.md'); view.render();
+  expect(document.querySelector('.pv-empty')!.textContent).toBe('No notes match this filter.');
+  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('0 notes');
+});
+it('replaces rather than intersects filters and searches only the subset', () => {
+  plugin.index.update('Two.md', { status: 'Pending', tags: ['work'] }); view.render();
+  click('Expand status'); filterValue('Show notes with status: Done (1)');
+  click('Toggle search'); const input = document.querySelector('.pv-filter') as HTMLInputElement;
+  input.value = 'Two.md'; input.dispatchEvent(new Event('input'));
+  expect(document.querySelector('.pv-empty')).not.toBeNull();
+  input.value = ''; input.dispatchEvent(new Event('input'));
+  click('Expand tags'); filterValue('Show notes with tags: work (1)');
+  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('tags = work · 2 notes');
+  expect(document.querySelector('[aria-label="Toggle status (2)"]')).not.toBeNull();
+});
+it('offers keyboard filtering on empty values but not property rows, independently per view', async () => {
+  document.querySelector('[aria-label="Toggle status (2)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
+  expect((Menu as any).items.some((item: any) => item.title === 'Filter by this value')).toBe(false);
+  plugin.index.update('Empty.md', { status: null }); view.render(); click('Expand status');
+  const button = document.querySelector('[aria-label="Show notes with status: (empty) (1)"]') as HTMLElement;
+  button.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true }));
+  (Menu as any).items.find((item: any) => item.title === 'Filter by this value').run();
+  expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('(empty) · 1 note');
+  const other = new PropertiesView({ app: view.app } as any, plugin); await other.onOpen();
+  expect((other.contentEl.querySelector('.pv-filter-bar') as HTMLElement).hidden).toBe(true);
+  await other.onClose();
+});
+it('opens the value filter menu on long-press without expanding notes', () => {
+  vi.useFakeTimers();
+  try {
+    click('Expand status');
+    const row = document.querySelector('[aria-label="Show notes with status: Done (1)"]') as HTMLElement;
+    row.dispatchEvent(Object.assign(new Event('pointerdown'), { pointerType: 'touch', pointerId: 1, clientX: 10, clientY: 20 }));
+    vi.advanceTimersByTime(500);
+    expect((Menu as any).items.some((item: any) => item.title === 'Filter by this value')).toBe(true);
+    row.dispatchEvent(new Event('pointerup')); row.click();
+    expect(document.querySelector('.pv-notes')).toBeNull();
+  } finally { vi.useRealTimers(); }
+});
+it('prunes selected notes that leave the live filter and clears selection when filtering changes', () => {
+  plugin.index.update('Two.md', { status: 'Done', topic: 'work' });
+  plugin.index.update('Projects/One.md', { status: 'Done', topic: 'work' });
+  view.render(); click('Expand status'); filterValue('Show notes with status: Done (2)');
+  click('Expand topic'); click('Show notes with topic: work (2)');
+  const note = document.querySelector('.pv-file') as HTMLElement;
+  note.dispatchEvent(new MouseEvent('contextmenu'));
+  (Menu as any).items.find((item: any) => item.title === 'Select notes…').run();
+  plugin.index.update('Projects/One.md', { status: 'Pending', topic: 'work' }); view.render();
+  expect(document.querySelector('.pv-note-selection')!.textContent).toContain('0 selected');
+  click('Clear property filter');
+  expect((document.querySelector('.pv-note-selection') as HTMLElement).hidden).toBe(true);
+});
+
+
+it('shows one filtered note, separately from its two remaining properties', () => {
+  plugin.index = new PropertyIndex();
+  const fm = { author: 'AJ', rating: 4, topic: 'design' };
+  plugin.index.update('Note-A.md', fm);
+  plugin.index.update('Note-A.md', fm);
+  view.render(); click('Expand author');
+  expect(document.querySelector('[aria-label="Show notes with author: AJ (1)"]')).not.toBeNull();
+  filterValue('Show notes with author: AJ (1)');
+  expect(document.querySelector('.pv-filter-label')!.textContent).toBe('Filtered by author = AJ · 1 note');
+  expect(document.querySelector('.pv-summary')!.textContent).toBe('2 properties · Filtered (1 note)');
+  expect(document.querySelector('[aria-label="Toggle rating (1)"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Toggle topic (1)"]')).not.toBeNull();
+  plugin.index.remove('Note-A.md'); plugin.index.update('Renamed.md', fm); view.render();
+  expect(document.querySelector('.pv-filter-label')!.textContent).toBe('Filtered by author = AJ · 1 note');
+  expect(document.querySelector('.pv-summary')!.textContent).toBe('2 properties · Filtered (1 note)');
+  // A genuinely different matching path counts once, even if its author is a list.
+  plugin.index.update('Note-B.md', { ...fm, author: ['AJ', 'AJ'] }); view.render();
+  expect(document.querySelector('.pv-filter-label')!.textContent).toBe('Filtered by author = AJ · 2 notes');
+});
