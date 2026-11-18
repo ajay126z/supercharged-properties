@@ -753,3 +753,29 @@ it.each(['all', 'custom', 'filtered'])('opens a note on a mobile tap in the %s v
   }
   note.click();expect(openFile).toHaveBeenCalledOnce();
 });
+
+it.each([false, true])('waits for a deferred Search view before setting the query (existing=%s)', async existing => {
+  const setQuery = vi.fn(), detach = vi.fn();
+  const leaf = { view: {} as { setQuery?: typeof setQuery }, setViewState: vi.fn().mockResolvedValue(undefined), detach };
+  let loaded!: () => void;
+  const ready = new Promise<void>(resolve => { loaded = resolve; });
+  const revealLeaf = vi.fn(async () => { await ready; leaf.view = { setQuery }; });
+  (view as any).app.workspace = { getLeavesOfType: () => existing ? [leaf] : [], getLeftLeaf: () => leaf, revealLeaf };
+  const property = plugin.index.properties.get('status');
+  const value = [...property.values.values()].find((node: any) => node.label === 'Done');
+  const pending = (view as any).search(property, value);
+  await vi.waitFor(() => expect(revealLeaf).toHaveBeenCalledWith(leaf));
+  expect(setQuery).not.toHaveBeenCalled(); expect(detach).not.toHaveBeenCalled();
+  expect((Notice as any).messages).not.toContain('Enable the Search core plugin to use Open in Search.');
+  loaded(); await pending;
+  expect(setQuery).toHaveBeenCalledWith('["status":"Done"]');
+  expect(detach).not.toHaveBeenCalled();
+});
+it('does not detach an existing Search leaf when its loaded view is unavailable', async () => {
+  const leaf = { view: {}, detach: vi.fn() };
+  (view as any).app.workspace = { getLeavesOfType: () => [leaf], revealLeaf: vi.fn().mockResolvedValue(undefined) };
+  const property = plugin.index.properties.get('status');
+  await (view as any).search(property, property);
+  expect(leaf.detach).not.toHaveBeenCalled();
+  expect((Notice as any).messages).toContain('Enable the Search core plugin to use Open in Search.');
+});

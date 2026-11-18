@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Wait for the core Search pane to load before applying Open in Search queries, avoiding the incorrect enable-Search notice when the vault has just opened.
+
 - Restore mobile note taps in all, custom, and filtered property views. A touch pointer leaving after release no longer suppresses its click; long-press and scroll gestures still prevent accidental opening.
 
 ## [1.4.1] - 2026-11-17

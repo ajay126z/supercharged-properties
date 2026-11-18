@@ -2454,6 +2454,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
         leaf = newLeaf;
         await newLeaf.setViewState({ type: "search", active: true });
       }
+      await this.app.workspace.revealLeaf(leaf);
       const view = leaf.view;
       if (typeof view.setQuery !== "function") {
         created?.detach();
@@ -2463,7 +2464,6 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       }
       view.setQuery(query);
       created = null;
-      await this.app.workspace.revealLeaf(leaf);
       if (node !== property && JSON.parse(node.id)[0] === "empty") {
         new import_obsidian8.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
       }

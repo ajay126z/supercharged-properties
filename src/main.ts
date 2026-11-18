@@ -851,6 +851,9 @@ export class PropertiesView extends ItemView {
         created = newLeaf; leaf = newLeaf;
         await newLeaf.setViewState({ type: 'search', active: true });
       }
+      // Since Obsidian 1.7.2, a background leaf may still hold a DeferredView.
+      // Revealing it also waits for loading; read leaf.view only after that completes.
+      await this.app.workspace.revealLeaf(leaf);
       const view = leaf.view as unknown as { setQuery?: (query: string) => void };
       if (typeof view.setQuery !== 'function') {
         created?.detach(); created = null;
@@ -858,7 +861,6 @@ export class PropertiesView extends ItemView {
       }
       view.setQuery(query);
       created = null;
-      await this.app.workspace.revealLeaf(leaf);
       if (node !== property && (JSON.parse(node.id) as string[])[0] === 'empty') {
         new Notice('Search matches null properties; the local empty row also includes blank strings and empty lists.');
       }

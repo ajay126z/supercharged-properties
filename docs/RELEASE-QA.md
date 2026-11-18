@@ -253,3 +253,9 @@ Run this checklist against a build candidate before publishing. Automated checks
 - Long-press a note: the menu opens without opening the note. Dismiss it and confirm the next short tap opens normally.
 - Scroll through notes: no menu or accidental note opening. Confirm tapping a note after scrolling works.
 - In note-selection mode, short taps still toggle selection rather than opening notes.
+
+## Search startup regression
+
+- Enable core Search, close/reopen the vault without opening Search, and use Open in Search from a property and value row. Confirm the pane opens with the correct query on desktop and mobile.
+- Repeat with an existing Search pane restored in a collapsed sidebar, then with Search already loaded.
+- Disable core Search and repeat: show the enable-Search notice and remove only a newly created unusable pane, preserving existing panes.
