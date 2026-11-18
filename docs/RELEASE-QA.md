@@ -225,7 +225,7 @@ Run this checklist against a build candidate before publishing. Automated checks
 | Result | Pass / Fail |
 | Notes | |
 
-## Value filter (unreleased)
+## Value filter (1.4.0)
 
 - Filter a value from its desktop, keyboard, and mobile long-press menus, including `(empty)`. Confirm the filter property disappears and counts shrink.
 - Clear and replace filters; confirm separate tabs stay independent and saved views retain their keys.
@@ -236,7 +236,7 @@ Run this checklist against a build candidate before publishing. Automated checks
 
 - For a single Note-A with author AJ, rating 4, and topic design: author AJ must show 1 before filtering, the filter bar must show 1 note, and the summary must show 2 properties · Filtered (1 note). Repeated metadata updates, renaming, and moving the note must retain one matching path.
 
-## Filter note list (unreleased)
+## Filter note list (1.4.0)
 
 - Expand the count; confirm names, folder labels, numeric-aware sorting, and duplicate-name disambiguation.
 - Open notes with click/tap, Ctrl/Cmd-click, and keyboard Enter; missing paths must never create a note.

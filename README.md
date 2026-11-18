@@ -30,7 +30,9 @@ On mobile and narrow panes, the property and value wrap so the full condition st
 
 ![Filter by a value, reveal matching notes, and open a note](docs/media/07-value-filter-notes.gif)
 
-One filter is active per tab; choosing another replaces it. Notes entering or leaving that value update the results automatically. The filter is temporary and is not saved in a view. **Open in Search** and **Copy search query** remain vault-wide and do not include the value filter. See [Value filter](docs/USER-GUIDE.md#value-filter) for edit scope and examples. This feature is unreleased, following 1.3.0.
+One filter is active per tab; choosing another replaces it. Notes entering or leaving that value update the results automatically. The filter is temporary and is not saved in a view. **Open in Search** and **Copy search query** remain vault-wide and do not include the value filter. See [Value filter](docs/USER-GUIDE.md#value-filter) for edit scope and examples. Available in **1.4.0**.
+
+> Design and concept inspired by @[RedPandaLi|RedPandaLi's](https://github.com/RedPandaLi) idea of Scoped Properties.
 
 ## Keep your view focused
 

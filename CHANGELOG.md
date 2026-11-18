@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-17
+
 ### Fixed
 
 - Wrap the Value filter label so long property names and values remain visible on mobile and narrow panes; move the note-count and Clear buttons to the next line when needed.
@@ -138,7 +140,9 @@ Initial public release.
 
 - Released under the MIT License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
 
-[Unreleased]: https://github.com/ajay126z/supercharged-properties/compare/1.2.1...HEAD
+[Unreleased]: https://github.com/ajay126z/supercharged-properties/compare/1.4.0...HEAD
+[1.4.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.4.0
+[1.3.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.3.0
 [1.2.1]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.2.1
 [1.2.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.2.0
 [1.1.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.1.0

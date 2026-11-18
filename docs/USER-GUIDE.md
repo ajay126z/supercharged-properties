@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. Property-name and value edits write frontmatter only after you review a preview and confirm.
 
-This guide describes **1.3.0** plus the unreleased Value filter, including property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
+This guide describes **1.4.0**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 ## Contents
 
@@ -116,7 +116,7 @@ Search operates within your current property selection and excludes hidden prope
 
 ![Filter notes by a value and explore the matching note list](media/07-value-filter-notes.gif)
 
-Use a Value filter to answer cross-property questions, such as “Which topics appear in completed notes?” This feature is unreleased, following 1.3.0.
+Use a Value filter to answer cross-property questions, such as “Which topics appear in completed notes?” Available in **1.4.0**.
 
 1. Expand a property such as `status`.
 2. Right-click a value such as `done`, long-press it on mobile, or focus its label and press **Shift+F10** or the menu key.
