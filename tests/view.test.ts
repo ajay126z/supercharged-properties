@@ -612,7 +612,7 @@ it.each(['number', 'checkbox', 'date', 'datetime', 'multitext'])('exposes note e
 function filterValue(label: string) {
   const button = document.querySelector(`[aria-label="${label}"]`) as HTMLElement;
   button.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
-  (Menu as any).items.find((item: any) => item.title === 'Filter by this value').run();
+  (Menu as any).items.find((item: any) => item.title === 'Filter by Value').run();
 }
 it('filters counts, picker and links, preserves profiles, and clears with focus restoration', async () => {
   plugin.index.update('Two.md', { status: 'Pending', tags: ['work'] });
@@ -658,11 +658,11 @@ it('replaces rather than intersects filters and searches only the subset', () =>
 });
 it('offers keyboard filtering on empty values but not property rows, independently per view', async () => {
   document.querySelector('[aria-label="Toggle status (2)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
-  expect((Menu as any).items.some((item: any) => item.title === 'Filter by this value')).toBe(false);
+  expect((Menu as any).items.some((item: any) => item.title === 'Filter by Value')).toBe(false);
   plugin.index.update('Empty.md', { status: null }); view.render(); click('Expand status');
   const button = document.querySelector('[aria-label="Show notes with status: (empty) (1)"]') as HTMLElement;
   button.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true }));
-  (Menu as any).items.find((item: any) => item.title === 'Filter by this value').run();
+  (Menu as any).items.find((item: any) => item.title === 'Filter by Value').run();
   expect(document.querySelector('.pv-filter-bar')!.textContent).toContain('(empty)');
   const other = new PropertiesView({ app: view.app } as any, plugin); await other.onOpen();
   expect((other.contentEl.querySelector('.pv-filter-bar') as HTMLElement).hidden).toBe(true);
@@ -675,7 +675,7 @@ it('opens the value filter menu on long-press without expanding notes', () => {
     const row = document.querySelector('[aria-label="Show notes with status: Done (1)"]') as HTMLElement;
     row.dispatchEvent(Object.assign(new Event('pointerdown'), { pointerType: 'touch', pointerId: 1, clientX: 10, clientY: 20 }));
     vi.advanceTimersByTime(500);
-    expect((Menu as any).items.some((item: any) => item.title === 'Filter by this value')).toBe(true);
+    expect((Menu as any).items.some((item: any) => item.title === 'Filter by Value')).toBe(true);
     row.dispatchEvent(new Event('pointerup')); row.click();
     expect(document.querySelector('.pv-notes')).toBeNull();
   } finally { vi.useRealTimers(); }

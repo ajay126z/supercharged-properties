@@ -1,7 +1,7 @@
 {
   "id": "supercharged-properties",
   "name": "Supercharged Properties",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "minAppVersion": "1.7.2",
   "description": "Explore vault properties, values, and notes, and bulk-edit values with previews and undo.",
   "author": "Ajay Zapadiya",

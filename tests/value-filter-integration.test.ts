@@ -32,7 +32,7 @@ it.each(['value', 'rename', 'remove'])('keeps filtered %s writes and undo inside
     view.contentEl.querySelector(`[aria-label="${label}"]`)!.dispatchEvent(new MouseEvent('contextmenu'));
     (Menu as any).items.find((item: any) => item.title === action).run();
   };
-  menu('Show notes with type: recipe (2)', 'Filter by this value');
+  menu('Show notes with type: recipe (2)', 'Filter by Value');
   if (mode === 'value') {
     menu('Show notes with status: wip (1)', 'Rename value…');
     expect(dialogs.value.siblings).toEqual(['done']);

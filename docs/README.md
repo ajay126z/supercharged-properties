@@ -2,7 +2,7 @@
 
 ## For users
 
-These guides describe **1.4.0**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
+These guides describe **1.4.1**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
@@ -43,6 +43,7 @@ These guides describe **1.4.0**, with Value filter and its expandable note list,
 
 ## Release notes
 
+- [1.4.1](releases/1.4.1.md)
 - [1.4.0](releases/1.4.0.md)
 - [1.3.0](releases/1.3.0.md)
 - [1.2.1](releases/1.2.1.md)

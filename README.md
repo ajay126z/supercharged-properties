@@ -21,7 +21,7 @@ Choose the properties you want to see, save views for different projects, and ex
 
 Explore the rest of your metadata within a group of notes—for example, see which topics and authors occur among notes with `status: active`.
 
-1. Right-click a value on desktop or long-press it on mobile, then choose **Filter by this value**.
+1. Right-click a value on desktop or long-press it on mobile, then choose **Filter by Value**.
 2. Browse the remaining properties. Counts and note links now reflect only matching notes; the filter property stays in the bar above the tree.
 3. Expand the **note count** to see the matching note names and folders. Click a name to open it, or Ctrl/Cmd-click to open a new tab. Larger groups offer **Show more** after the first 200 notes.
 4. Choose **Clear** to return to the full tree.

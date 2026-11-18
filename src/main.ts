@@ -892,7 +892,7 @@ export class PropertiesView extends ItemView {
       }));
     }
     if (node !== property) {
-      menu.addItem(item => item.setTitle('Filter by this value').setIcon('filter').onClick(() => {
+      menu.addItem(item => item.setTitle('Filter by Value').setIcon('filter').onClick(() => {
         this.setFilter({ property: property.id, value: node.id, propertyLabel: property.label, label: node.label });
       }));
       const [kind] = JSON.parse(node.id) as [PropertyValueKind, string];

@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-17
+
+### Changed
+
+- Rename the value-filter menu action to **Filter by Value**.
+- Update the README, user guide, and demo GIF to use the new label.
+
 ## [1.4.0] - 2026-11-17
 
 ### Fixed
@@ -140,7 +147,8 @@ Initial public release.
 
 - Released under the MIT License. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
 
-[Unreleased]: https://github.com/ajay126z/supercharged-properties/compare/1.4.0...HEAD
+[Unreleased]: https://github.com/ajay126z/supercharged-properties/compare/1.4.1...HEAD
+[1.4.1]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.4.1
 [1.4.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.4.0
 [1.3.0]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.3.0
 [1.2.1]: https://github.com/ajay126z/supercharged-properties/releases/tag/1.2.1
