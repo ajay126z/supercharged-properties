@@ -17,6 +17,18 @@ Choose the properties you want to see, save views for different projects, and ex
 
 ![Browse properties and search matching notes](docs/media/01-browse-and-search.gif)
 
+## Browse inline properties
+
+Enable **Settings → Supercharged Properties → Show inline properties**, then choose **Inline Properties** from the view dropdown. Browse a separate, read-only **property → value → notes** tree for fields written in note bodies:
+
+```markdown
+author:: AJ
+[topic:: design]
+(rating:: 4)
+```
+
+All properties and saved views continue to show YAML frontmatter. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. It offers no property/value editing or YAML Search queries. Excluded folders apply, and code, frontmatter, and comments are ignored. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. This feature is unreleased, following 1.4.2.
+
 ## Explore notes sharing a value
 
 Explore the rest of your metadata within a group of notes—for example, see which topics and authors occur among notes with `status: active`.
@@ -126,6 +138,7 @@ When choosing properties, **All** and **None** keep the view name you have typed
 
 | Setting | What it does |
 | --- | --- |
+| Show inline properties | Add the separate read-only Inline Properties view; disabled by default. |
 | Show note counts | Show how many distinct notes use each property or value. |
 | Sort by | Choose alphabetical order or note frequency. |
 | Excluded folders | Omit selected folders and their subfolders from the view and new bulk edits. |

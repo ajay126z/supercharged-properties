@@ -779,3 +779,37 @@ it('does not detach an existing Search leaf when its loaded view is unavailable'
   expect(leaf.detach).not.toHaveBeenCalled();
   expect((Notice as any).messages).toContain('Enable the Search core plugin to use Open in Search.');
 });
+
+function enableInlineView() {
+  plugin.prefs.showInlineProperties=true;
+  const index=new PropertyIndex();index.update('Inline.md',{status:['inline only'],author:['AJ'],rating:['4']});
+  plugin.inline={index,pending:0,failures:new Set()};view.render();
+  const select=document.querySelector<HTMLSelectElement>('.pv-profile-select')!;select.value='inline';select.dispatchEvent(new Event('change'));
+}
+it('offers an optional separate read-only Inline Properties tree without YAML edit actions', () => {
+  expect(document.querySelector('option[value="inline"]')).toBeNull();enableInlineView();
+  expect(document.querySelector('.pv-summary')!.textContent).toContain('Read-only');
+  expect(document.querySelector('[aria-label="Choose properties to show"]')!.hasAttribute('disabled')).toBe(true);
+  click('Expand status');expect(document.querySelector('.pv-tree')!.textContent).toContain('inline only');expect(document.querySelector('.pv-tree')!.textContent).not.toContain('Done');
+  document.querySelector('[aria-label="Toggle status (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
+  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Copy matching note links']);
+  document.querySelector('[aria-label="Show notes with status: inline only (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
+  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Copy matching note links','Filter by Value']);
+  view.render(); click('Show notes with status: inline only (1)');
+  const note=document.querySelector<HTMLButtonElement>('.pv-file')!;expect(note.hasAttribute('aria-haspopup')).toBe(false);note.click();expect(openFile).toHaveBeenCalledOnce();
+});
+it('preserves YAML saved views and expansion, keeps inline filters separate, and falls back to All on disable', () => {
+  plugin.prefs.scope=['status'];plugin.prefs.profiles=[{id:'custom',name:'Custom',keys:['status']}];plugin.prefs.activeProfile='custom';plugin.prefs.expanded=['status'];
+  const original=structuredClone(plugin.prefs);enableInlineView();
+  expect(plugin.prefs.scope).toEqual(original.scope);expect(plugin.prefs.activeProfile).toBe('custom');
+  click('Expand status');filterValue('Show notes with status: inline only (1)');expect(document.querySelector('.pv-summary')!.textContent).toContain('2 properties');
+  expect(plugin.prefs.expanded).toEqual(['status']);
+  const select=document.querySelector<HTMLSelectElement>('.pv-profile-select')!;select.value='profile:custom';select.dispatchEvent(new Event('change'));
+  expect(document.querySelector('.pv-tree')!.textContent).toContain('Done');expect((document.querySelector('.pv-filter-bar') as HTMLElement).hidden).toBe(true);
+  select.value='inline';select.dispatchEvent(new Event('change'));plugin.prefs.showInlineProperties=false;view.render();
+  expect(select.value).toBe('all');expect(document.querySelector('option[value="inline"]')).toBeNull();expect(plugin.prefs.profiles).toEqual(original.profiles);
+});
+it('shows inline indexing and read-failure status instead of silently presenting missing results', () => {
+ enableInlineView();plugin.inline.index=new PropertyIndex();plugin.inline.pending=2;view.render();expect(document.querySelector('.pv-empty')!.textContent).toBe('Reading inline properties…');
+ plugin.inline.pending=0;plugin.inline.failures.add('bad.md');view.render();expect(document.querySelector('.pv-summary')!.textContent).toContain('1 note could not be read');
+});

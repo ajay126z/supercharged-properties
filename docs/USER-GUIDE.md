@@ -12,6 +12,7 @@ This guide describes **1.4.2**, with Value filter and its expandable note list, 
 - [Browse properties, values, and notes](#browse-properties-values-and-notes)
 - [Understand values and counts](#understand-values-and-counts)
 - [Search the tree](#search-the-tree)
+- [Inline properties](#inline-properties)
 - [Value filter](#value-filter)
 - [Choose properties](#choose-properties)
 - [Exclude template or other folders](#exclude-template-or-other-folders)
@@ -111,6 +112,33 @@ Search uses case-insensitive substring matching. It is a local tree filter, not 
 Matching branches expand automatically. A matching property can show all its values; a matching value can show all its notes. A note-path match reveals the relevant note branch. Clear the input to return to ordinary browsing. **Escape** or hiding the search input clears the tree search, but keeps an active Value filter. Changing the property view also clears the tree search.
 
 Search operates within your current property selection and excludes hidden properties. It does not limit the scope of bulk edits or the row's copy-links action.
+
+## Inline properties
+
+This feature is unreleased, following 1.4.2. Turn on **Settings → Supercharged Properties → Show inline properties**, then select **Inline Properties** in the view dropdown. It is a built-in, read-only view separate from **All properties** and your saved YAML views.
+
+Supported forms:
+
+```markdown
+author:: AJ
+We discussed [topic:: design] today.
+(rating:: 4)
+related:: [[Project A]]
+- [owner:: Alex]
+> status:: active
+```
+
+Full-line fields use the rest of the line as their value. Bracketed and parenthesized fields can appear within prose, including several fields on one line. Repeated fields contribute their values to the same property; repeated values in one note count once. Empty values appear as `(empty)`. Names and values use the same case-insensitive grouping as the property tree.
+
+Values are **literal text**. Numbers, dates, booleans, commas, and expressions are not evaluated or converted into Dataview types. For example, `topics:: design, art` is one text value; use repeated `topics::` fields for separate values. Complete wikilinks are retained as text. This is support for these field forms, not a full Dataview parser or query engine, and does not require Dataview to be installed.
+
+The parser ignores YAML frontmatter, fenced and indented code, inline code, HTML comments, and Obsidian `%%` comments. It does not collect implicit Dataview fields, task emoji shorthand, or multiline values. The reserved metadata key `position` is excluded.
+
+Expand **property → value → notes**, search the tree, sort rows, open notes, or copy matching note links. **Filter by Value** and the expandable matching-note list also work within the inline index. Inline rows offer no rename, merge, split, delete, selected-note editing, or **Open in Search / Copy search query** actions. Those Search queries target YAML properties, so they would not describe inline fields correctly.
+
+YAML property selection, saved-view management, pins, hiding, and configured type icons do not apply to the inline tree. The property picker is disabled there, and inline properties use a text icon. Sorting and the Show note counts setting apply to both sources. Inline expansion and filtering are local to the view; switching between sources clears search, value filtering, and note selection without changing the saved YAML views.
+
+The setting is off by default. While enabled, the plugin reads included Markdown note bodies in a bounded background queue. The summary reports indexing progress and any unreadable notes. Metadata/body changes update results; renames, moves, deletions, and folder exclusions are respected. Use **Refresh property index** to retry failed reads or force a rescan. Disabling the setting clears the inline index, removes the dropdown option, and switches an active inline view back to **All properties**. The setting persists; the selected inline view does not persist across view recreation or plugin reload.
 
 ## Value filter
 
@@ -289,7 +317,7 @@ Both actions require an explicit confirmation after reviewing the affected and s
 
 ## Data access and privacy
 
-The plugin enumerates Markdown notes in your current vault to build the property index and reads cached frontmatter. This is necessary for vault-wide browsing and matching-note counts. It does not enumerate non-Markdown attachments. It also reads the vault's configured property types for icons.
+The plugin enumerates Markdown notes in your current vault to build the property index and reads cached frontmatter. This is necessary for vault-wide browsing and matching-note counts. It does not enumerate non-Markdown attachments. It also reads the vault's configured property types for icons. When Show inline properties is enabled, it additionally reads included Markdown note bodies for the separate inline index; disabling that setting stops new inline reads and clears that index.
 
 **Copy search query** and **Copy matching note links** write only the generated query or links when you select the action. They replace the current clipboard contents, but never read them. No clipboard monitoring runs in the background. The plugin does not send vault data to external services. Explicit bulk edits write frontmatter after confirmation.
 
@@ -301,6 +329,7 @@ Open **Settings → Supercharged Properties**.
 
 | Setting | Purpose |
 | --- | --- |
+| Show inline properties | Add a separate read-only tree of inline fields from note bodies. Off by default. |
 | Show note counts | Shows or hides distinct-note counts beside rows. |
 | Sort by | Selects the shared property/value sort preference. |
 | Excluded folders | One vault-relative folder per line, including subfolders; omitted from the index and new bulk edits. |

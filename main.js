@@ -1305,6 +1305,159 @@ var NoteValueModal = class extends import_obsidian6.Modal {
   }
 };
 
+// src/inline-properties.ts
+function parseInlineProperties(source) {
+  const fields = /* @__PURE__ */ Object.create(null);
+  const lines = source.replace(/^\uFEFF/, "").split(/\r?\n/);
+  let frontmatter = lines[0]?.trim() === "---";
+  let fence;
+  const prose = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (frontmatter) {
+      if (i > 0 && /^(---|\.\.\.)\s*$/.test(line)) frontmatter = false;
+      continue;
+    }
+    const unquoted = line.replace(/^(?: {0,3}> ?)+/, "");
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(unquoted);
+    if (fence) {
+      if (marker && marker[1][0] === fence.char && marker[1].length >= fence.length && !marker[2].trim()) fence = void 0;
+      continue;
+    }
+    if (marker) {
+      fence = { char: marker[1][0], length: marker[1].length };
+      continue;
+    }
+    if (/^( {4}|\t)/.test(unquoted)) continue;
+    prose.push(unquoted);
+  }
+  const text = prose.join("\n").replace(/<!--[\s\S]*?(?:-->|$)|%%[\s\S]*?(?:%%|$)/g, (match) => match.replace(/[^\n]/g, " ")).replace(/(`+)([\s\S]*?)\1(?!`)/g, (match) => match.replace(/[^\n]/g, " "));
+  const add = (raw) => {
+    const colon = raw.indexOf("::");
+    if (colon < 0) return false;
+    const key = raw.slice(0, colon).trim().replace(/^\*\*(.*?)\*\*$/, "$1").trim();
+    if (!key || /[[\]():`\\]/.test(key) || key === "position") return false;
+    const value = raw.slice(colon + 2).trim();
+    (fields[key] ?? (fields[key] = [])).push(value || null);
+    return true;
+  };
+  for (const line of text.split("\n")) {
+    const plain = line.replace(/^\s*(?:[-*+] |\d+[.)] )(?:\[[ xX]\] )?/, "").trim();
+    if (add(plain)) continue;
+    const stack = [];
+    for (let i = 0; i < line.length; i++) {
+      if (line[i] === "\\") {
+        i++;
+        continue;
+      }
+      if (line[i] === "[" || line[i] === "(") stack.push({ at: i, close: line[i] === "[" ? "]" : ")" });
+      else if (stack.length && line[i] === stack[stack.length - 1].close) {
+        const start = stack.pop();
+        add(line.slice(start.at + 1, i));
+      }
+    }
+  }
+  return fields;
+}
+
+// src/inline-index.ts
+var InlineIndex = class {
+  constructor(read, included, changed) {
+    this.read = read;
+    this.included = included;
+    this.changed = changed;
+    this.index = new PropertyIndex();
+    this.enabled = false;
+    this.failures = /* @__PURE__ */ new Set();
+    this.epoch = 0;
+    this.active = 0;
+    this.requests = /* @__PURE__ */ new Map();
+    this.queue = /* @__PURE__ */ new Map();
+    this.stamps = /* @__PURE__ */ new Map();
+  }
+  get pending() {
+    return this.requests.size;
+  }
+  stamp(file) {
+    return `${file.stat?.mtime}:${file.stat?.size}`;
+  }
+  setEnabled(enabled, notify = true) {
+    this.epoch++;
+    this.enabled = enabled;
+    this.requests.clear();
+    this.queue.clear();
+    this.stamps.clear();
+    this.failures.clear();
+    this.index = new PropertyIndex();
+    if (notify) this.changed();
+  }
+  sync(files, force = false) {
+    if (!this.enabled) return;
+    const included = new Set(files.filter((file) => this.included(file.path)).map((file) => file.path));
+    for (const path of /* @__PURE__ */ new Set([...this.stamps.keys(), ...this.requests.keys(), ...this.failures])) if (!included.has(path)) this.remove(path);
+    for (const file of files) if (included.has(file.path) && (force || this.stamps.get(file.path) !== this.stamp(file))) this.update(file);
+  }
+  update(file, content) {
+    const path = file.path;
+    if (!this.enabled) return;
+    if (file.extension !== "md" || !this.included(path)) {
+      this.remove(path);
+      return;
+    }
+    if (content !== void 0) {
+      this.requests.delete(path);
+      this.queue.delete(path);
+      this.failures.delete(path);
+      this.index.update(path, parseInlineProperties(content));
+      this.stamps.set(path, this.stamp(file));
+      this.changed();
+      return;
+    }
+    const request = { file, stamp: this.stamp(file), epoch: this.epoch };
+    this.requests.set(path, request);
+    this.queue.set(path, request);
+    this.pump();
+    this.changed();
+  }
+  remove(path) {
+    this.requests.delete(path);
+    this.queue.delete(path);
+    this.stamps.delete(path);
+    this.failures.delete(path);
+    this.index.remove(path);
+    this.changed();
+  }
+  pump() {
+    while (this.active < 4 && this.queue.size) {
+      const [path, request] = this.queue.entries().next().value;
+      this.queue.delete(path);
+      this.active++;
+      void this.load(path, request);
+    }
+  }
+  async load(path, request) {
+    const current = () => this.enabled && request.epoch === this.epoch && this.requests.get(path) === request && request.file.path === path && this.included(path);
+    try {
+      const content = await this.read(request.file);
+      if (current()) {
+        this.index.update(path, parseInlineProperties(content));
+        this.stamps.set(path, request.stamp);
+        this.failures.delete(path);
+      }
+    } catch {
+      if (current()) {
+        this.index.remove(path);
+        this.failures.add(path);
+      }
+    } finally {
+      if (this.requests.get(path) === request) this.requests.delete(path);
+      this.active--;
+      this.pump();
+      if (this.enabled) this.changed();
+    }
+  }
+};
+
 // src/filter-note-list.ts
 var import_obsidian7 = require("obsidian");
 var nextListId = 0;
@@ -1559,7 +1712,7 @@ function attachNoteMenu(element, open) {
 
 // src/main.ts
 var VIEW = "supercharged-properties";
-var defaults = { counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+var defaults = { showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
   constructor() {
     super(...arguments);
@@ -1572,6 +1725,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
     const saved = loaded && typeof loaded === "object" && !Array.isArray(loaded) ? loaded : {};
     const profiles = loadProfiles(saved?.profiles);
     this.prefs = {
+      showInlineProperties: saved.showInlineProperties === true,
       profiles,
       activeProfile: typeof saved.activeProfile === "string" && profiles.some((profile) => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v) => typeof v === "string") : null,
@@ -1582,6 +1736,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
       hidden: typeof saved?.hidden === "string" ? saved.hidden : "",
       expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((v) => typeof v === "string") : []
     };
+    this.inline = new InlineIndex((file) => this.app.vault.cachedRead(file), (path) => this.includesPath(path), () => this.refresh());
+    this.inline.setEnabled(this.prefs.showInlineProperties);
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
     this.valueEditor = new ValueEditor(this.app, (path) => this.includesPath(path), (id) => noteEditType({ id }, this.typeResolver));
@@ -1596,7 +1752,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
     this.addCommand({ id: "open-tab", name: "Open in tab", callback: () => {
       void this.openTab();
     } });
-    this.addCommand({ id: "rebuild", name: "Refresh property index", callback: () => this.rebuild() });
+    this.addCommand({ id: "rebuild", name: "Refresh property index", callback: () => this.rebuild(true) });
     this.addCommand({
       id: "undo-value-edit",
       name: "Undo last property edit",
@@ -1609,11 +1765,13 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
     this.addSettingTab(new PreferencesTab(this));
     this.registerEvent(this.app.metadataCache.on("changed", (file, _data, cache) => {
       this.updateIndexedNote(file.path, cache.frontmatter);
+      this.inline.update(file, _data);
       this.refresh();
     }));
     this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRebuild()));
     this.registerEvent(this.app.vault.on("create", (file) => {
       if (file instanceof import_obsidian8.TFile && file.extension === "md" && this.includesPath(file.path)) {
+        this.inline.update(file);
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache) {
           this.updateIndexedNote(file.path, cache.frontmatter);
@@ -1621,20 +1779,27 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
         }
       }
     }));
+    this.registerEvent(this.app.vault.on("modify", (file) => {
+      if (file instanceof import_obsidian8.TFile) this.inline.update(file);
+    }));
     this.registerEvent(this.app.vault.on("delete", (file) => {
       if (file instanceof import_obsidian8.TFile) {
         this.index.remove(file.path);
+        this.inline.remove(file.path);
         this.refresh();
       } else this.scheduleRebuild();
     }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
       if (file instanceof import_obsidian8.TFile) {
         this.index.remove(oldPath);
+        this.inline.remove(oldPath);
+        this.inline.update(file);
         if (file.extension === "md" && this.includesPath(file.path)) this.updateIndexedNote(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
         this.refresh();
       } else this.scheduleRebuild();
     }));
     this.register(() => {
+      this.inline.setEnabled(false, false);
       window.clearTimeout(this.timer);
       window.clearTimeout(this.rebuildTimer);
     });
@@ -1652,16 +1817,23 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
     this.rebuild();
     await this.save();
   }
+  async setShowInlineProperties(enabled) {
+    this.prefs.showInlineProperties = enabled;
+    this.inline.setEnabled(enabled);
+    if (enabled) this.inline.sync(this.app.vault.getMarkdownFiles());
+    await this.save();
+  }
   scheduleRebuild() {
     window.clearTimeout(this.rebuildTimer);
     this.rebuildTimer = window.setTimeout(() => this.rebuild(), 150);
   }
-  rebuild() {
+  rebuild(forceInline = false) {
     window.clearTimeout(this.rebuildTimer);
     this.index = new PropertyIndex();
     for (const file of this.app.vault.getMarkdownFiles()) {
       if (this.includesPath(file.path)) this.updateIndexedNote(file.path, this.app.metadataCache.getFileCache(file)?.frontmatter);
     }
+    this.inline.sync(this.app.vault.getMarkdownFiles(), forceInline);
     void this.reloadTypes();
   }
   async reloadTypes() {
@@ -1799,6 +1971,8 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.query = "";
     this.searchScope = "any";
     this.filter = null;
+    this.inlineView = false;
+    this.inlineExpanded = [];
     this.scopeQuery = "";
     this.visibleKeys = [];
     this.allExpanded = false;
@@ -1863,7 +2037,18 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.profileSelect.setAttribute("aria-label", "Property view");
     this.profileSelect.addEventListener("change", () => {
       const value = this.profileSelect.value;
-      if (value === "all") {
+      const wasInline = this.inlineView;
+      this.inlineView = value === "inline" && this.plugin.prefs.showInlineProperties;
+      if (wasInline !== this.inlineView) {
+        this.filter = null;
+        this.filterNoteList.reset();
+        this.selectedNotes = void 0;
+        this.noteAnchor = void 0;
+      }
+      if (this.inlineView) {
+        this.scopePanel.hidden = true;
+        this.scopeButton.setAttribute("aria-expanded", "false");
+      } else if (value === "all") {
         this.plugin.prefs.scope = null;
         this.plugin.prefs.activeProfile = null;
       } else if (value !== "custom") {
@@ -1884,15 +2069,15 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     toolbar.prepend(actions);
     this.sortButton = this.iconButton(actions, "Sort properties", "arrow-up-narrow-wide", () => this.openSortMenu());
     this.sortButton.setAttribute("aria-haspopup", "menu");
-    this.iconButton(actions, "Refresh property index", "refresh-cw", () => this.plugin.rebuild());
+    this.iconButton(actions, "Refresh property index", "refresh-cw", () => this.plugin.rebuild(true));
     this.expandToggle = this.iconButton(actions, "Expand all properties", "list-tree", () => {
       if (this.allExpanded) {
         this.query = "";
         this.input.value = "";
         this.expandedValues.clear();
-        this.plugin.prefs.expanded = [];
+        this.expandedKeys = [];
       } else {
-        this.plugin.prefs.expanded = [.../* @__PURE__ */ new Set([...this.plugin.prefs.expanded, ...this.visibleKeys])];
+        this.expandedKeys = [.../* @__PURE__ */ new Set([...this.expandedKeys, ...this.visibleKeys])];
       }
       void this.plugin.save();
       this.render();
@@ -1982,15 +2167,23 @@ var PropertiesView = class extends import_obsidian8.ItemView {
   sorted(nodes) {
     return sortNodes(nodes, this.plugin.prefs.sort);
   }
+  get expandedKeys() {
+    return this.inlineView ? this.inlineExpanded : this.plugin.prefs.expanded;
+  }
+  set expandedKeys(keys) {
+    if (this.inlineView) this.inlineExpanded = keys;
+    else this.plugin.prefs.expanded = keys;
+  }
   toggleProperty(key) {
-    const keys = new Set(this.plugin.prefs.expanded);
+    const keys = new Set(this.expandedKeys);
     if (keys.has(key)) keys.delete(key);
     else keys.add(key);
-    this.plugin.prefs.expanded = [...keys];
+    this.expandedKeys = [...keys];
     void this.plugin.save();
     this.render();
   }
   renderScope() {
+    if (this.inlineView) return;
     this.scopePanel.replaceChildren();
     const actions = el2(this.scopePanel, "div", "pv-actions");
     this.button(actions, "All", "Show all properties", () => {
@@ -2044,21 +2237,23 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     const active = profiles.find((profile) => profile.id === this.plugin.prefs.activeProfile);
     this.profileSelect.replaceChildren();
     const hidden = new Set(this.plugin.prefs.hidden.split("\n").map(fold).filter(Boolean));
-    const count = (keys) => new Set([...keys].filter((key) => index.properties.has(key) && !hidden.has(key))).size;
+    const count = (keys) => new Set([...keys].filter((key) => (this.inlineView ? this.plugin.index : index).properties.has(key) && !hidden.has(key))).size;
     el2(this.profileSelect, "option", "", `All properties (${count(this.plugin.index.properties.keys())})`).value = "all";
     if (this.plugin.prefs.scope !== null && !active) el2(this.profileSelect, "option", "", `Custom selection (${count(this.plugin.prefs.scope)})`).value = "custom";
     for (const profile of profiles) {
       const modified = profile === active && !sameKeys(profile.keys, this.plugin.prefs.scope ?? [...this.plugin.index.properties.keys()]);
       el2(this.profileSelect, "option", "", profile.name + (modified ? " (modified)" : "") + ` (${count(profile === active ? this.plugin.prefs.scope ?? this.plugin.index.properties.keys() : profile.keys)})`).value = `profile:${profile.id}`;
     }
-    this.profileSelect.value = active ? `profile:${active.id}` : this.plugin.prefs.scope === null ? "all" : "custom";
+    if (this.plugin.prefs.showInlineProperties) el2(this.profileSelect, "option", "", `Inline Properties (${this.inlineView ? index.properties.size : this.plugin.inline.index.properties.size})`).value = "inline";
+    this.profileSelect.value = this.inlineView ? "inline" : active ? `profile:${active.id}` : this.plugin.prefs.scope === null ? "all" : "custom";
     if (this.profileUpdate) {
-      this.profileUpdate.disabled = !active;
-      this.profileRename.disabled = !active;
-      this.profileDelete.disabled = !active;
+      this.profileUpdate.disabled = this.inlineView || !active;
+      this.profileRename.disabled = this.inlineView || !active;
+      this.profileDelete.disabled = this.inlineView || !active;
     }
   }
   manageProfile(action) {
+    if (this.inlineView) return;
     const prefs = this.plugin.prefs;
     const active = prefs.profiles.find((profile) => profile.id === prefs.activeProfile);
     const name = this.profileName.value.trim();
@@ -2081,6 +2276,10 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       }
       if (fold(name) === "all properties") {
         new import_obsidian8.Notice("All properties View already exists.");
+        return;
+      }
+      if (fold(name) === "inline properties") {
+        new import_obsidian8.Notice("Inline Properties is a built-in view. Choose another name.");
         return;
       }
       if (prefs.profiles.some((profile) => fold(profile.name) === fold(name) && (action === "new" || profile !== active))) {
@@ -2149,17 +2348,36 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.selectedNotes = void 0;
     this.noteAnchor = void 0;
     this.render();
-    this.scopeButton.focus({ preventScroll: true });
+    (this.inlineView ? this.searchToggle : this.scopeButton).focus({ preventScroll: true });
   }
   filterPaths() {
     if (!this.filter) return null;
-    return this.plugin.index.properties.get(this.filter.property)?.values.get(this.filter.value)?.paths ?? /* @__PURE__ */ new Set();
+    return this.sourceIndex().properties.get(this.filter.property)?.values.get(this.filter.value)?.paths ?? /* @__PURE__ */ new Set();
+  }
+  sourceIndex() {
+    return this.inlineView ? this.plugin.inline.index : this.plugin.index;
+  }
+  canEditNotes(property) {
+    return !this.inlineView && !!noteEditType(property, this.plugin.typeResolver);
   }
   activeIndex(paths = this.filterPaths()) {
-    return this.filter ? this.plugin.index.scoped(paths ?? /* @__PURE__ */ new Set(), this.filter.property) : this.plugin.index;
+    const source = this.sourceIndex();
+    return this.filter ? source.scoped(paths ?? /* @__PURE__ */ new Set(), this.filter.property) : source;
   }
   render() {
     if (!this.body) return;
+    if (this.inlineView && !this.plugin.prefs.showInlineProperties) {
+      this.inlineView = false;
+      this.filter = null;
+      this.filterNoteList.reset();
+      this.selectedNotes = void 0;
+      this.noteAnchor = void 0;
+      this.plugin.prefs.scope = null;
+      this.plugin.prefs.activeProfile = null;
+      void this.plugin.save();
+    }
+    this.scopeButton.disabled = this.inlineView;
+    this.scopeButton.title = this.inlineView ? "Saved views and property selection apply to frontmatter only" : "Choose properties to show";
     const valuePaths = this.filterPaths();
     const index = this.activeIndex(valuePaths);
     this.syncProfiles(index);
@@ -2171,8 +2389,9 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.body.replaceChildren();
     if (!this.scopePanel.hidden) this.renderScopeChoices(index);
     const hidden = new Set(this.plugin.prefs.hidden.split("\n").map(fold).filter(Boolean));
-    const pinned = new Set(this.plugin.prefs.pinned);
-    const scope = this.plugin.prefs.scope;
+    if (this.inlineView) hidden.clear();
+    const pinned = new Set(this.inlineView ? [] : this.plugin.prefs.pinned);
+    const scope = this.inlineView ? null : this.plugin.prefs.scope;
     const properties = this.sorted(index.properties.values()).filter((p) => !hidden.has(p.id) && (scope === null || scope.includes(p.id))).sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
     this.sortButton.title = `Sort: ${sortOptions[this.plugin.prefs.sort]}`;
     let visible = 0;
@@ -2186,7 +2405,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       this.visibleKeys.push(property.id);
       const group = el2(this.body, "div", "pv-group");
       const row = el2(group, "div", "pv-row pv-property-row");
-      const expanded = !!this.query || this.plugin.prefs.expanded.includes(property.id);
+      const expanded = !!this.query || this.expandedKeys.includes(property.id);
       const toggle = this.iconButton(row, `${expanded ? "Collapse" : "Expand"} ${property.label}`, expanded ? "chevron-down" : "chevron-right", () => this.toggleProperty(property.id));
       toggle.className = "pv-toggle";
       toggle.disabled = !!this.query;
@@ -2224,7 +2443,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       const otherPaths = new Set([...property.paths].filter((path) => !assigned.has(path)));
       if (otherPaths.size) this.renderNotes(children, property, { ...property, paths: otherPaths }, property.id, keyMatches);
     }
-    this.allExpanded = this.visibleKeys.length > 0 && (!!this.query || this.visibleKeys.every((key) => this.plugin.prefs.expanded.includes(key)));
+    this.allExpanded = this.visibleKeys.length > 0 && (!!this.query || this.visibleKeys.every((key) => this.expandedKeys.includes(key)));
     const toggleLabel = this.allExpanded ? "Collapse all properties" : "Expand all properties";
     this.expandToggle.title = toggleLabel;
     this.expandToggle.setAttribute("aria-label", toggleLabel);
@@ -2241,8 +2460,12 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     }
     this.filterNoteList.update(valuePaths);
     this.summary.textContent = `${visible} properties \xB7 ${this.filter ? `Filtered (${noteCount})` : scope === null ? "Entire vault" : "Custom selection"}`;
+    if (this.inlineView) {
+      const pending = this.plugin.inline.pending, failures = this.plugin.inline.failures.size;
+      this.summary.textContent += ` \xB7 Inline properties \xB7 Read-only${pending ? ` \xB7 Indexing ${pending} ${pending === 1 ? "note" : "notes"}\u2026` : ""}${failures ? ` \xB7 ${failures} ${failures === 1 ? "note" : "notes"} could not be read` : ""}`;
+    }
     if (!visible) {
-      const message2 = this.filter && n === 0 ? "No notes match this filter." : !this.filter && !this.query && scope?.length === 0 ? "Choose properties above to start exploring." : "No matching properties. Adjust your search or selection.";
+      const message2 = this.inlineView && !this.filter && this.plugin.inline.pending ? "Reading inline properties\u2026" : this.inlineView && !this.filter && !this.query && !index.properties.size ? "No inline properties found in included notes." : this.filter && n === 0 ? "No notes match this filter." : !this.filter && !this.query && scope?.length === 0 ? "Choose properties above to start exploring." : "No matching properties. Adjust your search or selection.";
       el2(this.body, "div", "pv-empty", message2);
     }
     this.body.scrollTop = scroll;
@@ -2257,11 +2480,11 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       this.showMenu(new MouseEvent("contextmenu", { clientX: point.x, clientY: point.y }), property, node);
     }));
     if (isKey) {
-      const type = this.plugin.typeResolver.typeFor(property);
+      const type = this.inlineView ? "Inline text (read-only)" : this.plugin.typeResolver.typeFor(property);
       const icon = el2(button, "span", "pv-icon pv-type-icon");
       icon.title = `Type: ${type}`;
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian8.setIcon)(icon, this.plugin.typeResolver.iconFor(property));
+      (0, import_obsidian8.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
     }
     el2(button, "span", "pv-label", node.label);
     if (isKey && this.plugin.prefs.pinned.includes(property.id)) (0, import_obsidian8.setIcon)(el2(button, "span", "pv-pin"), "pin");
@@ -2309,7 +2532,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       button.dataset.pvFocus = rowId;
       button.dataset.notePath = path;
       button.classList.toggle("is-selected", this.selectedNotes?.property === property.id && this.selectedNotes.paths.has(path));
-      if (noteEditType(property, this.plugin.typeResolver)) {
+      if (this.canEditNotes(property)) {
         button.setAttribute("aria-haspopup", "menu");
         this.noteMenuDisposers.push(attachNoteMenu(button, (point) => this.showNoteMenu(point, property, path, rowId)));
         button.addEventListener("keydown", (event) => {
@@ -2335,7 +2558,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       if (folder) el2(button, "small", "pv-note-path", folder);
       button.addEventListener("click", (event) => {
         const modifiedOpen = event.ctrlKey || event.metaKey;
-        if (noteEditType(property, this.plugin.typeResolver)) {
+        if (this.canEditNotes(property)) {
           if (!modifiedOpen && event.shiftKey) {
             event.preventDefault();
             this.selectNoteRange(property, rowId, path);
@@ -2384,13 +2607,13 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.noteMenuDisposers = [];
   }
   noteSelectionContext() {
-    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders, this.filter]);
+    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders, this.filter, this.inlineView]);
   }
   syncNoteSelection(index) {
     if (this.noteAnchor?.context !== this.noteSelectionContext()) this.noteAnchor = void 0;
     let selection = this.selectedNotes;
     const property = selection && index.properties.get(selection.property);
-    if (selection && (!property || !noteEditType(property, this.plugin.typeResolver) || selection.context !== this.noteSelectionContext())) {
+    if (selection && (!property || !this.canEditNotes(property) || selection.context !== this.noteSelectionContext())) {
       this.selectedNotes = selection = void 0;
     }
     this.selectionBar.replaceChildren();
@@ -2479,16 +2702,16 @@ var PropertiesView = class extends import_obsidian8.ItemView {
   }
   showMenu(event, property, node) {
     const menu = new import_obsidian8.Menu();
-    menu.addItem((item) => item.setTitle("Open in Search").setIcon("search").onClick(() => {
+    if (!this.inlineView) menu.addItem((item) => item.setTitle("Open in Search").setIcon("search").onClick(() => {
       void this.search(property, node);
     }));
-    menu.addItem((item) => item.setTitle("Copy search query").setIcon("copy").onClick(() => {
+    if (!this.inlineView) menu.addItem((item) => item.setTitle("Copy search query").setIcon("copy").onClick(() => {
       void this.copy(this.queryFor(property, node));
     }));
     menu.addItem((item) => item.setTitle("Copy matching note links").setIcon("link").onClick(() => {
       void this.copy([...node.paths].sort(natural).map((path) => `[[${path.replace(/\.md$/, "")}]]`).join("\n"));
     }));
-    if (node === property) {
+    if (!this.inlineView && node === property) {
       menu.addItem((item) => item.setTitle("Rename property\u2026").setIcon("pencil").onClick(() => this.plugin.renameProperty(property)));
       menu.addItem((item) => item.setTitle("Delete property\u2026").setIcon("trash-2").onClick(() => this.plugin.deleteProperty(property)));
       const pinned = this.plugin.prefs.pinned.includes(property.id);
@@ -2511,7 +2734,7 @@ ${property.label}`;
       }));
       const [kind] = JSON.parse(node.id);
       const addEdit = (title, mode, icon = "pencil") => menu.addItem((item) => item.setTitle(title).setIcon(icon).onClick(() => this.plugin.editValue(property, node, mode)));
-      if (kind !== "empty") {
+      if (!this.inlineView && kind !== "empty") {
         addEdit("Rename value\u2026", "rename");
         if ([...property.values.values()].some((value) => value !== node && JSON.parse(value.id)[0] === kind)) addEdit("Merge value\u2026", "merge");
         addEdit("Delete value\u2026", "delete", "trash-2");
@@ -2531,6 +2754,9 @@ var PreferencesTab = class extends import_obsidian8.PluginSettingTab {
   }
   getSettingDefinitions() {
     return [
+      { name: "Show inline properties", desc: "Add a separate, read-only Inline Properties view for Dataview-style fields in note bodies. Reads Markdown notes in included folders; no Dataview plugin is required.", render: (setting) => {
+        setting.addToggle((toggle) => toggle.setValue(this.plugin.prefs.showInlineProperties).onChange((value) => this.plugin.setShowInlineProperties(value)));
+      } },
       { name: "Show note counts", render: (setting) => {
         setting.addToggle((toggle) => toggle.setValue(this.plugin.prefs.counts).onChange(async (value) => {
           this.plugin.prefs.counts = value;

@@ -259,3 +259,12 @@ Run this checklist against a build candidate before publishing. Automated checks
 - Enable core Search, close/reopen the vault without opening Search, and use Open in Search from a property and value row. Confirm the pane opens with the correct query on desktop and mobile.
 - Repeat with an existing Search pane restored in a collapsed sidebar, then with Search already loaded.
 - Disable core Search and repeat: show the enable-Search notice and remove only a newly created unusable pane, preserving existing panes.
+
+## Inline properties (unreleased)
+
+- Enable Show inline properties and choose Inline Properties. Check all three field forms, repeated values, empty fields, wikilinks, comments and code exclusions.
+- Confirm YAML values with the same names remain separate, with no inline edit menus or note selection controls.
+- Check local search, sorting, Copy matching note links, Value filters, and opening notes on desktop/mobile.
+- Switch back to a saved YAML view; confirm its keys, expansion, pins, and hidden settings are preserved.
+- Edit, rename, move, delete, and exclude notes while indexing; confirm no stale paths reappear. Disable while reads are pending; the option must disappear and the active inline view must return to All properties.
+- Confirm loading/failure feedback, forced refresh retries, and no body reads for inline indexing when disabled.

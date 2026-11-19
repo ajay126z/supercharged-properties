@@ -44,7 +44,12 @@ Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply(
 
 Value filters live only on `PropertiesView`. Each render derives `PropertyIndex.scoped()` from current matching paths and excludes the filter key. Tree, picker counts, copy links, and edit menus use derived nodes; saved-profile key sets and modified comparisons use the full index. Search queries remain vault-wide.
 
+Inline properties are an optional separate source. `InlineIndex` reads note bodies only while enabled, queues at most four reads, and rejects stale results after updates, moves, or disable. `PropertiesView.inlineView` is local to the view. Inline menus must never call YAML editors or YAML Search; inline expansion is independent, and YAML profile keys remain unchanged.
+
 Supporting modules:
+
+- `src/inline-properties.ts` - literal inline-field parser excluding frontmatter, code and comments.
+- `src/inline-index.ts` - bounded async indexing, change reconciliation, failure reporting and request invalidation.
 
 - `src/filter-note-list.ts` - read-only filter count disclosure, sorted note rows, progressive loading, native opening/hover, and focus/scroll restoration. Uses the same live path set as the filter count; it does not join tree selection.
 

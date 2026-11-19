@@ -184,3 +184,20 @@ it('keeps one author path after repeated metadata updates and note renames', asy
   }
   plugin.rebuild(); expect(paths()).toEqual(new Set(['Projects/Renamed.md']));
 });
+it('enables inline body indexing separately, updates from metadata text, handles renames and disables reads', async () => {
+ const {plugin,cache,vault,files,metadata}=await setup();
+ const note=Object.assign(new TFile(),{path:'A.md',extension:'md',stat:{mtime:1,size:20}});files.push(note);metadata.set('A.md',{frontmatter:{author:'YAML'}});
+ const read=vi.fn(async()=> 'author:: Inline\n[topic:: design]');(plugin as any).app.vault.cachedRead=read;(plugin as any).saveData=vi.fn();
+ expect(plugin.prefs.showInlineProperties).toBe(false);plugin.rebuild();expect(read).not.toHaveBeenCalled();
+ await plugin.setShowInlineProperties(true);await Promise.resolve();
+ expect([...plugin.inline.index.properties.get('author')!.values.values()][0].label).toBe('Inline');
+ expect([...plugin.index.properties.get('author')!.values.values()][0].label).toBe('YAML');
+ cache.emit('changed',note,'author:: New',{frontmatter:{author:'YAML'}});
+ expect([...plugin.inline.index.properties.get('author')!.values.values()][0].label).toBe('New');
+ note.path='Projects/B.md';metadata.set('Projects/B.md',{frontmatter:{author:'YAML'}});vault.emit('rename',note,'A.md');await Promise.resolve();await Promise.resolve();
+ expect(plugin.inline.index.properties.get('author')!.paths).toEqual(new Set(['Projects/B.md']));
+ await plugin.setExcludedFolders('Projects');
+ expect(plugin.inline.index.properties.size).toBe(0);
+ await plugin.setShowInlineProperties(false);const reads=read.mock.calls.length;vault.emit('modify',note);expect(read).toHaveBeenCalledTimes(reads);
+ expect(plugin.inline.index.properties.size).toBe(0);
+});

@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Optional Show inline properties setting and separate read-only Inline Properties view. Browse literal Dataview-style fields as property → value → notes, with local search, sorting, distinct-note counts, copied links, and Value filters. Excluded folders apply; YAML views and editing remain separate. Background reads are bounded and discard outdated results.
+
 ## [1.4.2] - 2026-11-18
 
 ### Fixed

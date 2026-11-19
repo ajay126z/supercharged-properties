@@ -2,7 +2,7 @@
 
 ## For users
 
-These guides describe **1.4.2**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
+These guides describe **1.4.2** plus the unreleased Inline Properties view, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
@@ -12,6 +12,8 @@ These guides describe **1.4.2**, with Value filter and its expandable note list,
 | [Property-name renaming](PROPERTY-RENAMING.md) | Key renaming and deletion, case corrections, collision handling, preserved values, preference updates, and shared undo. |
 
 ### Common tasks
+
+- [Browse read-only inline properties](USER-GUIDE.md#inline-properties)
 
 - [See and open notes in a filtered subset](USER-GUIDE.md#value-filter)
 - [Explore other properties among notes sharing a value](USER-GUIDE.md#value-filter)
