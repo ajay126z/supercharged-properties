@@ -114,12 +114,60 @@ it('removes a new leaf and explains when Search is unavailable', async () => {
   await vi.waitFor(() => expect(detach).toHaveBeenCalledOnce());
   expect((Notice as any).messages).toContain('Enable the Search core plugin to use Open in Search.');
 });
-it('clears search when collapsing all and preserves scoped selection', () => {
+it.each([
+  ['Search everything', 'Done'],
+  ['Property names', 'status'],
+  ['Values', 'Done'],
+  ['Note names / paths', 'Projects/']
+])('preserves a saved view and %s search when collapsing and expanding', (mode, query) => {
   plugin.prefs.scope = ['status'];
-  click('Toggle search');
-  const input = document.querySelector('input')!; input.value = 'Done'; input.dispatchEvent(new Event('input'));
-  click('Collapse all properties'); expect(input.value).toBe('');
-  expect(document.querySelectorAll('.pv-values')).toHaveLength(0); expect(plugin.prefs.scope).toEqual(['status']);
+  plugin.prefs.profiles = [{ id: 'book', name: 'Book View', keys: ['status'] }];
+  plugin.prefs.activeProfile = 'book';
+  plugin.prefs.expanded = ['status', 'tags'];
+  view.render();
+  click('Toggle search'); click('Search in: Search everything');
+  (Menu as any).items.find((item: any) => item.title === mode).run();
+  const input = document.querySelector('input')!;
+  input.value = query; input.dispatchEvent(new Event('input'));
+  const results = document.querySelector('.pv-tree')!.textContent;
+  click('Collapse all properties');
+  expect(input.value).toBe(query);
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  view.render(); // Live refresh must not expand the collapsed search again.
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
+  click('Expand all properties');
+  expect(document.querySelector('.pv-tree')!.textContent).toBe(results);
+  expect(plugin.prefs.scope).toEqual(['status']);
+  expect(plugin.prefs.activeProfile).toBe('book');
+  expect(plugin.prefs.expanded).toEqual(['status', 'tags']);
+  click('Collapse all properties');
+  input.value = 'Pending'; input.dispatchEvent(new Event('input'));
+  if (mode !== 'Property names' && mode !== 'Note names / paths') {
+    expect(document.querySelectorAll('.pv-values')).toHaveLength(1);
+  }
+});
+it('collapses only visible properties in a custom view', () => {
+  plugin.prefs.scope = ['status'];
+  plugin.prefs.expanded = ['status', 'tags'];
+  view.render(); click('Collapse all properties');
+  expect(plugin.prefs.scope).toEqual(['status']);
+  expect(plugin.prefs.expanded).toEqual(['tags']);
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
+  click('Expand all properties');
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(1);
+});
+it('keeps the value filter when collapsing and expanding properties', () => {
+  click('Expand status'); filterValue('Show notes with status: Done (1)');
+  click('Expand all properties');
+  const results = document.querySelector('.pv-tree')!.textContent;
+  const label = document.querySelector('.pv-filter-label')!.textContent;
+  click('Collapse all properties');
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
+  click('Expand all properties');
+  expect(document.querySelector('.pv-tree')!.textContent).toBe(results);
+  expect(document.querySelector('.pv-filter-label')!.textContent).toBe(label);
 });
 it('renders property text without interpreting HTML', () => {
   plugin.index.update('x.md', { '<img src=x>': '<script>bad</script>' }); view.render();

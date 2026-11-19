@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep the active view, search, and Value filter when expanding or collapsing all properties. Collapse only displayed properties and preserve expansion outside the current view.
+
 ## [1.4.2] - 2026-11-18
 
 ### Fixed

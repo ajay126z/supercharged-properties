@@ -67,7 +67,7 @@ Open Supercharged Properties, expand `status`, then expand `doing` to find the n
 | Note row | Opens the note; Ctrl/Cmd-click opens a new tab. In mobile selection mode, tapping toggles selection. Right-click (desktop) or long-press (mobile) opens supported property-editing actions. |
 | Note-selection checkbox | Toggles selection without opening the note. Available during selection mode on desktop and mobile. |
 | Expand all properties | Expands currently visible properties. It does not open every value's note list. |
-| Collapse all properties | Collapses branches and clears the tree search. |
+| Collapse all properties | Collapses displayed properties while keeping the current view, tree search, and Value filter. |
 | Show more | Reveals another page of a large value or note list. |
 | Refresh property index | Rebuilds the tree and reloads property type icons. |
 

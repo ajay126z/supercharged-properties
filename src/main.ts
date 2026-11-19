@@ -274,6 +274,8 @@ export class PropertiesView extends ItemView {
   private noteMenuDisposers: Array<() => void> = [];
   private query = '';
   private searchScope = 'any';
+  private searchExpanded = true;
+  private expansionContext = '';
   private searchHeader!: HTMLElement;
   private searchToggle!: HTMLButtonElement;
   private searchScopeButton!: HTMLButtonElement;
@@ -353,9 +355,12 @@ export class PropertiesView extends ItemView {
     this.sortButton.setAttribute('aria-haspopup', 'menu');
     this.iconButton(actions, 'Refresh property index', 'refresh-cw', () => this.plugin.rebuild());
     this.expandToggle = this.iconButton(actions, 'Expand all properties', 'list-tree', () => {
-      if (this.allExpanded) {
-        this.query = ''; this.input.value = ''; this.expandedValues.clear();
-        this.plugin.prefs.expanded = [];
+      if (this.allExpanded) this.expandedValues.clear();
+      if (this.query) {
+        this.searchExpanded = !this.allExpanded;
+      } else if (this.allExpanded) {
+        const visible = new Set(this.visibleKeys);
+        this.plugin.prefs.expanded = this.plugin.prefs.expanded.filter(key => !visible.has(key));
       } else {
         this.plugin.prefs.expanded = [...new Set([...this.plugin.prefs.expanded, ...this.visibleKeys])];
       }
@@ -571,6 +576,11 @@ export class PropertiesView extends ItemView {
 
   render(): void {
     if (!this.body) return;
+    const expansionContext = JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.activeProfile, this.filter]);
+    if (expansionContext !== this.expansionContext) {
+      this.expansionContext = expansionContext;
+      this.searchExpanded = true;
+    }
     const valuePaths = this.filterPaths();
     const index = this.activeIndex(valuePaths);
     this.syncProfiles(index);
@@ -597,7 +607,7 @@ export class PropertiesView extends ItemView {
       this.visibleKeys.push(property.id);
       const group = el(this.body, 'div', 'pv-group');
       const row = el(group, 'div', 'pv-row pv-property-row');
-      const expanded = !!this.query || this.plugin.prefs.expanded.includes(property.id);
+      const expanded = this.query ? this.searchExpanded : this.plugin.prefs.expanded.includes(property.id);
       const toggle = this.iconButton(row, `${expanded ? 'Collapse' : 'Expand'} ${property.label}`, expanded ? 'chevron-down' : 'chevron-right', () => this.toggleProperty(property.id));
       toggle.className = 'pv-toggle'; toggle.disabled = !!this.query;
       toggle.dataset.pvFocus = JSON.stringify(['toggle', property.id]); toggle.setAttribute('aria-expanded', String(expanded));
@@ -630,7 +640,7 @@ export class PropertiesView extends ItemView {
       const otherPaths = new Set([...property.paths].filter(path => !assigned.has(path)));
       if (otherPaths.size) this.renderNotes(children, property, { ...property, paths: otherPaths }, property.id, keyMatches);
     }
-    this.allExpanded = this.visibleKeys.length > 0 && (!!this.query || this.visibleKeys.every(key => this.plugin.prefs.expanded.includes(key)));
+    this.allExpanded = this.visibleKeys.length > 0 && (this.query ? this.searchExpanded : this.visibleKeys.every(key => this.plugin.prefs.expanded.includes(key)));
     const toggleLabel = this.allExpanded ? 'Collapse all properties' : 'Expand all properties';
     this.expandToggle.title = toggleLabel;
     this.expandToggle.setAttribute('aria-label', toggleLabel);
