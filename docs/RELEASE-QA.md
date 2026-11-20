@@ -288,3 +288,11 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] Open at least ten saved views in the view picker; verify downward opening, bounded scrolling, wrapped names, and keyboard navigation on desktop and mobile.
 - [ ] Turn Show tooltips off/on; check toolbar, tree rows, view picker, and expanded matching-note list. Screen-reader labels and note previews remain available.
 - [ ] Reload the plugin and verify the tooltip preference persists.
+
+
+### View-local pins
+
+- [ ] Pin in All properties and verify inheritance in two saved YAML views.
+- [ ] Pin a different property and unpin an inherited property in one view; verify other views and All properties remain unchanged.
+- [ ] Reload, rename/update a saved view, and rename a property; verify local pin choices persist.
+- [ ] Save a custom selection as a view and verify its local pins carry over.

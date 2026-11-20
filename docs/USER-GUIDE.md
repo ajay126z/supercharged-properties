@@ -237,7 +237,7 @@ The table describes property/value-row bulk actions. “Full indexed note set”
 
 ## Save and manage views
 
-Saved views, also called profiles, store a **property selection**. They do not save search text, sorting, pinning, or hidden-property settings as separate per-view preferences.
+Saved views, also called profiles, store a **property selection**. YAML saved views also store local pin/unpin choices. They do not save search text, sorting, or hidden-property settings as separate per-view preferences.
 
 ### Create a view
 
@@ -293,6 +293,10 @@ Click **Sort properties** to choose:
 The selected ordering applies to property and value rows. Frequency means distinct-note count; ties use alphabetical order. The same preference is available in Settings.
 
 Right-click a **property row** and choose **Pin property** to keep it above unpinned properties. Choose **Unpin property** to restore normal ordering. Pinning does not override the property selection, search, or hiding.
+
+Pins set in **All properties** are inherited by other YAML views. Pinning inside a saved view affects only that view. Unpinning an inherited pin inside a saved view hides its pin only there; All properties and other views keep it. Local choices persist across reloads and stay with the saved view when renamed or updated. Existing pins remain global until you override them in a view.
+
+Unsaved custom selections have their own local pin choices, which are copied when you save a new view. Deleting a saved view retains its current pin choices in the resulting custom selection. Inline views remain read-only and do not offer pinning.
 
 Choose **Hide property** to remove a property from the tree. To restore it, open **Settings → Supercharged Properties → Hidden properties** and remove its name. Hiding changes the display only; it does not delete metadata. Hidden-property names are matched without regard to capitalization or surrounding whitespace.
 

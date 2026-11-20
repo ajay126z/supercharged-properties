@@ -17,6 +17,8 @@ Choose the properties you want to see, save views for different projects, and ex
 
 ![Browse properties and search matching notes](docs/media/01-browse-and-search.gif)
 
+Pins set in **All properties** are shared across YAML views. Pin or unpin inside a saved view to change only that view, without affecting All properties or other views.
+
 ## Browse inline properties
 
 Enable **Settings → Supercharged Properties → Show inline properties**, then choose **Inline Properties** from the view dropdown. Browse a separate, read-only **property → value → notes** tree for fields written in note bodies:

@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Keep pin/unpin choices local to each YAML saved view or custom selection, while inheriting pins from All properties. Persist local overrides and preserve them through property renames.
+
 - After Collapse all in note/path search results, expand properties to values first, then expand values to notes. New searches still reveal matching branches automatically.
 
 - Show distinct search-matching note counts on property and value rows in YAML and inline views, including inside Value filters.

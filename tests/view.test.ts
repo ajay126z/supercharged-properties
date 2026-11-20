@@ -1094,3 +1094,32 @@ it('disables and restores browser tooltips while preserving accessible controls'
   expect(picker.hasAttribute('data-tooltip-classes')).toBe(false);
   expect(document.querySelector('.pv-filter-note')!.getAttribute('title')).toBe('Projects/One.md');
 });
+
+it('inherits All properties pins but isolates pin/unpin overrides in saved views', () => {
+  plugin.prefs.profiles=[{id:'books',name:'Books',keys:['status','tags']},{id:'work',name:'Work',keys:['status','tags']}];view.render();
+  const pin = (property: string, action: string) => {
+    const row=[...document.querySelectorAll<HTMLElement>('.pv-property-row .pv-node')].find(row=>row.querySelector('.pv-label')!.textContent===property)!;
+    row.dispatchEvent(new MouseEvent('contextmenu'));
+    (Menu as any).items.find((item:any)=>item.title===action).run();
+  };
+  const pinned = () => [...document.querySelectorAll('.pv-property-row .pv-node')].filter(row=>row.querySelector('.pv-pin')).map(row=>row.querySelector('.pv-label')!.textContent);
+  pin('tags','Pin property');expect(plugin.prefs.pinned).toEqual(['tags']);
+  chooseView('profile:books');expect(pinned()).toEqual(['tags']);
+  pin('status','Pin property');pin('tags','Unpin property');expect(pinned()).toEqual(['status']);
+  expect(plugin.prefs.pinned).toEqual(['tags']);
+  chooseView('profile:work');expect(pinned()).toEqual(['tags']);
+  chooseView('all');expect(pinned()).toEqual(['tags']);
+  pin('status','Pin property');chooseView('profile:work');expect(pinned()).toEqual(['status','tags']);
+  chooseView('profile:books');expect(pinned()).toEqual(['status']);
+  click('Choose properties to show');nameProfile('Reading');click('Rename active profile');
+  expect(pinned()).toEqual(['status']);
+  expect(plugin.prefs.profiles[0].pinOverrides).toEqual({status:true,tags:false});
+});
+it('keeps custom-selection pins local and carries them into a new saved view', () => {
+  click('Choose properties to show');click('Clear property selection');click('Include status');
+  document.querySelector('[aria-label="Toggle status (2)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
+  (Menu as any).items.find((item:any)=>item.title==='Pin property').run();
+  expect(plugin.prefs.pinned).toEqual([]);expect(plugin.prefs.customPinOverrides).toEqual({status:true});
+  nameProfile('Tasks');click('Save selection as new profile');expect(plugin.prefs.profiles[0].pinOverrides).toEqual({status:true});
+  chooseView('all');expect(document.querySelector('.pv-pin')).toBeNull();
+});

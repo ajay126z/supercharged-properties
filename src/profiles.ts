@@ -1,5 +1,5 @@
 import { fold } from './index';
-export interface PropertyProfile { id: string; name: string; keys: string[] }
+export interface PropertyProfile { id: string; name: string; keys: string[]; pinOverrides?: Record<string, boolean> }
 export function loadProfiles(raw: unknown): PropertyProfile[] {
   if (!Array.isArray(raw)) return [];
   const ids = new Set<string>(); const names = new Set<string>();
@@ -9,7 +9,8 @@ export function loadProfiles(raw: unknown): PropertyProfile[] {
     if (!value || typeof value.id !== 'string' || !value.id || typeof value.name !== 'string' || !value.name.trim() || !Array.isArray(value.keys)) return [];
     if (ids.has(value.id) || names.has(fold(value.name))) return [];
     ids.add(value.id); names.add(fold(value.name));
-    return [{ id: value.id, name: value.name.trim(), keys: [...new Set<string>(value.keys.filter((key: unknown): key is string => typeof key === 'string').map(fold).filter(Boolean))] }];
+    const pinOverrides = loadPinOverrides(value.pinOverrides);
+    return [{ ...(pinOverrides ? { pinOverrides } : {}), id: value.id, name: value.name.trim(), keys: [...new Set<string>(value.keys.filter((key: unknown): key is string => typeof key === 'string').map(fold).filter(Boolean))] }];
   });
 }
 export function sameKeys(a: readonly string[], b: readonly string[]): boolean {
@@ -17,7 +18,7 @@ export function sameKeys(a: readonly string[], b: readonly string[]): boolean {
   return left.size === right.size && [...left].every(key => right.has(key));
 }
 
-export interface PropertyViewState { profiles: PropertyProfile[]; scope: string[] | null; activeProfile: string | null }
+export interface PropertyViewState { profiles: PropertyProfile[]; scope: string[] | null; activeProfile: string | null; customPinOverrides?: Record<string, boolean> }
 export function loadViewState(raw: unknown): PropertyViewState {
   const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const profiles = loadProfiles(value.profiles);
@@ -26,4 +27,9 @@ export function loadViewState(raw: unknown): PropertyViewState {
     scope: Array.isArray(value.scope) ? [...new Set(value.scope.filter((key): key is string => typeof key === 'string').map(fold).filter(Boolean))] : null,
     activeProfile: typeof value.activeProfile === 'string' && profiles.some(profile => profile.id === value.activeProfile) ? value.activeProfile : null
   };
+}
+
+export function loadPinOverrides(raw: unknown): Record<string, boolean> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  return Object.fromEntries(Object.entries(raw).filter(([key, value]) => fold(key) && typeof value === 'boolean').map(([key, value]) => [fold(key), value as boolean]));
 }

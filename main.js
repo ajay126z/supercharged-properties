@@ -284,7 +284,8 @@ function loadProfiles(raw) {
     if (ids.has(value.id) || names.has(fold(value.name))) return [];
     ids.add(value.id);
     names.add(fold(value.name));
-    return [{ id: value.id, name: value.name.trim(), keys: [...new Set(value.keys.filter((key) => typeof key === "string").map(fold).filter(Boolean))] }];
+    const pinOverrides = loadPinOverrides(value.pinOverrides);
+    return [{ ...pinOverrides ? { pinOverrides } : {}, id: value.id, name: value.name.trim(), keys: [...new Set(value.keys.filter((key) => typeof key === "string").map(fold).filter(Boolean))] }];
   });
 }
 function sameKeys(a, b) {
@@ -300,6 +301,10 @@ function loadViewState(raw) {
     scope: Array.isArray(value.scope) ? [...new Set(value.scope.filter((key) => typeof key === "string").map(fold).filter(Boolean))] : null,
     activeProfile: typeof value.activeProfile === "string" && profiles.some((profile) => profile.id === value.activeProfile) ? value.activeProfile : null
   };
+}
+function loadPinOverrides(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
+  return Object.fromEntries(Object.entries(raw).filter(([key, value]) => fold(key) && typeof value === "boolean").map(([key, value]) => [fold(key), value]));
 }
 
 // src/property-types.ts
@@ -458,7 +463,14 @@ function includeRenamedProperty(prefs, source, target) {
   prefs.pinned = include(prefs.pinned);
   prefs.expanded = include(prefs.expanded);
   prefs.hidden = include(prefs.hidden.split("\n")).join("\n");
-  for (const profile of prefs.profiles) profile.keys = include(profile.keys);
+  const carryPins = (overrides) => {
+    if (overrides && Object.prototype.hasOwnProperty.call(overrides, from) && !Object.prototype.hasOwnProperty.call(overrides, to)) Object.defineProperty(overrides, to, { value: overrides[from], enumerable: true, configurable: true, writable: true });
+  };
+  carryPins(prefs.customPinOverrides);
+  for (const profile of prefs.profiles) {
+    profile.keys = include(profile.keys);
+    carryPins(profile.pinOverrides);
+  }
 }
 
 // src/value-operations.ts
@@ -1934,6 +1946,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian9.Plugin {
       showTooltips: saved.showTooltips !== false,
       inlineViews: loadViewState(saved.inlineViews),
       profiles,
+      customPinOverrides: loadPinOverrides(saved.customPinOverrides),
       activeProfile: typeof saved.activeProfile === "string" && profiles.some((profile) => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v) => typeof v === "string") : null,
       pinned: Array.isArray(saved?.pinned) ? saved.pinned.filter((v) => typeof v === "string") : [],
@@ -2393,6 +2406,32 @@ var PropertiesView = class extends import_obsidian9.ItemView {
   get viewPrefs() {
     return this.inlineView ? this.inlinePrefs : this.plugin.prefs;
   }
+  get pinOverrides() {
+    const prefs = this.plugin.prefs;
+    const profile = prefs.profiles.find((item) => item.id === prefs.activeProfile);
+    return profile ? profile.pinOverrides : prefs.scope !== null ? prefs.customPinOverrides : void 0;
+  }
+  effectivePins() {
+    if (this.inlineView) return /* @__PURE__ */ new Set();
+    const pins = new Set(this.plugin.prefs.pinned);
+    for (const [key, pinned] of Object.entries(this.pinOverrides ?? {})) {
+      if (pinned) pins.add(key);
+      else pins.delete(key);
+    }
+    return pins;
+  }
+  togglePin(key) {
+    const prefs = this.plugin.prefs;
+    const pinned = this.effectivePins().has(key);
+    const profile = prefs.profiles.find((item) => item.id === prefs.activeProfile);
+    if (profile || prefs.scope !== null) {
+      const overrides = { ...this.pinOverrides, [key]: !pinned };
+      if (profile) profile.pinOverrides = overrides;
+      else prefs.customPinOverrides = overrides;
+    } else prefs.pinned = pinned ? prefs.pinned.filter((item) => item !== key) : [...prefs.pinned, key];
+    void this.plugin.save();
+    this.render();
+  }
   get expandedKeys() {
     return this.inlineView ? this.inlineExpanded : this.plugin.prefs.expanded;
   }
@@ -2530,7 +2569,7 @@ var PropertiesView = class extends import_obsidian9.ItemView {
     }
     if (action === "new") {
       const id = this.contentEl.ownerDocument.defaultView.crypto.randomUUID();
-      prefs.profiles.push({ id, name, keys });
+      prefs.profiles.push({ id, name, keys, ...!this.inlineView && this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {} });
       prefs.activeProfile = id;
       prefs.scope = [...keys];
     } else if (!active) return;
@@ -2539,6 +2578,7 @@ var PropertiesView = class extends import_obsidian9.ItemView {
       prefs.scope = [...keys];
     } else if (action === "rename") active.name = name;
     else {
+      if (!this.inlineView) prefs.customPinOverrides = active.pinOverrides ? { ...active.pinOverrides } : void 0;
       prefs.profiles = prefs.profiles.filter((profile) => profile !== active);
       prefs.activeProfile = null;
     }
@@ -2639,7 +2679,7 @@ var PropertiesView = class extends import_obsidian9.ItemView {
     if (!this.scopePanel.hidden) this.renderScopeChoices(index);
     const hidden = new Set(this.plugin.prefs.hidden.split("\n").map(fold).filter(Boolean));
     if (this.inlineView) hidden.clear();
-    const pinned = new Set(this.inlineView ? [] : this.plugin.prefs.pinned);
+    const pinned = this.effectivePins();
     const scope = this.viewPrefs.scope;
     const properties = this.sorted(index.properties.values()).filter((p) => !hidden.has(p.id) && (scope === null || scope.includes(p.id))).sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
     this.sortButton.title = `Sort: ${sortOptions[this.plugin.prefs.sort]}`;
@@ -2747,7 +2787,7 @@ var PropertiesView = class extends import_obsidian9.ItemView {
       (0, import_obsidian9.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
     }
     el2(button, "span", "pv-label", node.label);
-    if (isKey && this.plugin.prefs.pinned.includes(property.id)) (0, import_obsidian9.setIcon)(el2(button, "span", "pv-pin"), "pin");
+    if (isKey && this.effectivePins().has(property.id)) (0, import_obsidian9.setIcon)(el2(button, "span", "pv-pin"), "pin");
     if (!isKey) {
       const kind = JSON.parse(node.id)[0];
       if (kind !== "string") el2(button, "span", "pv-kind", kind);
@@ -2974,11 +3014,9 @@ var PropertiesView = class extends import_obsidian9.ItemView {
     if (!this.inlineView && node === property) {
       menu.addItem((item) => item.setTitle("Rename property\u2026").setIcon("pencil").onClick(() => this.plugin.renameProperty(property)));
       menu.addItem((item) => item.setTitle("Delete property\u2026").setIcon("trash-2").onClick(() => this.plugin.deleteProperty(property)));
-      const pinned = this.plugin.prefs.pinned.includes(property.id);
+      const pinned = this.effectivePins().has(property.id);
       menu.addItem((item) => item.setTitle(pinned ? "Unpin property" : "Pin property").setIcon("pin").onClick(() => {
-        this.plugin.prefs.pinned = pinned ? this.plugin.prefs.pinned.filter((key) => key !== property.id) : [...this.plugin.prefs.pinned, property.id];
-        void this.plugin.save();
-        this.render();
+        this.togglePin(property.id);
       }));
       menu.addItem((item) => item.setTitle("Hide property").setIcon("eye-off").onClick(() => {
         this.plugin.prefs.hidden += `

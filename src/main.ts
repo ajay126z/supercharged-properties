@@ -6,7 +6,7 @@ import { fitVisibleViewport, usesTouchLayout } from './mobile-layout';
 import { excludedFolders, isFolderExcluded } from './folder-exclusions';
 import { SortOrder, sortOptions, sortOrder, sortNodes } from './sorting';
 import { propertyQuery } from './search';
-import { loadProfiles, loadViewState, sameKeys, PropertyProfile, PropertyViewState } from './profiles';
+import { loadProfiles, loadPinOverrides, loadViewState, sameKeys, PropertyProfile, PropertyViewState } from './profiles';
 import { PropertyTypeResolver, supportsTextSplit, noteEditType } from './property-types';
 import { ValueEditor, type ValueEditPreview, type ValueEditResult } from './value-editor';
 import { PropertyRenameModal } from './property-rename-dialog';
@@ -23,7 +23,7 @@ import type { PropertyValueKind } from './frontmatter-values';
 import { noteEditError, textOnlyList, type ListItem } from './note-value-operations';
 
 const VIEW = 'supercharged-properties';
-interface Preferences { showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
+interface Preferences { customPinOverrides?: Record<string, boolean>; showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
 interface ValueFilter { property: string; value: string; propertyLabel: string; label: string }
 const defaults: Preferences = { showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 
@@ -46,6 +46,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
       showTooltips: saved.showTooltips !== false,
       inlineViews: loadViewState(saved.inlineViews),
       profiles,
+      customPinOverrides: loadPinOverrides(saved.customPinOverrides),
       activeProfile: typeof saved.activeProfile === 'string' && profiles.some(profile => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v: unknown) => typeof v === 'string') : null,
       pinned: Array.isArray(saved?.pinned) ? saved.pinned.filter((v: unknown) => typeof v === 'string') : [],
@@ -481,6 +482,30 @@ export class PropertiesView extends ItemView {
   }
   private get inlinePrefs(): PropertyViewState { return this.plugin.prefs.inlineViews ??= loadViewState(null); }
   private get viewPrefs(): PropertyViewState { return this.inlineView ? this.inlinePrefs : this.plugin.prefs; }
+  private get pinOverrides(): Record<string, boolean> | undefined {
+    const prefs = this.plugin.prefs;
+    const profile = prefs.profiles.find(item => item.id === prefs.activeProfile);
+    return profile ? profile.pinOverrides : prefs.scope !== null ? prefs.customPinOverrides : undefined;
+  }
+  private effectivePins(): Set<string> {
+    if (this.inlineView) return new Set();
+    const pins = new Set(this.plugin.prefs.pinned);
+    for (const [key, pinned] of Object.entries(this.pinOverrides ?? {})) {
+      if (pinned) pins.add(key); else pins.delete(key);
+    }
+    return pins;
+  }
+  private togglePin(key: string): void {
+    const prefs = this.plugin.prefs;
+    const pinned = this.effectivePins().has(key);
+    const profile = prefs.profiles.find(item => item.id === prefs.activeProfile);
+    if (profile || prefs.scope !== null) {
+      const overrides = { ...this.pinOverrides, [key]: !pinned };
+      if (profile) profile.pinOverrides = overrides;
+      else prefs.customPinOverrides = overrides;
+    } else prefs.pinned = pinned ? prefs.pinned.filter(item => item !== key) : [...prefs.pinned, key];
+    void this.plugin.save(); this.render();
+  }
   private get expandedKeys(): string[] { return this.inlineView ? this.inlineExpanded : this.plugin.prefs.expanded; }
   private set expandedKeys(keys: string[]) { if (this.inlineView) this.inlineExpanded = keys; else this.plugin.prefs.expanded = keys; }
   private propertyExpanded(key: string): boolean {
@@ -578,11 +603,14 @@ export class PropertiesView extends ItemView {
     }
     if (action === 'new') {
       const id = this.contentEl.ownerDocument.defaultView!.crypto.randomUUID();
-      prefs.profiles.push({ id, name, keys }); prefs.activeProfile = id; prefs.scope = [...keys];
+      prefs.profiles.push({ id, name, keys, ...(!this.inlineView && this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {}) }); prefs.activeProfile = id; prefs.scope = [...keys];
     } else if (!active) return;
     else if (action === 'update') { active.keys = keys; prefs.scope = [...keys]; }
     else if (action === 'rename') active.name = name;
-    else { prefs.profiles = prefs.profiles.filter(profile => profile !== active); prefs.activeProfile = null; }
+    else {
+      if (!this.inlineView) prefs.customPinOverrides = active.pinOverrides ? { ...active.pinOverrides } : undefined;
+      prefs.profiles = prefs.profiles.filter(profile => profile !== active); prefs.activeProfile = null;
+    }
     this.profileName.value = '';
     if (usesTouchLayout(this.contentEl) && this.contentEl.ownerDocument.activeElement === this.profileName) {
       this.profileName.blur();
@@ -670,7 +698,7 @@ export class PropertiesView extends ItemView {
     if (!this.scopePanel.hidden) this.renderScopeChoices(index);
     const hidden = new Set(this.plugin.prefs.hidden.split('\n').map(fold).filter(Boolean));
     if (this.inlineView) hidden.clear();
-    const pinned = new Set(this.inlineView ? [] : this.plugin.prefs.pinned);
+    const pinned = this.effectivePins();
     const scope = this.viewPrefs.scope;
     const properties = this.sorted(index.properties.values()).filter(p => !hidden.has(p.id) && (scope === null || scope.includes(p.id)))
       .sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
@@ -775,7 +803,7 @@ export class PropertiesView extends ItemView {
       setIcon(icon, this.inlineView ? 'text' : this.plugin.typeResolver.iconFor(property));
     }
     el(button, 'span', 'pv-label', node.label);
-    if (isKey && this.plugin.prefs.pinned.includes(property.id)) setIcon(el(button, 'span', 'pv-pin'), 'pin');
+    if (isKey && this.effectivePins().has(property.id)) setIcon(el(button, 'span', 'pv-pin'), 'pin');
     if (!isKey) { const kind = (JSON.parse(node.id) as string[])[0]; if (kind !== 'string') el(button, 'span', 'pv-kind', kind); }
     if (this.plugin.prefs.counts) el(button, 'span', 'pv-count', String(count));
     return button;
@@ -987,10 +1015,9 @@ export class PropertiesView extends ItemView {
     if (!this.inlineView && node === property) {
       menu.addItem(item => item.setTitle('Rename property…').setIcon('pencil').onClick(() => this.plugin.renameProperty(property)));
       menu.addItem(item => item.setTitle('Delete property…').setIcon('trash-2').onClick(() => this.plugin.deleteProperty(property)));
-      const pinned = this.plugin.prefs.pinned.includes(property.id);
+      const pinned = this.effectivePins().has(property.id);
       menu.addItem(item => item.setTitle(pinned ? 'Unpin property' : 'Pin property').setIcon('pin').onClick(() => {
-        this.plugin.prefs.pinned = pinned ? this.plugin.prefs.pinned.filter(key => key !== property.id) : [...this.plugin.prefs.pinned, property.id];
-        void this.plugin.save(); this.render();
+        this.togglePin(property.id);
       }));
       menu.addItem(item => item.setTitle('Hide property').setIcon('eye-off').onClick(() => {
         this.plugin.prefs.hidden += `\n${property.label}`; void this.plugin.save(); this.render();

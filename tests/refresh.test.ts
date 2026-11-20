@@ -221,3 +221,13 @@ it('defaults tooltips to enabled and restores the disabled preference', async ()
   const saveData=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saveData;
   await plugin.save();expect(saveData.mock.calls[0][0].showTooltips).toBe(false);
 });
+
+it('loads and saves independent view pin overrides without changing legacy global pins', async () => {
+  const {plugin}=await setup({pinned:['tags'],profiles:[{id:'books',name:'Books',keys:['status'],pinOverrides:{Status:true,TAGS:false,bad:'yes'}}],customPinOverrides:{Rating:true}});
+  expect(plugin.prefs.pinned).toEqual(['tags']);
+  expect(plugin.prefs.profiles[0].pinOverrides).toEqual({status:true,tags:false});
+  expect(plugin.prefs.customPinOverrides).toEqual({rating:true});
+  const saveData=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saveData;await plugin.save();
+  const restored=await setup(saveData.mock.calls[0][0]);expect(restored.plugin.prefs.profiles).toEqual(plugin.prefs.profiles);
+  expect(restored.plugin.prefs.customPinOverrides).toEqual({rating:true});
+});

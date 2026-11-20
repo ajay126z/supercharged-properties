@@ -77,3 +77,14 @@ it('carries view preferences to the new key while retaining old references for p
   expect(prefs.profiles[0].keys).toEqual(['author', 'status', 'authors']);
   includeRenamedProperty(prefs, 'author', 'Author'); expect(prefs.scope).toHaveLength(2);
 });
+
+it('carries local pin and unpin overrides through property renames without replacing target choices', () => {
+  const prefs={scope:null,pinned:[],expanded:[],hidden:'',customPinOverrides:{author:true},profiles:[
+    {id:'a',name:'A',keys:['author'],pinOverrides:{author:false}},
+    {id:'b',name:'B',keys:['author'],pinOverrides:{author:true,authors:false}}
+  ]};
+  includeRenamedProperty(prefs,'author','authors');
+  expect(prefs.customPinOverrides).toEqual({author:true,authors:true});
+  expect(prefs.profiles[0].pinOverrides).toEqual({author:false,authors:false});
+  expect(prefs.profiles[1].pinOverrides).toEqual({author:true,authors:false});
+});
