@@ -21,7 +21,7 @@ Pins set in **All properties** are shared across YAML views. Pin or unpin inside
 
 ## Browse inline properties
 
-Enable **Settings → Supercharged Properties → Show inline properties**, then choose **Inline Properties** from the view dropdown. Browse a separate, read-only **property → value → notes** tree for fields written in note bodies:
+Enable **Settings → Supercharged Properties → Show inline properties**, then choose **Inline Properties** from the view dropdown. Browse a separate **property → value → notes** tree for fields written in note bodies:
 
 ```markdown
 author:: AJ
@@ -29,7 +29,7 @@ author:: AJ
 (rating:: 4)
 ```
 
-All properties and existing saved views continue to show YAML frontmatter. To save an inline view, choose **Inline Properties**, open **Choose properties to show**, select fields, enter a name, and choose **Save new**. The view picker opens downward with a scrollable list that fits the screen. Inline views appear as **Inline: Name** and have their own Update, Rename, and Delete controls. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. It offers no property/value editing or YAML Search queries. Excluded folders apply, and code, frontmatter, and comments are ignored. Fields in nested lists and indented list continuations are supported, including link values. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. This feature is unreleased, following 1.4.2.
+All properties and existing saved views continue to show YAML frontmatter. To save an inline view, choose **Inline Properties**, open **Choose properties to show**, select fields, enter a name, and choose **Save new**. The view picker opens downward with a scrollable list that fits the screen. Inline views appear as **Inline: Name** and have their own Update, Rename, and Delete controls. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. Right-click or long-press inline rows to rename or delete a property, rename a value, or select several values to replace with one new text value. Edits require Preview changes and Confirm changes, with **Undo last inline property edit** available until reload. Inline pins and hidden properties are separate from YAML. Open in Search and Copy search query use text queries that may also match code examples. Excluded folders apply, and code, frontmatter, and comments are ignored. Fields in nested lists and indented list continuations are supported, including link values. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. This feature is unreleased, following 1.4.2.
 
 ## Explore notes sharing a value
 
@@ -141,7 +141,8 @@ When choosing properties, **All** and **None** keep the view name you have typed
 | Setting | What it does |
 | --- | --- |
 | Show tooltips | Show hover hints in the property browser; enabled by default. |
-| Show inline properties | Add the separate read-only Inline Properties view; disabled by default. |
+| Hidden inline properties | Hide inline property names without affecting YAML. |
+| Show inline properties | Add the separate Inline Properties view; disabled by default. |
 | Show note counts | Show how many distinct notes use each property or value. |
 | Sort by | Choose alphabetical order or note frequency. |
 | Excluded folders | Omit selected folders and their subfolders from the view and new bulk edits. |

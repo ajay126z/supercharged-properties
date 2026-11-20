@@ -263,7 +263,7 @@ Run this checklist against a build candidate before publishing. Automated checks
 ## Inline properties (unreleased)
 
 - Enable Show inline properties and choose Inline Properties. Check all three field forms, repeated values, empty fields, wikilinks, comments and code exclusions.
-- Confirm YAML values with the same names remain separate, with no inline edit menus or note selection controls.
+- Confirm YAML values with the same names remain separate, with inline edit menus routed to the inline editor and no note selection controls.
 - Check local search, sorting, Copy matching note links, Value filters, and opening notes on desktop/mobile.
 - Switch back to a saved YAML view; confirm its keys, expansion, pins, and hidden settings are preserved.
 - Edit, rename, move, delete, and exclude notes while indexing; confirm no stale paths reappear. Disable while reads are pending; the option must disappear and the active inline view must return to All properties.
@@ -296,3 +296,13 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] Pin a different property and unpin an inherited property in one view; verify other views and All properties remain unchanged.
 - [ ] Reload, rename/update a saved view, and rename a property; verify local pin choices persist.
 - [ ] Save a custom selection as a view and verify its local pins carry over.
+
+
+### Inline editing and display controls
+
+- [ ] Check property/value menus on desktop and mobile: Search, Copy search query, rename/delete property, rename/replace selected values, pin/unpin and hide.
+- [ ] Preview a multi-value replacement and confirm only selected values change in the current Value filter's notes.
+- [ ] Verify YAML, comments, code examples, CRLF, links and surrounding prose are preserved; unsafe syntax and name collisions are reported as skipped.
+- [ ] Change a note after preview and after apply; verify apply/undo skip the changed note.
+- [ ] Test separate Undo last inline property edit, local inline pin inheritance and Hidden inline properties settings.
+- [ ] Confirm action buttons remain reachable above the keyboard on mobile while reviewing long previews.

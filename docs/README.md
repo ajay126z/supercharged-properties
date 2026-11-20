@@ -13,7 +13,7 @@ These guides describe **1.4.2** plus the unreleased Inline Properties view, with
 
 ### Common tasks
 
-- [Browse read-only inline properties](USER-GUIDE.md#inline-properties)
+- [Browse and edit inline properties](USER-GUIDE.md#inline-properties)
 
 - [See and open notes in a filtered subset](USER-GUIDE.md#value-filter)
 - [Explore other properties among notes sharing a value](USER-GUIDE.md#value-filter)

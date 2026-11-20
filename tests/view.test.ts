@@ -836,15 +836,15 @@ function enableInlineView() {
   plugin.inline={index,pending:0,failures:new Set()};view.render();
   chooseView('inline');
 }
-it('offers an optional separate read-only Inline Properties tree without YAML edit actions', () => {
+it('offers separate inline search and edit actions without YAML note editing', () => {
   expect(availableViews()).not.toContain('inline');enableInlineView();
-  expect(document.querySelector('.pv-summary')!.textContent).toContain('Read-only');
+  expect(document.querySelector('.pv-summary')!.textContent).toContain('Inline properties');
   expect(document.querySelector('[aria-label="Choose properties to show"]')!.hasAttribute('disabled')).toBe(false);
   click('Expand status');expect(document.querySelector('.pv-tree')!.textContent).toContain('inline only');expect(document.querySelector('.pv-tree')!.textContent).not.toContain('Done');
   document.querySelector('[aria-label="Toggle status (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
-  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Copy matching note links']);
+  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Open in Search','Copy search query','Copy matching note links','Rename property…','Delete property…','Pin property','Hide property','Replace selected values…']);
   document.querySelector('[aria-label="Show notes with status: inline only (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
-  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Copy matching note links','Filter by Value']);
+  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Open in Search','Copy search query','Copy matching note links','Rename value…','Filter by Value']);
   view.render(); click('Show notes with status: inline only (1)');
   const note=document.querySelector<HTMLButtonElement>('.pv-file')!;expect(note.hasAttribute('aria-haspopup')).toBe(false);note.click();expect(openFile).toHaveBeenCalledOnce();
 });
@@ -1122,4 +1122,15 @@ it('keeps custom-selection pins local and carries them into a new saved view', (
   expect(plugin.prefs.pinned).toEqual([]);expect(plugin.prefs.customPinOverrides).toEqual({status:true});
   nameProfile('Tasks');click('Save selection as new profile');expect(plugin.prefs.profiles[0].pinOverrides).toEqual({status:true});
   chooseView('all');expect(document.querySelector('.pv-pin')).toBeNull();
+});
+
+it('routes inline edits and search to inline handlers and keeps pins/hiding separate', async () => {
+  plugin.editInline=vi.fn();enableInlineView();
+  const property=plugin.inline.index.properties.get('author');
+  expect((view as any).queryFor(property,property)).toBe('line:("author" "::")');
+  const menu=()=>document.querySelector('[aria-label="Toggle author (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
+  menu();(Menu as any).items.find((item:any)=>item.title==='Rename property…').run();expect(plugin.editInline).toHaveBeenCalledWith(property,'rename-property');
+  menu();(Menu as any).items.find((item:any)=>item.title==='Pin property').run();expect(plugin.prefs.inlineViews.pinned).toEqual(['author']);expect(plugin.prefs.pinned).toEqual([]);
+  menu();(Menu as any).items.find((item:any)=>item.title==='Hide property').run();expect(plugin.prefs.inlineViews.hidden).toContain('author');expect(plugin.prefs.hidden).toBe('');
+  expect(document.querySelector('[aria-label="Toggle author (1)"]')).toBeNull();
 });

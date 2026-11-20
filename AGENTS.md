@@ -44,13 +44,14 @@ Bulk edits flow through `ValueEditor.preview()` -> modal confirmation -> `apply(
 
 Value filters live only on `PropertiesView`. Each render derives `PropertyIndex.scoped()` from current matching paths and excludes the filter key. Tree, picker counts, copy links, and edit menus use derived nodes; saved-profile key sets and modified comparisons use the full index. Search queries remain vault-wide. Tree search narrows displayed property/value counts and the filter-note disclosure using distinct matching paths, but does not narrow editor or copy-link scope. Collapse all preserves search and disables automatic note expansion until search context changes; individual property/value overrides remain available.
 
-Inline properties are an optional separate source. `InlineIndex` reads note bodies only while enabled, queues at most four reads, and rejects stale results after updates, moves, or disable. `PropertiesView.inlineView` is local to the view. Inline menus must never call YAML editors or YAML Search; inline expansion is independent, and YAML profile keys remain unchanged. Inline saved profiles, active profile and scope persist separately in `prefs.inlineViews`. The built-in Inline Properties view is protected like All properties.
+Inline properties are an optional separate source. `InlineIndex` reads note bodies only while enabled, queues at most four reads, and rejects stale results after updates, moves, or disable. `PropertiesView.inlineView` is local to the view. Inline menus use the dedicated InlineEditor and text Search queries, never YAML editors or property queries; inline expansion is independent, and YAML profile keys remain unchanged. Inline saved profiles, active profile and scope persist separately in `prefs.inlineViews`. The built-in Inline Properties view is protected like All properties.
 
 Supporting modules:
 
 - `src/inline-properties.ts` - literal inline-field parser excluding frontmatter, code and comments.
 - `src/view-picker.ts` - downward-opening view selector with viewport bounds, keyboard navigation and scrollable choices.
 - `src/tooltips.ts` - per-view hover-hint preference; preserve aria-label accessibility and note preview behavior.
+- `src/inline-edit.ts`, `src/inline-editor.ts`, `src/inline-dialog.ts` - parser-validated text spans, full-note preview/conflict checks through vault.process, separate inline undo, and multi-value replacement.
 - `src/inline-index.ts` - bounded async indexing, change reconciliation, failure reporting and request invalidation.
 
 - `src/filter-note-list.ts` - read-only filter count disclosure, sorted note rows, progressive loading, native opening/hover, and focus/scroll restoration. Uses the same live path set as the filter count; it does not join tree selection.

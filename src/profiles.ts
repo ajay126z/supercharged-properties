@@ -18,12 +18,15 @@ export function sameKeys(a: readonly string[], b: readonly string[]): boolean {
   return left.size === right.size && [...left].every(key => right.has(key));
 }
 
-export interface PropertyViewState { profiles: PropertyProfile[]; scope: string[] | null; activeProfile: string | null; customPinOverrides?: Record<string, boolean> }
+export interface PropertyViewState { pinned?: string[]; hidden?: string; profiles: PropertyProfile[]; scope: string[] | null; activeProfile: string | null; customPinOverrides?: Record<string, boolean> }
 export function loadViewState(raw: unknown): PropertyViewState {
   const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const profiles = loadProfiles(value.profiles);
   return {
     profiles,
+    ...(value.pinned !== undefined ? { pinned: Array.isArray(value.pinned) ? value.pinned.filter((v): v is string => typeof v === 'string').map(fold) : [] } : {}),
+    ...(typeof value.hidden === 'string' ? { hidden: value.hidden } : {}),
+    ...(loadPinOverrides(value.customPinOverrides) ? { customPinOverrides: loadPinOverrides(value.customPinOverrides) } : {}),
     scope: Array.isArray(value.scope) ? [...new Set(value.scope.filter((key): key is string => typeof key === 'string').map(fold).filter(Boolean))] : null,
     activeProfile: typeof value.activeProfile === 'string' && profiles.some(profile => profile.id === value.activeProfile) ? value.activeProfile : null
   };

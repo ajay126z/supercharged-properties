@@ -26,6 +26,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Inline property/name deletion and renaming, multi-value replacement with one text value, complete note previews, conflict-checked writes, and separate session undo. Inline text Search queries, source-specific pins with view-local overrides, and hidden-inline-property settings.
+
 - Show tooltips setting, enabled by default, to hide property-browser hover hints while preserving screen-reader labels and note previews.
 
 - Saved inline property views with source-specific selections, Save/Update/Rename/Delete controls, persistent settings, and search and Value filter support. Built-in Inline Properties remains protected and saved inline views stay separate from YAML views.

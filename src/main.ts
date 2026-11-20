@@ -1,3 +1,6 @@
+import { InlineEditor } from './inline-editor';
+import { InlineEditModal } from './inline-dialog';
+import { inlineQuery, type InlineEdit } from './inline-edit';
 import { applyTooltips } from './tooltips';
 import { ItemView, Menu, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import { fold, natural, PropertyIndex, PropertyNode, ValueNode } from './index';
@@ -30,6 +33,7 @@ const defaults: Preferences = { showTooltips: true, inlineViews: loadViewState(n
 export default class SuperchargedPropertiesPlugin extends Plugin {
   index = new PropertyIndex();
   inline!: InlineIndex;
+  inlineEditor!: InlineEditor;
   prefs: Preferences = { ...defaults, inlineViews: loadViewState(null) };
   typeResolver!: PropertyTypeResolver;
   valueEditor!: ValueEditor;
@@ -56,6 +60,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
       hidden: typeof saved?.hidden === 'string' ? saved.hidden : '',
       expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((v: unknown) => typeof v === 'string') : []
     };
+    this.inlineEditor = new InlineEditor(this.app, path => this.includesPath(path));
     this.inline = new InlineIndex(file => this.app.vault.cachedRead(file), path => this.includesPath(path), () => this.refresh());
     this.inline.setEnabled(this.prefs.showInlineProperties);
     this.typeResolver = new PropertyTypeResolver(this.app);
@@ -76,6 +81,11 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
         return true;
       }
     });
+    this.addCommand({ id: 'undo-inline-edit', name: 'Undo last inline property edit', checkCallback: checking => {
+      if (!this.inlineEditor.canUndo()) return false;
+      if (!checking) void this.inlineEditor.undo().then(result => { new Notice(`Restored ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed.`); this.rebuild(true); });
+      return true;
+    } });
     this.addSettingTab(new PreferencesTab(this));
     this.registerEvent(this.app.metadataCache.on('changed', (file, _data, cache) => {
       this.updateIndexedNote(file.path, cache.frontmatter);
@@ -182,6 +192,27 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     new Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 10000);
     for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
     this.rebuild();
+  }
+
+  editInline(property: PropertyNode, mode: InlineEdit['mode'], value?: ValueNode): void {
+    const selected = value ? [(JSON.parse(value.id) as string[])[0] === 'empty' ? '' : value.label] : [];
+    new InlineEditModal(this.app, {
+      edit: { property: property.label, mode, replacement: mode === 'rename-property' ? property.label : selected[0] ?? '', values: selected },
+      values: [...property.values.values()].sort((a,b) => natural(a.label,b.label)),
+      preview: edit => this.inlineEditor.preview(edit, property.paths),
+      apply: async plan => {
+        const result = await this.inlineEditor.apply(plan);
+        if (result.updated && mode === 'rename-property') {
+          const state = this.prefs.inlineViews;
+          const prefs = { scope: state.scope, profiles: state.profiles, pinned: state.pinned ?? [], hidden: state.hidden ?? '', expanded: [], customPinOverrides: state.customPinOverrides };
+          includeRenamedProperty(prefs, property.id, plan.edit.replacement);
+          Object.assign(state, { scope: prefs.scope, pinned: prefs.pinned, hidden: prefs.hidden });
+          await this.save();
+        }
+        new Notice(`Updated ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed. Use Undo last inline property edit to restore the last batch.`, 10000);
+        this.rebuild(true);
+      }
+    }).open();
   }
 
   renameProperty(property: PropertyNode): void {
@@ -483,27 +514,26 @@ export class PropertiesView extends ItemView {
   private get inlinePrefs(): PropertyViewState { return this.plugin.prefs.inlineViews ??= loadViewState(null); }
   private get viewPrefs(): PropertyViewState { return this.inlineView ? this.inlinePrefs : this.plugin.prefs; }
   private get pinOverrides(): Record<string, boolean> | undefined {
-    const prefs = this.plugin.prefs;
+    const prefs = this.viewPrefs;
     const profile = prefs.profiles.find(item => item.id === prefs.activeProfile);
     return profile ? profile.pinOverrides : prefs.scope !== null ? prefs.customPinOverrides : undefined;
   }
   private effectivePins(): Set<string> {
-    if (this.inlineView) return new Set();
-    const pins = new Set(this.plugin.prefs.pinned);
+    const pins = new Set(this.inlineView ? this.inlinePrefs.pinned ?? [] : this.plugin.prefs.pinned);
     for (const [key, pinned] of Object.entries(this.pinOverrides ?? {})) {
       if (pinned) pins.add(key); else pins.delete(key);
     }
     return pins;
   }
   private togglePin(key: string): void {
-    const prefs = this.plugin.prefs;
+    const prefs = this.inlineView ? this.inlinePrefs : this.plugin.prefs;
     const pinned = this.effectivePins().has(key);
     const profile = prefs.profiles.find(item => item.id === prefs.activeProfile);
     if (profile || prefs.scope !== null) {
       const overrides = { ...this.pinOverrides, [key]: !pinned };
       if (profile) profile.pinOverrides = overrides;
       else prefs.customPinOverrides = overrides;
-    } else prefs.pinned = pinned ? prefs.pinned.filter(item => item !== key) : [...prefs.pinned, key];
+    } else prefs.pinned = pinned ? (prefs.pinned ?? []).filter(item => item !== key) : [...prefs.pinned ?? [], key];
     void this.plugin.save(); this.render();
   }
   private get expandedKeys(): string[] { return this.inlineView ? this.inlineExpanded : this.plugin.prefs.expanded; }
@@ -558,7 +588,7 @@ export class PropertiesView extends ItemView {
     const choices: ViewChoice[] = [];
     const addSource = (inline: boolean, prefs: PropertyViewState, source: PropertyIndex) => {
       const active = prefs.profiles.find(profile => profile.id === prefs.activeProfile);
-      const hidden = new Set(inline ? [] : this.plugin.prefs.hidden.split('\n').map(fold).filter(Boolean));
+      const hidden = new Set((inline ? this.inlinePrefs.hidden ?? '' : this.plugin.prefs.hidden).split('\n').map(fold).filter(Boolean));
       const available = inline === this.inlineView ? index : source;
       const count = (keys: Iterable<string>) => new Set([...keys].filter(key => available.properties.has(key) && !hidden.has(key))).size;
       const prefix = inline ? 'inline:' : '';
@@ -603,12 +633,12 @@ export class PropertiesView extends ItemView {
     }
     if (action === 'new') {
       const id = this.contentEl.ownerDocument.defaultView!.crypto.randomUUID();
-      prefs.profiles.push({ id, name, keys, ...(!this.inlineView && this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {}) }); prefs.activeProfile = id; prefs.scope = [...keys];
+      prefs.profiles.push({ id, name, keys, ...(this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {}) }); prefs.activeProfile = id; prefs.scope = [...keys];
     } else if (!active) return;
     else if (action === 'update') { active.keys = keys; prefs.scope = [...keys]; }
     else if (action === 'rename') active.name = name;
     else {
-      if (!this.inlineView) prefs.customPinOverrides = active.pinOverrides ? { ...active.pinOverrides } : undefined;
+      prefs.customPinOverrides = active.pinOverrides ? { ...active.pinOverrides } : undefined;
       prefs.profiles = prefs.profiles.filter(profile => profile !== active); prefs.activeProfile = null;
     }
     this.profileName.value = '';
@@ -696,8 +726,7 @@ export class PropertiesView extends ItemView {
     const focusId = (this.contentEl.ownerDocument.activeElement as HTMLElement | null)?.dataset.pvFocus;
     const scroll = this.body.scrollTop; this.body.replaceChildren();
     if (!this.scopePanel.hidden) this.renderScopeChoices(index);
-    const hidden = new Set(this.plugin.prefs.hidden.split('\n').map(fold).filter(Boolean));
-    if (this.inlineView) hidden.clear();
+    const hidden = new Set((this.inlineView ? this.inlinePrefs.hidden ?? '' : this.plugin.prefs.hidden).split('\n').map(fold).filter(Boolean));
     const pinned = this.effectivePins();
     const scope = this.viewPrefs.scope;
     const properties = this.sorted(index.properties.values()).filter(p => !hidden.has(p.id) && (scope === null || scope.includes(p.id)))
@@ -776,7 +805,7 @@ export class PropertiesView extends ItemView {
     this.summary.textContent = `${visible} properties · ${this.filter ? `Filtered (${noteCount})` : scope === null ? 'Entire vault' : 'Custom selection'}`;
     if (this.inlineView) {
       const pending = this.plugin.inline.pending, failures = this.plugin.inline.failures.size;
-      this.summary.textContent += ` · Inline properties · Read-only${pending ? ` · Indexing ${pending} ${pending === 1 ? 'note' : 'notes'}…` : ''}${failures ? ` · ${failures} ${failures === 1 ? 'note' : 'notes'} could not be read` : ''}`;
+      this.summary.textContent += ` · Inline properties${pending ? ` · Indexing ${pending} ${pending === 1 ? 'note' : 'notes'}…` : ''}${failures ? ` · ${failures} ${failures === 1 ? 'note' : 'notes'} could not be read` : ''}`;
     }
     if (!visible) {
       const message = this.inlineView && !this.filter && this.plugin.inline.pending ? 'Reading inline properties…' : this.inlineView && !this.filter && !this.query && !index.properties.size ? 'No inline properties found in included notes.' : this.filter && !valuePaths?.size ? 'No notes match this filter.'
@@ -796,7 +825,7 @@ export class PropertiesView extends ItemView {
       this.showMenu(new MouseEvent('contextmenu', { clientX: point.x, clientY: point.y }), property, node);
     }));
     if (isKey) {
-      const type = this.inlineView ? 'Inline text (read-only)' : this.plugin.typeResolver.typeFor(property);
+      const type = this.inlineView ? 'Inline text' : this.plugin.typeResolver.typeFor(property);
       const icon = el(button, 'span', 'pv-icon pv-type-icon');
       icon.title = `Type: ${type}`;
       icon.setAttribute('aria-hidden', 'true');
@@ -962,6 +991,7 @@ export class PropertiesView extends ItemView {
   }
 
   private queryFor(property: PropertyNode, node: ValueNode): string {
+    if (this.inlineView) return inlineQuery(property.label, property === node ? undefined : (JSON.parse(node.id) as string[])[0] === 'empty' ? '' : node.label);
     if (property === node) return propertyQuery(property.label);
     const [kind] = JSON.parse(node.id) as string[];
     return propertyQuery(property.label, node.label, kind === 'empty');
@@ -993,7 +1023,8 @@ export class PropertiesView extends ItemView {
       }
       view.setQuery(query);
       created = null;
-      if (node !== property && (JSON.parse(node.id) as string[])[0] === 'empty') {
+      if (this.inlineView) new Notice('Inline Search matches text on the same line and can include code examples or other fields.');
+      if (!this.inlineView && node !== property && (JSON.parse(node.id) as string[])[0] === 'empty') {
         new Notice('Search matches null properties; the local empty row also includes blank strings and empty lists.');
       }
     } catch {
@@ -1007,23 +1038,25 @@ export class PropertiesView extends ItemView {
 
   private showMenu(event: MouseEvent, property: PropertyNode, node: ValueNode): void {
     const menu = new Menu();
-    if (!this.inlineView) menu.addItem(item => item.setTitle('Open in Search').setIcon('search').onClick(() => { void this.search(property, node); }));
-    if (!this.inlineView) menu.addItem(item => item.setTitle('Copy search query').setIcon('copy').onClick(() => { void this.copy(this.queryFor(property, node)); }));
+    menu.addItem(item => item.setTitle('Open in Search').setIcon('search').onClick(() => { void this.search(property, node); }));
+    menu.addItem(item => item.setTitle('Copy search query').setIcon('copy').onClick(() => { void this.copy(this.queryFor(property, node)); }));
     menu.addItem(item => item.setTitle('Copy matching note links').setIcon('link').onClick(() => {
       void this.copy([...node.paths].sort(natural).map(path => `[[${path.replace(/\.md$/, '')}]]`).join('\n'));
     }));
-    if (!this.inlineView && node === property) {
-      menu.addItem(item => item.setTitle('Rename property…').setIcon('pencil').onClick(() => this.plugin.renameProperty(property)));
-      menu.addItem(item => item.setTitle('Delete property…').setIcon('trash-2').onClick(() => this.plugin.deleteProperty(property)));
+    if (node === property) {
+      menu.addItem(item => item.setTitle('Rename property…').setIcon('pencil').onClick(() => this.inlineView ? this.plugin.editInline(property, 'rename-property') : this.plugin.renameProperty(property)));
+      menu.addItem(item => item.setTitle('Delete property…').setIcon('trash-2').onClick(() => this.inlineView ? this.plugin.editInline(property, 'delete-property') : this.plugin.deleteProperty(property)));
       const pinned = this.effectivePins().has(property.id);
       menu.addItem(item => item.setTitle(pinned ? 'Unpin property' : 'Pin property').setIcon('pin').onClick(() => {
         this.togglePin(property.id);
       }));
       menu.addItem(item => item.setTitle('Hide property').setIcon('eye-off').onClick(() => {
-        this.plugin.prefs.hidden += `\n${property.label}`; void this.plugin.save(); this.render();
+        if (this.inlineView) this.inlinePrefs.hidden = `${this.inlinePrefs.hidden ?? ''}\n${property.label}`;
+        else this.plugin.prefs.hidden += `\n${property.label}`; void this.plugin.save(); this.render();
         new Notice('Property hidden. Restore it in Supercharged Properties settings.');
       }));
     }
+    if (this.inlineView) menu.addItem(item => item.setTitle(node === property ? 'Replace selected values…' : 'Rename value…').setIcon('pencil').onClick(() => this.plugin.editInline(property, 'replace-values', node === property ? undefined : node)));
     if (node !== property) {
       menu.addItem(item => item.setTitle('Filter by Value').setIcon('filter').onClick(() => {
         this.setFilter({ property: property.id, value: node.id, propertyLabel: property.label, label: node.label });
@@ -1050,7 +1083,7 @@ class PreferencesTab extends PluginSettingTab {
   getSettingDefinitions() {
     // New hosts index these definitions; display() keeps compatibility with Obsidian 1.7.2.
     return [
-      { name: 'Show inline properties', desc: 'Add a separate, read-only Inline Properties view for Dataview-style fields in note bodies. Reads Markdown notes in included folders; no Dataview plugin is required.', render: (setting: Setting) => {
+      { name: 'Show inline properties', desc: 'Add a separate Inline Properties view for Dataview-style fields in note bodies. Reads Markdown notes in included folders; no Dataview plugin is required.', render: (setting: Setting) => {
         setting.addToggle(toggle => toggle.setValue(this.plugin.prefs.showInlineProperties).onChange(value => this.plugin.setShowInlineProperties(value)));
       } },
       { name: 'Show tooltips', desc: 'Show hover hints on the property browser controls and rows. Turning this off keeps screen-reader labels and note previews available.', render: (setting: Setting) => {
@@ -1070,6 +1103,11 @@ class PreferencesTab extends PluginSettingTab {
       } },
       { name: 'Excluded folders', desc: 'One vault-relative folder path per line, for example Templates or Resources/Templates. Includes subfolders; paths are case-sensitive, not patterns. Excluded notes are omitted from the tree, counts, copied links, and new bulk edits. Leave empty to include all folders.', render: (setting: Setting) => {
         setting.addTextArea(text => text.setValue(this.plugin.prefs.excludedFolders).onChange(value => this.plugin.setExcludedFolders(value)));
+      } },
+      { name: 'Hidden inline properties', desc: 'One inline property name per line. Does not hide YAML properties.', render: (setting: Setting) => {
+        setting.addTextArea(text => text.setValue(this.plugin.prefs.inlineViews.hidden ?? '').onChange(async value => {
+          this.plugin.prefs.inlineViews.hidden = value; await this.plugin.save();
+        }));
       } },
       { name: 'Hidden properties', desc: 'One property name per line. Leave empty to show all YAML properties.', render: (setting: Setting) => {
         setting.addTextArea(text => text.setValue(this.plugin.prefs.hidden).onChange(async value => {

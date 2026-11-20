@@ -2,7 +2,7 @@
 
 Supercharged Properties displays your vault's YAML frontmatter as a tree of **properties → values → notes**. Use it to inspect metadata, find notes, organize the view, and explicitly edit matching values across notes.
 
-Browsing, searching, sorting, and saving views do not modify notes. Property-name and value edits write frontmatter only after you review a preview and confirm.
+Browsing, searching, sorting, and saving views do not modify notes. YAML edits write frontmatter; inline edits write note-body fields. Both require preview and confirmation.
 
 This guide describes **1.4.2**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
@@ -117,7 +117,7 @@ Search operates within your current property selection and excludes hidden prope
 
 ## Inline properties
 
-This feature is unreleased, following 1.4.2. Turn on **Settings → Supercharged Properties → Show inline properties**, then select **Inline Properties** in the view dropdown. It is a built-in, read-only view separate from **All properties** and your saved YAML views.
+This feature is unreleased, following 1.4.2. Turn on **Settings → Supercharged Properties → Show inline properties**, then select **Inline Properties** in the view dropdown. It is a built-in view separate from **All properties** and your saved YAML views.
 
 Supported forms:
 
@@ -138,7 +138,17 @@ Fields in nested bullet/numbered lists and their indented continuation lines are
 
 The parser ignores YAML frontmatter, fenced and indented code, inline code, HTML comments, and Obsidian `%%` comments. It does not collect implicit Dataview fields, task emoji shorthand, or multiline values. The reserved metadata key `position` is excluded.
 
-Expand **property → value → notes**, search the tree, sort rows, open notes, or copy matching note links. **Filter by Value** and the expandable matching-note list also work within the inline index. Inline rows offer no rename, merge, split, delete, selected-note editing, or **Open in Search / Copy search query** actions. Those Search queries target YAML properties, so they would not describe inline fields correctly.
+Expand **property → value → notes**, search the tree, sort rows, open notes, or copy matching note links. **Filter by Value** and the expandable matching-note list also work within the inline index. Inline rows offer **Open in Search** and **Copy search query**, using a quoted `line:` text query for the property, `::`, and optional value. Native Search can also match code examples or separate fields on the same line; its results are broader than the inline parser. Search queries remain vault-wide. See [Obsidian Search operators](https://help.obsidian.md/plugins/search).
+
+### Edit inline properties and values
+
+Right-click a property row (long-press on mobile) for **Rename property…**, **Delete property…**, or **Replace selected values…**. On a value row, choose **Rename value…**. In the replacement dialog, select one or more values of that property and enter one new text value. Every matching occurrence of the selected values is replaced; it does not add another value. Repeated inline fields stay repeated, and values remain literal text.
+
+Choose **Preview changes**, review each note's complete before/after text and skipped notes, then **Confirm changes**. Changing an input invalidates the preview. Delete property removes every occurrence of that inline field and its values, including inline wrappers. Rename preserves values and formatting and skips notes where the destination inline property already exists. YAML frontmatter, code, comments, other fields, and surrounding prose remain untouched. Ambiguous or unsupported formatting and replacements that would break inline syntax are skipped.
+
+Edits honor excluded folders and the active Value filter. Tree search and saved views do not further restrict the affected notes. Notes changed after preview are skipped. Use **Supercharged Properties: Undo last inline property edit** to restore the last successful inline batch until reload. Undo restores the complete previous note only if the note still matches the applied version; later edits, missing notes, and currently excluded folders are skipped. Inline undo is separate from YAML's **Undo last property edit**.
+
+Inline property menus also include **Pin/Unpin property** and **Hide property**. Pins in the built-in Inline Properties view are inherited by saved inline views, with local overrides inside each saved view. They do not affect YAML pins. Restore hidden inline properties in **Settings → Supercharged Properties → Hidden inline properties**. Inline note rows remain navigation-only; use property/value menus for inline edits.
 
 ### Save an inline view
 
@@ -150,7 +160,7 @@ Saved inline views appear as **Inline: Name** in the dropdown. Use **Update**, *
 
 **Inline Properties** is the built-in all-fields view and cannot be renamed or deleted. **All → Save new** reports that this view already exists; **None → Save new** asks you to select at least one property. All/None preserve the name you have typed. Empty names, duplicate names within inline views, and the built-in view names are rejected. A YAML view and an inline view can share a name because their dropdown labels distinguish them.
 
-Inline selections and saved views are stored separately from YAML selections and views. Saved keys remain available even if no note currently uses them. Search and **Filter by Value** work within an inline saved view without replacing its saved keys. Inline views remain read-only.
+Inline selections and saved views are stored separately from YAML selections and views. Saved keys remain available even if no note currently uses them. Search and **Filter by Value** work within an inline saved view without replacing its saved keys.
 
 YAML pins, hidden-property settings, and configured type icons do not apply to the inline tree; inline properties use a text icon. Sorting and the Show note counts setting apply to both sources. Inline expansion and filtering are local to the view; switching between sources clears search, value filtering, and note selection without changing the saved YAML views.
 
@@ -296,7 +306,7 @@ Right-click a **property row** and choose **Pin property** to keep it above unpi
 
 Pins set in **All properties** are inherited by other YAML views. Pinning inside a saved view affects only that view. Unpinning an inherited pin inside a saved view hides its pin only there; All properties and other views keep it. Local choices persist across reloads and stay with the saved view when renamed or updated. Existing pins remain global until you override them in a view.
 
-Unsaved custom selections have their own local pin choices, which are copied when you save a new view. Deleting a saved view retains its current pin choices in the resulting custom selection. Inline views remain read-only and do not offer pinning.
+Unsaved custom selections have their own local pin choices, which are copied when you save a new view. Deleting a saved view retains its current pin choices in the resulting custom selection. Inline views have separate pin settings and the same inheritance behavior within inline views.
 
 Choose **Hide property** to remove a property from the tree. To restore it, open **Settings → Supercharged Properties → Hidden properties** and remove its name. Hiding changes the display only; it does not delete metadata. Hidden-property names are matched without regard to capitalization or surrounding whitespace.
 
@@ -343,7 +353,7 @@ Both actions require an explicit confirmation after reviewing the affected and s
 
 The plugin enumerates Markdown notes in your current vault to build the property index and reads cached frontmatter. This is necessary for vault-wide browsing and matching-note counts. It does not enumerate non-Markdown attachments. It also reads the vault's configured property types for icons. When Show inline properties is enabled, it additionally reads included Markdown note bodies for the separate inline index; disabling that setting stops new inline reads and clears that index.
 
-**Copy search query** and **Copy matching note links** write only the generated query or links when you select the action. They replace the current clipboard contents, but never read them. No clipboard monitoring runs in the background. The plugin does not send vault data to external services. Explicit bulk edits write frontmatter after confirmation.
+**Copy search query** and **Copy matching note links** write only the generated query or links when you select the action. They replace the current clipboard contents, but never read them. No clipboard monitoring runs in the background. The plugin does not send vault data to external services. Explicit YAML edits write frontmatter, and inline edits write note-body fields, after preview and confirmation.
 
 Security scanners may flag vault enumeration and clipboard access as capabilities. These capabilities support the features described above; removing them would remove vault-wide indexing or the Copy actions.
 
@@ -354,7 +364,8 @@ Open **Settings → Supercharged Properties**.
 | Setting | Purpose |
 | --- | --- |
 | Show tooltips | Show hover hints on browser controls and rows. On by default; changes apply to open views. Screen-reader labels and note previews remain available when off. |
-| Show inline properties | Add a separate read-only tree of inline fields from note bodies. Off by default. |
+| Hidden inline properties | One inline property name per line; separate from YAML hiding. |
+| Show inline properties | Add a separate tree of inline fields from note bodies. Off by default. |
 | Show note counts | Shows or hides distinct-note counts beside rows. |
 | Sort by | Selects the shared property/value sort preference. |
 | Excluded folders | One vault-relative folder per line, including subfolders; omitted from the index and new bulk edits. |
@@ -369,6 +380,7 @@ Available command-palette commands use the prefix **Supercharged Properties:**.
 | Open sidebar | Opens or reveals the properties view. |
 | Open in tab | Opens a properties view in a tab. |
 | Refresh property index | Rebuilds metadata and type-icon information. |
+| Undo last inline property edit | Restore the last successful inline batch, skipping notes changed afterward. Separate from YAML undo. |
 | Undo last property edit | Restores the last eligible property-name or value edit batch; available only while an undo batch exists and no edit is running. |
 
 ## Keyboard and mobile use
