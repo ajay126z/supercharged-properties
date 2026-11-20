@@ -1,3 +1,4 @@
+import { applyTooltips } from './tooltips';
 // SPDX-License-Identifier: MIT
 import { setIcon } from 'obsidian';
 
@@ -14,7 +15,7 @@ export class ViewPicker {
   private typed = '';
   private typedAt = 0;
 
-  constructor(parent: HTMLElement, private change: (value: string) => void) {
+  constructor(parent: HTMLElement, private change: (value: string) => void, private showTooltips: () => boolean = () => true) {
     this.button = parent.createEl('button', { cls: 'pv-profile-select', attr: { type: 'button', 'aria-label': 'Property view', 'aria-haspopup': 'listbox', 'aria-expanded': 'false' } });
     this.label = this.button.createSpan({ cls: 'pv-profile-label' });
     setIcon(this.button.createSpan({ cls: 'pv-profile-chevron' }), 'chevron-down');
@@ -31,6 +32,7 @@ export class ViewPicker {
     this.button.value = value;
     this.label.textContent = choices.find(choice => choice.value === value)?.label ?? 'Choose a view';
     this.button.title = this.label.textContent;
+    applyTooltips(this.button, this.showTooltips());
     if (this.popup) {
       const focused = this.popup.contains(this.button.ownerDocument.activeElement);
       const scroll = this.popup.scrollTop;
@@ -81,6 +83,7 @@ export class ViewPicker {
       option.addEventListener('click', () => { this.close(); this.change(choice.value); });
       option.addEventListener('focus', () => { this.active = index; });
     }
+    applyTooltips(this.popup!, this.showTooltips());
   }
 
   private focusOption(scroll = true): void {

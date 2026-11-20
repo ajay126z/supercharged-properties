@@ -25,6 +25,31 @@ __export(main_exports, {
   default: () => SuperchargedPropertiesPlugin
 });
 module.exports = __toCommonJS(main_exports);
+
+// src/tooltips.ts
+function applyTooltips(root, enabled) {
+  const selector = "[title], [data-pv-tooltip-title], [aria-label], [data-tooltip-classes]";
+  const elements = Array.from(root.querySelectorAll(selector));
+  if (root.matches(selector)) elements.push(root);
+  for (const element of elements) {
+    if (!enabled) {
+      if (element.hasAttribute("title")) {
+        element.dataset.pvTooltipTitle = element.getAttribute("title");
+        element.removeAttribute("title");
+      }
+    } else if (element.dataset.pvTooltipTitle !== void 0) {
+      if (!element.hasAttribute("title")) element.title = element.dataset.pvTooltipTitle;
+      delete element.dataset.pvTooltipTitle;
+    }
+    const classes = new Set((element.getAttribute("data-tooltip-classes") ?? "").split(/\s+/).filter(Boolean));
+    if (!enabled && element.hasAttribute("aria-label")) classes.add("pv-tooltip-disabled");
+    else classes.delete("pv-tooltip-disabled");
+    if (classes.size) element.setAttribute("data-tooltip-classes", [...classes].join(" "));
+    else element.removeAttribute("data-tooltip-classes");
+  }
+}
+
+// src/main.ts
 var import_obsidian9 = require("obsidian");
 
 // src/frontmatter-values.ts
@@ -1491,8 +1516,9 @@ var InlineIndex = class {
 // src/view-picker.ts
 var import_obsidian7 = require("obsidian");
 var ViewPicker = class {
-  constructor(parent, change) {
+  constructor(parent, change, showTooltips = () => true) {
     this.change = change;
+    this.showTooltips = showTooltips;
     this.choices = [];
     this.active = 0;
     this.typed = "";
@@ -1553,6 +1579,7 @@ var ViewPicker = class {
     this.button.value = value;
     this.label.textContent = choices.find((choice) => choice.value === value)?.label ?? "Choose a view";
     this.button.title = this.label.textContent;
+    applyTooltips(this.button, this.showTooltips());
     if (this.popup) {
       const focused = this.popup.contains(this.button.ownerDocument.activeElement);
       const scroll = this.popup.scrollTop;
@@ -1611,6 +1638,7 @@ var ViewPicker = class {
         this.active = index;
       });
     }
+    applyTooltips(this.popup, this.showTooltips());
   }
   focusOption(scroll = true) {
     const option = this.popup?.children[this.active];
@@ -1643,12 +1671,13 @@ function noteRows(paths) {
   }).sort((a, b) => natural(a.name, b.name) || a.path.localeCompare(b.path));
 }
 var FilterNoteList = class {
-  constructor(app, bar, panel, clear, hoverParent, source) {
+  constructor(app, bar, panel, clear, hoverParent, source, showTooltips = () => true) {
     this.app = app;
     this.panel = panel;
     this.clear = clear;
     this.hoverParent = hoverParent;
     this.source = source;
+    this.showTooltips = showTooltips;
     this.paths = /* @__PURE__ */ new Set();
     this.open = false;
     this.limit = batchSize;
@@ -1718,6 +1747,7 @@ var FilterNoteList = class {
     this.toggle.setAttribute("aria-label", `${this.open ? "Hide" : "Show"} ${n} filtered ${n === 1 ? "note" : "notes"}`);
     this.toggle.title = this.open ? "Hide matching notes" : "Show matching notes";
     (0, import_obsidian8.setIcon)(this.icon, this.open ? "chevron-up" : "chevron-down");
+    applyTooltips(this.toggle, this.showTooltips());
     this.panel.hidden = !this.open || !n;
     this.panel.parentElement?.classList.toggle("pv-filter-notes-open", !this.panel.hidden);
     this.panel.replaceChildren();
@@ -1777,6 +1807,7 @@ var FilterNoteList = class {
         this.buttons()[firstNew]?.focus();
       });
     }
+    applyTooltips(this.panel, this.showTooltips());
     this.panel.scrollTop = scroll;
     if (hadFocus) {
       const buttons = this.buttons();
@@ -1886,7 +1917,7 @@ function attachNoteMenu(element, open) {
 
 // src/main.ts
 var VIEW = "supercharged-properties";
-var defaults = { inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+var defaults = { showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 var SuperchargedPropertiesPlugin = class extends import_obsidian9.Plugin {
   constructor() {
     super(...arguments);
@@ -1900,6 +1931,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian9.Plugin {
     const profiles = loadProfiles(saved?.profiles);
     this.prefs = {
       showInlineProperties: saved.showInlineProperties === true,
+      showTooltips: saved.showTooltips !== false,
       inlineViews: loadViewState(saved.inlineViews),
       profiles,
       activeProfile: typeof saved.activeProfile === "string" && profiles.some((profile) => profile.id === saved.activeProfile) ? saved.activeProfile : null,
@@ -2244,7 +2276,7 @@ var PropertiesView = class extends import_obsidian9.ItemView {
       void this.plugin.save();
       this.plugin.refresh();
       this.render();
-    });
+    }, () => this.plugin.prefs.showTooltips !== false);
     const actions = el2(toolbar, "div", "pv-actions pv-nav-actions");
     toolbar.prepend(actions);
     this.sortButton = this.iconButton(actions, "Sort properties", "arrow-up-narrow-wide", () => this.openSortMenu());
@@ -2278,7 +2310,7 @@ var PropertiesView = class extends import_obsidian9.ItemView {
     const filterActions = el2(this.filterBar, "div", "pv-filter-actions");
     const clearFilter = this.button(filterActions, "Clear", "Clear property filter", () => this.setFilter(null));
     const filterNotes = el2(this.contentEl, "div", "pv-filter-notes");
-    this.filterNoteList = new FilterNoteList(this.app, filterActions, filterNotes, clearFilter, this, VIEW);
+    this.filterNoteList = new FilterNoteList(this.app, filterActions, filterNotes, clearFilter, this, VIEW, () => this.plugin.prefs.showTooltips !== false);
     this.summary = el2(this.contentEl, "div", "pv-summary");
     this.summary.setAttribute("aria-live", "polite");
     this.selectionBar = el2(this.contentEl, "div", "pv-note-selection");
@@ -2432,6 +2464,7 @@ var PropertiesView = class extends import_obsidian9.ItemView {
     this.profileRename = this.button(buttons, "Rename", "Rename active profile", () => this.manageProfile("rename"));
     this.profileDelete = this.button(buttons, "Delete", "Delete active profile", () => this.manageProfile("delete"));
     this.syncProfiles();
+    applyTooltips(this.scopePanel, this.plugin.prefs.showTooltips !== false);
   }
   syncProfiles(index = this.activeIndex()) {
     const choices = [];
@@ -2694,6 +2727,7 @@ var PropertiesView = class extends import_obsidian9.ItemView {
       const message2 = this.inlineView && !this.filter && this.plugin.inline.pending ? "Reading inline properties\u2026" : this.inlineView && !this.filter && !this.query && !index.properties.size ? "No inline properties found in included notes." : this.filter && !valuePaths?.size ? "No notes match this filter." : !this.filter && !this.query && scope?.length === 0 ? "Choose properties above to start exploring." : "No matching properties. Adjust your search or selection.";
       el2(this.body, "div", "pv-empty", message2);
     }
+    applyTooltips(this.contentEl, this.plugin.prefs.showTooltips !== false);
     this.body.scrollTop = scroll;
     if (focusId) Array.from(this.contentEl.querySelectorAll("[data-pv-focus]")).find((e) => e.dataset.pvFocus === focusId)?.focus({ preventScroll: true });
   }
@@ -2982,6 +3016,12 @@ var PreferencesTab = class extends import_obsidian9.PluginSettingTab {
     return [
       { name: "Show inline properties", desc: "Add a separate, read-only Inline Properties view for Dataview-style fields in note bodies. Reads Markdown notes in included folders; no Dataview plugin is required.", render: (setting) => {
         setting.addToggle((toggle) => toggle.setValue(this.plugin.prefs.showInlineProperties).onChange((value) => this.plugin.setShowInlineProperties(value)));
+      } },
+      { name: "Show tooltips", desc: "Show hover hints on the property browser controls and rows. Turning this off keeps screen-reader labels and note previews available.", render: (setting) => {
+        setting.addToggle((toggle) => toggle.setValue(this.plugin.prefs.showTooltips).onChange(async (value) => {
+          this.plugin.prefs.showTooltips = value;
+          await this.plugin.save();
+        }));
       } },
       { name: "Show note counts", render: (setting) => {
         setting.addToggle((toggle) => toggle.setValue(this.plugin.prefs.counts).onChange(async (value) => {

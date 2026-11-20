@@ -24,6 +24,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Show tooltips setting, enabled by default, to hide property-browser hover hints while preserving screen-reader labels and note previews.
+
 - Saved inline property views with source-specific selections, Save/Update/Rename/Delete controls, persistent settings, and search and Value filter support. Built-in Inline Properties remains protected and saved inline views stay separate from YAML views.
 
 - Optional Show inline properties setting and separate read-only Inline Properties view. Browse literal Dataview-style fields as property → value → notes, with local search, sorting, distinct-note counts, copied links, and Value filters. Excluded folders apply; YAML views and editing remain separate. Background reads are bounded and discard outdated results.

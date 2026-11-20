@@ -349,6 +349,7 @@ Open **Settings → Supercharged Properties**.
 
 | Setting | Purpose |
 | --- | --- |
+| Show tooltips | Show hover hints on browser controls and rows. On by default; changes apply to open views. Screen-reader labels and note previews remain available when off. |
 | Show inline properties | Add a separate read-only tree of inline fields from note bodies. Off by default. |
 | Show note counts | Shows or hides distinct-note counts beside rows. |
 | Sort by | Selects the shared property/value sort preference. |

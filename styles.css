@@ -171,3 +171,5 @@
 .pv-view-menu .pv-view-option:hover, .pv-view-menu .pv-view-option:focus-visible { background:var(--background-modifier-hover); outline:2px solid var(--interactive-accent); outline-offset:-2px; }
 .is-mobile .pv-view-menu .pv-view-option { min-height:44px; }
 @media (pointer:coarse) { .pv-view-menu .pv-view-option { min-height:44px; } }
+
+.tooltip.pv-tooltip-disabled { display:none; }

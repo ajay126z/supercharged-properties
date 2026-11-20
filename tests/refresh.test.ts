@@ -213,3 +213,11 @@ it('persists inline view settings separately from YAML view settings', async () 
   const restored=await setup(saveData.mock.calls[0][0]);
   expect(restored.plugin.prefs.inlineViews).toEqual(inlineViews);
 });
+
+it('defaults tooltips to enabled and restores the disabled preference', async () => {
+  expect((await setup()).plugin.prefs.showTooltips).toBe(true);
+  const {plugin}=await setup({showTooltips:false});
+  expect(plugin.prefs.showTooltips).toBe(false);
+  const saveData=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saveData;
+  await plugin.save();expect(saveData.mock.calls[0][0].showTooltips).toBe(false);
+});

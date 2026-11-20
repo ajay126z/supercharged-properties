@@ -1,3 +1,4 @@
+import { applyTooltips } from './tooltips';
 import { ItemView, Menu, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, setIcon } from 'obsidian';
 import { fold, natural, PropertyIndex, PropertyNode, ValueNode } from './index';
 
@@ -22,9 +23,9 @@ import type { PropertyValueKind } from './frontmatter-values';
 import { noteEditError, textOnlyList, type ListItem } from './note-value-operations';
 
 const VIEW = 'supercharged-properties';
-interface Preferences { inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
+interface Preferences { showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
 interface ValueFilter { property: string; value: string; propertyLabel: string; label: string }
-const defaults: Preferences = { inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+const defaults: Preferences = { showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 
 export default class SuperchargedPropertiesPlugin extends Plugin {
   index = new PropertyIndex();
@@ -42,6 +43,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     const profiles = loadProfiles(saved?.profiles);
     this.prefs = {
       showInlineProperties: saved.showInlineProperties === true,
+      showTooltips: saved.showTooltips !== false,
       inlineViews: loadViewState(saved.inlineViews),
       profiles,
       activeProfile: typeof saved.activeProfile === 'string' && profiles.some(profile => profile.id === saved.activeProfile) ? saved.activeProfile : null,
@@ -380,7 +382,7 @@ export class PropertiesView extends ItemView {
       }
       this.query = ''; this.input.value = ''; this.expandedValues.clear();
       void this.plugin.save(); this.plugin.refresh(); this.render();
-    });
+    }, () => this.plugin.prefs.showTooltips !== false);
     const actions = el(toolbar, 'div', 'pv-actions pv-nav-actions');
     toolbar.prepend(actions);
     this.sortButton = this.iconButton(actions, 'Sort properties', 'arrow-up-narrow-wide', () => this.openSortMenu());
@@ -412,7 +414,7 @@ export class PropertiesView extends ItemView {
     const filterActions = el(this.filterBar, 'div', 'pv-filter-actions');
     const clearFilter = this.button(filterActions, 'Clear', 'Clear property filter', () => this.setFilter(null));
     const filterNotes = el(this.contentEl, 'div', 'pv-filter-notes');
-    this.filterNoteList = new FilterNoteList(this.app, filterActions, filterNotes, clearFilter, this, VIEW);
+    this.filterNoteList = new FilterNoteList(this.app, filterActions, filterNotes, clearFilter, this, VIEW, () => this.plugin.prefs.showTooltips !== false);
     this.summary = el(this.contentEl, 'div', 'pv-summary'); this.summary.setAttribute('aria-live', 'polite');
     this.selectionBar = el(this.contentEl, 'div', 'pv-note-selection');
     this.selectionBar.hidden = true;
@@ -525,6 +527,7 @@ export class PropertiesView extends ItemView {
     this.profileRename = this.button(buttons, 'Rename', 'Rename active profile', () => this.manageProfile('rename'));
     this.profileDelete = this.button(buttons, 'Delete', 'Delete active profile', () => this.manageProfile('delete'));
     this.syncProfiles();
+    applyTooltips(this.scopePanel, this.plugin.prefs.showTooltips !== false);
   }
   private syncProfiles(index = this.activeIndex()): void {
     const choices: ViewChoice[] = [];
@@ -753,6 +756,7 @@ export class PropertiesView extends ItemView {
         : 'No matching properties. Adjust your search or selection.';
       el(this.body, 'div', 'pv-empty', message);
     }
+    applyTooltips(this.contentEl, this.plugin.prefs.showTooltips !== false);
     this.body.scrollTop = scroll;
     if (focusId) Array.from(this.contentEl.querySelectorAll<HTMLElement>('[data-pv-focus]')).find(e => e.dataset.pvFocus === focusId)?.focus({ preventScroll: true });
   }
@@ -1021,6 +1025,11 @@ class PreferencesTab extends PluginSettingTab {
     return [
       { name: 'Show inline properties', desc: 'Add a separate, read-only Inline Properties view for Dataview-style fields in note bodies. Reads Markdown notes in included folders; no Dataview plugin is required.', render: (setting: Setting) => {
         setting.addToggle(toggle => toggle.setValue(this.plugin.prefs.showInlineProperties).onChange(value => this.plugin.setShowInlineProperties(value)));
+      } },
+      { name: 'Show tooltips', desc: 'Show hover hints on the property browser controls and rows. Turning this off keeps screen-reader labels and note previews available.', render: (setting: Setting) => {
+        setting.addToggle(toggle => toggle.setValue(this.plugin.prefs.showTooltips).onChange(async value => {
+          this.plugin.prefs.showTooltips = value; await this.plugin.save();
+        }));
       } },
       { name: 'Show note counts', render: (setting: Setting) => {
         setting.addToggle(toggle => toggle.setValue(this.plugin.prefs.counts).onChange(async value => {

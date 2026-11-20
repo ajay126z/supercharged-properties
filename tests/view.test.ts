@@ -1073,3 +1073,24 @@ it.each([
   input.value=inline?'Inline.md':'Projects/One';input.dispatchEvent(new Event('input'));
   expect(document.querySelectorAll('.pv-file').length).toBeGreaterThan(0);
 });
+
+it('disables and restores browser tooltips while preserving accessible controls', () => {
+  const picker=document.querySelector<HTMLButtonElement>('[aria-label="Property view"]')!;
+  expect(picker.title).toContain('All properties');
+  plugin.prefs.showTooltips=false;view.render();
+  expect(document.querySelectorAll('.pv-view [title]')).toHaveLength(0);
+  expect(picker.getAttribute('aria-label')).toBe('Property view');
+  expect(picker.getAttribute('data-tooltip-classes')).toContain('pv-tooltip-disabled');
+  click('Choose properties to show');
+  expect(document.querySelectorAll('.pv-scope-panel [title]')).toHaveLength(0);
+  click('Expand status');filterValue('Show notes with status: Done (1)');click('Show 1 filtered note');
+  expect(document.querySelector('.pv-filter-note')!.hasAttribute('title')).toBe(false);
+  expect(document.querySelector('.pv-filter-note')!.getAttribute('aria-label')).toContain('One');
+  click('Property view');
+  expect(document.querySelector('.pv-view-menu')!.getAttribute('data-tooltip-classes')).toContain('pv-tooltip-disabled');
+  click('Property view');
+  plugin.prefs.showTooltips=true;view.render();
+  expect(picker.title).toContain('All properties');
+  expect(picker.hasAttribute('data-tooltip-classes')).toBe(false);
+  expect(document.querySelector('.pv-filter-note')!.getAttribute('title')).toBe('Projects/One.md');
+});

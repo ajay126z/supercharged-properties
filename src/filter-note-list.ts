@@ -1,3 +1,4 @@
+import { applyTooltips } from './tooltips';
 // SPDX-License-Identifier: MIT
 import { Keymap, Notice, setIcon, type App } from 'obsidian';
 import { natural } from './index';
@@ -23,7 +24,7 @@ export class FilterNoteList {
   private limit = batchSize;
 
   constructor(private app: App, bar: HTMLElement, private panel: HTMLElement,
-    private clear: HTMLButtonElement, private hoverParent: unknown, private source: string) {
+    private clear: HTMLButtonElement, private hoverParent: unknown, private source: string, private showTooltips: () => boolean = () => true) {
     panel.id = `pv-filter-notes-${++nextListId}`;
     panel.hidden = true;
     this.toggle = bar.createEl('button', { cls: 'pv-filter-toggle' });
@@ -85,6 +86,7 @@ export class FilterNoteList {
     this.toggle.setAttribute('aria-label', `${this.open ? 'Hide' : 'Show'} ${n} filtered ${n === 1 ? 'note' : 'notes'}`);
     this.toggle.title = this.open ? 'Hide matching notes' : 'Show matching notes';
     setIcon(this.icon, this.open ? 'chevron-up' : 'chevron-down');
+    applyTooltips(this.toggle, this.showTooltips());
     this.panel.hidden = !this.open || !n;
     this.panel.parentElement?.classList.toggle('pv-filter-notes-open', !this.panel.hidden);
     this.panel.replaceChildren();
@@ -129,6 +131,7 @@ export class FilterNoteList {
         this.limit += batchSize; this.render(); this.buttons()[firstNew]?.focus();
       });
     }
+    applyTooltips(this.panel, this.showTooltips());
     this.panel.scrollTop = scroll;
     if (hadFocus) {
       const buttons = this.buttons();

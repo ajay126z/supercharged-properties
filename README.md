@@ -138,6 +138,7 @@ When choosing properties, **All** and **None** keep the view name you have typed
 
 | Setting | What it does |
 | --- | --- |
+| Show tooltips | Show hover hints in the property browser; enabled by default. |
 | Show inline properties | Add the separate read-only Inline Properties view; disabled by default. |
 | Show note counts | Show how many distinct notes use each property or value. |
 | Sort by | Choose alphabetical order or note frequency. |
