@@ -50,7 +50,8 @@ export class FilterNoteList {
 
   reset(): void { this.open = false; this.limit = batchSize; this.panel.scrollTop = 0; }
 
-  update(paths: ReadonlySet<string> | null): void {
+  update(paths: ReadonlySet<string> | null, preserveOpenWhenEmpty = false): void {
+    if (!paths?.size && !preserveOpenWhenEmpty) this.reset();
     this.paths = paths ?? new Set();
     this.render();
   }
@@ -78,7 +79,6 @@ export class FilterNoteList {
     const moreFocused = active?.classList.contains('pv-filter-note-more-button');
     const scroll = this.panel.scrollTop;
     const n = this.paths.size;
-    if (!n) this.reset();
     this.count.textContent = `${n} ${n === 1 ? 'note' : 'notes'}`;
     this.toggle.disabled = n === 0;
     this.toggle.setAttribute('aria-expanded', String(this.open && n > 0));

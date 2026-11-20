@@ -68,7 +68,7 @@ Open Supercharged Properties, expand `status`, then expand `doing` to find the n
 | Note row | Opens the note; Ctrl/Cmd-click opens a new tab. In mobile selection mode, tapping toggles selection. Right-click (desktop) or long-press (mobile) opens supported property-editing actions. |
 | Note-selection checkbox | Toggles selection without opening the note. Available during selection mode on desktop and mobile. |
 | Expand all properties | Expands currently visible properties. It does not open every value's note list. |
-| Collapse all properties | Collapses branches and clears the tree search. |
+| Collapse all properties | Collapses displayed properties while preserving the search, active view, and Value filter. |
 | Show more | Reveals another page of a large value or note list. |
 | Refresh property index | Rebuilds the tree and reloads property type icons. |
 
@@ -77,6 +77,8 @@ The tree updates automatically as notes and metadata change, including note and 
 Property rows show type icons based on the vault's configured property types, such as text, list, tags, number, checkbox, date, or date & time. Unrecognized or unavailable types fall back to text. Icons describe the configured property type; individual value rows retain the actual stored value's type.
 
 ## Understand values and counts
+
+During search, property and value counts reflect distinct matching notes, including matches by value or note name/path. Collapsing branches does not change those counts; clearing search restores the full counts.
 
 Counts are **distinct notes**, not the number of assignments. A note with `topics: [writing, writing]` contributes one count to `writing`. A note with two different topics appears under both topics, so adding value counts can exceed the property's note count.
 
@@ -109,7 +111,7 @@ Within nonempty lists, null entries contribute to `(empty)`; blank text and empt
 
 Search uses case-insensitive substring matching. It is a local tree filter, not an Obsidian query parser: enter `Projects/` to find matching paths, rather than `path:Projects`.
 
-Matching branches expand automatically. A matching property can show all its values; a matching value can show all its notes. A note-path match reveals the relevant note branch. Clear the input to return to ordinary browsing. **Escape** or hiding the search input clears the tree search, but keeps an active Value filter. Changing the property view also clears the tree search.
+Matching branches expand automatically. You can then expand or collapse individual properties and value branches with their arrows, including after Collapse all. After Collapse all, expanding a property shows only its values; expand a value separately to see its notes. A new search automatically reveals matching note branches again. These choices stay in place during live refresh and reset when the search or view changes. A matching property can show all its values; a matching value can show all its notes. A note-path match reveals the relevant note branch. Clear the input to return to ordinary browsing. **Escape** or hiding the search input clears the tree search, but keeps an active Value filter. Changing the property view also clears the tree search.
 
 Search operates within your current property selection and excludes hidden properties. It does not limit the scope of bulk edits or the row's copy-links action.
 
@@ -173,7 +175,9 @@ Only one condition is active. Choosing another value replaces the condition and 
 
 Counts are distinct note paths, not property assignments or list items. For one note with `author: AJ`, `rating: 4`, and `topic: design`, filtering `author = AJ` shows **1 note** in the bar and **2 properties · Filtered (1 note)** in the summary. The two properties are rating and topic.
 
-The expandable note list sorts by note name, with numeric ordering (Note 2 before Note 10) and full path as a tie-breaker. Folder labels and full-path tooltips distinguish duplicate names. It initially shows up to 200 notes; **Show more** loads the next batch. The count always includes the whole subset, even before all rows are loaded. Tree search does not narrow this list.
+The expandable note list sorts by note name, with numeric ordering (Note 2 before Note 10) and full path as a tie-breaker. Folder labels and full-path tooltips distinguish duplicate names. It initially shows up to 200 notes; **Show more** loads the next batch. The count includes all matching notes, even before all rows are loaded.
+
+When a Value filter is active, the matching-note dropdown and its count also follow the tree search (property names, values, or note names/paths). This works whether you search before or after applying the Value filter. Clearing the search restores the full Value filter note list; collapsing branches does not change the list. Search narrows the displayed list only: edit previews continue to use the Value filter's full note subset.
 
 Click or tap a name to open that note in the current editor. Ctrl/Cmd-click opens a new tab; Obsidian's additional opening modifiers are respected. Opening a note leaves the filter and disclosure state intact. This list is for opening notes only; use note rows in the property tree for selection and editing. On desktop, Page preview works according to Obsidian's settings (by default, hold Ctrl/Cmd while hovering). It requires the Page preview core plugin.
 

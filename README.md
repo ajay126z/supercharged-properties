@@ -8,7 +8,7 @@ Choose the properties you want to see, save views for different projects, and ex
 
 ## Explore your notes
 
-- **Browse properties → values → notes.** Expand a property to see its values, then open the notes that use them.
+- **Browse properties → values → notes.** Expand a property to see its values, then open the notes that use them. Expand/collapse all preserves your search, active view, and Value filter. Individual branch arrows also work within search and filtered results. After Collapse all, expand properties → values → notes one level at a time. Property/value counts and the Value filter’s matching-note list update as you search.
 - **Find what you need.** Search property names, values, note names, or folder paths. Open matching notes in Obsidian Search or copy their links.
 - **See how properties are used.** Note counts show how common each property or value is. Type icons help distinguish text, lists, numbers, dates, and checkboxes.
 - **Choose your order.** Sort alphabetically or by how many notes use a property or value.

@@ -294,6 +294,11 @@ export class PropertiesView extends ItemView {
   private noteMenuDisposers: Array<() => void> = [];
   private query = '';
   private searchScope = 'any';
+  private searchExpanded = true;
+  private autoExpandSearchNotes = true;
+  private searchPropertyExpansion = new Map<string, boolean>();
+  private searchValueExpansion = new Map<string, boolean>();
+  private expansionContext = '';
   private searchHeader!: HTMLElement;
   private searchToggle!: HTMLButtonElement;
   private searchScopeButton!: HTMLButtonElement;
@@ -383,8 +388,16 @@ export class PropertiesView extends ItemView {
     this.iconButton(actions, 'Refresh property index', 'refresh-cw', () => this.plugin.rebuild(true));
     this.expandToggle = this.iconButton(actions, 'Expand all properties', 'list-tree', () => {
       if (this.allExpanded) {
-        this.query = ''; this.input.value = ''; this.expandedValues.clear();
-        this.expandedKeys = [];
+        this.expandedValues.clear();
+        this.searchValueExpansion.clear();
+        this.autoExpandSearchNotes = false;
+      }
+      if (this.query) {
+        this.searchExpanded = !this.allExpanded;
+        this.searchPropertyExpansion.clear();
+      } else if (this.allExpanded) {
+        const visible = new Set(this.visibleKeys);
+        this.expandedKeys = this.expandedKeys.filter(key => !visible.has(key));
       } else {
         this.expandedKeys = [...new Set([...this.expandedKeys, ...this.visibleKeys])];
       }
@@ -468,7 +481,14 @@ export class PropertiesView extends ItemView {
   private get viewPrefs(): PropertyViewState { return this.inlineView ? this.inlinePrefs : this.plugin.prefs; }
   private get expandedKeys(): string[] { return this.inlineView ? this.inlineExpanded : this.plugin.prefs.expanded; }
   private set expandedKeys(keys: string[]) { if (this.inlineView) this.inlineExpanded = keys; else this.plugin.prefs.expanded = keys; }
+  private propertyExpanded(key: string): boolean {
+    return this.query ? this.searchPropertyExpansion.get(key) ?? this.searchExpanded : this.expandedKeys.includes(key);
+  }
   private toggleProperty(key: string): void {
+    if (this.query) {
+      this.searchPropertyExpansion.set(key, !this.propertyExpanded(key));
+      this.render(); return;
+    }
     const keys = new Set(this.expandedKeys);
     if (keys.has(key)) keys.delete(key); else keys.add(key);
     this.expandedKeys = [...keys]; void this.plugin.save(); this.render();
@@ -626,6 +646,14 @@ export class PropertiesView extends ItemView {
       this.plugin.prefs.scope = null; this.plugin.prefs.activeProfile = null;
       void this.plugin.save();
     }
+    const expansionContext = JSON.stringify([this.inlineView, this.query, this.searchScope, this.viewPrefs.scope, this.viewPrefs.activeProfile, this.filter]);
+    if (expansionContext !== this.expansionContext) {
+      this.expansionContext = expansionContext;
+      this.searchExpanded = true;
+      this.autoExpandSearchNotes = true;
+      this.searchPropertyExpansion.clear();
+      this.searchValueExpansion.clear();
+    }
     this.scopeButton.disabled = false;
     this.scopeButton.title = 'Choose properties to show';
     const valuePaths = this.filterPaths();
@@ -645,6 +673,7 @@ export class PropertiesView extends ItemView {
       .sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
     this.sortButton.title = `Sort: ${sortOptions[this.plugin.prefs.sort]}`;
     let visible = 0;
+    const searchPaths = new Set<string>();
     this.visibleKeys = [];
     for (const property of properties) {
       const keyMatches = !this.query || this.matches(property.label, 'key');
@@ -652,14 +681,20 @@ export class PropertiesView extends ItemView {
       const values = this.sorted(property.values.values()).filter(v => keyMatches || this.matches(v.label, 'value') || noteMatches(v));
       if (!keyMatches && !values.length && !noteMatches(property)) continue;
       visible++;
+      // Count distinct matching notes, independently of expansion and pagination.
+      const matchingPaths = keyMatches ? property.paths : new Set([...property.paths].filter(path => this.matches(path, 'note')));
+      if (!keyMatches) for (const value of values) if (this.matches(value.label, 'value')) {
+        for (const path of value.paths) matchingPaths.add(path);
+      }
+      if (this.filter && this.query) for (const path of matchingPaths) searchPaths.add(path);
       this.visibleKeys.push(property.id);
       const group = el(this.body, 'div', 'pv-group');
       const row = el(group, 'div', 'pv-row pv-property-row');
-      const expanded = !!this.query || this.expandedKeys.includes(property.id);
+      const expanded = this.propertyExpanded(property.id);
       const toggle = this.iconButton(row, `${expanded ? 'Collapse' : 'Expand'} ${property.label}`, expanded ? 'chevron-down' : 'chevron-right', () => this.toggleProperty(property.id));
-      toggle.className = 'pv-toggle'; toggle.disabled = !!this.query;
+      toggle.className = 'pv-toggle';
       toggle.dataset.pvFocus = JSON.stringify(['toggle', property.id]); toggle.setAttribute('aria-expanded', String(expanded));
-      const button = this.nodeButton(row, property, property, () => this.toggleProperty(property.id));
+      const button = this.nodeButton(row, property, property, () => this.toggleProperty(property.id), matchingPaths.size);
       button.setAttribute('aria-expanded', String(expanded));
       if (!expanded) continue;
       const children = el(group, 'div', 'pv-values');
@@ -667,18 +702,20 @@ export class PropertiesView extends ItemView {
       for (const value of values.slice(0, limit)) {
         const valueGroup = el(children, 'div', 'pv-value-group');
         const id = JSON.stringify([property.id, value.id]);
-        const showNotes = this.expandedValues.has(id) || (!!this.query && !keyMatches && !this.matches(value.label, 'value') && noteMatches(value));
+        const automaticNotes = this.expandedValues.has(id) || (!!this.query && this.autoExpandSearchNotes && !keyMatches && !this.matches(value.label, 'value') && noteMatches(value));
+        const showNotes = this.query ? this.searchValueExpansion.get(id) ?? automaticNotes : automaticNotes;
         const valueRow = el(valueGroup, 'div', 'pv-row');
         const toggleValue = () => {
-          if (showNotes) this.expandedValues.delete(id); else this.expandedValues.add(id); this.render();
+          if (this.query) this.searchValueExpansion.set(id, !showNotes);
+          else if (showNotes) this.expandedValues.delete(id); else this.expandedValues.add(id);
+          this.render();
         };
         const valueToggle = this.iconButton(valueRow, `${showNotes ? 'Collapse' : 'Expand'} notes for ${property.label}: ${value.label}`, showNotes ? 'chevron-down' : 'chevron-right', toggleValue);
         valueToggle.className = 'pv-toggle';
         valueToggle.dataset.pvFocus = JSON.stringify(['value-toggle', property.id, value.id]);
         valueToggle.setAttribute('aria-expanded', String(showNotes));
-        // Search-expanded branches stay open until the filter is cleared.
-        valueToggle.disabled = !!this.query && !keyMatches && !this.matches(value.label, 'value') && noteMatches(value);
-        const valueButton = this.nodeButton(valueRow, property, value, toggleValue);
+        const matchingCount = keyMatches || this.matches(value.label, 'value') ? value.paths.size : [...value.paths].filter(path => this.matches(path, 'note')).length;
+        const valueButton = this.nodeButton(valueRow, property, value, toggleValue, matchingCount);
         valueButton.setAttribute('aria-expanded', String(showNotes));
         if (showNotes) this.renderNotes(valueGroup, property, value, id, keyMatches || this.matches(value.label, 'value'));
       }
@@ -688,14 +725,15 @@ export class PropertiesView extends ItemView {
       const otherPaths = new Set([...property.paths].filter(path => !assigned.has(path)));
       if (otherPaths.size) this.renderNotes(children, property, { ...property, paths: otherPaths }, property.id, keyMatches);
     }
-    this.allExpanded = this.visibleKeys.length > 0 && (!!this.query || this.visibleKeys.every(key => this.expandedKeys.includes(key)));
+    this.allExpanded = this.visibleKeys.length > 0 && this.visibleKeys.every(key => this.propertyExpanded(key));
     const toggleLabel = this.allExpanded ? 'Collapse all properties' : 'Expand all properties';
     this.expandToggle.title = toggleLabel;
     this.expandToggle.setAttribute('aria-label', toggleLabel);
     this.expandToggle.setAttribute('aria-pressed', String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
     setIcon(this.expandToggle, this.allExpanded ? 'fold-vertical' : 'list-tree');
-    const n = valuePaths?.size ?? 0;
+    const displayedPaths = this.filter && this.query ? searchPaths : valuePaths;
+    const n = displayedPaths?.size ?? 0;
     const noteCount = `${n} ${n === 1 ? 'note' : 'notes'}`;
     this.filterBar.hidden = !this.filter;
     if (this.filter) {
@@ -703,14 +741,14 @@ export class PropertiesView extends ItemView {
       this.filterLabel.textContent = text;
       this.filterLabel.title = this.filterBar.title = text;
     }
-    this.filterNoteList.update(valuePaths);
+    this.filterNoteList.update(displayedPaths, !!this.query && !!valuePaths?.size);
     this.summary.textContent = `${visible} properties · ${this.filter ? `Filtered (${noteCount})` : scope === null ? 'Entire vault' : 'Custom selection'}`;
     if (this.inlineView) {
       const pending = this.plugin.inline.pending, failures = this.plugin.inline.failures.size;
       this.summary.textContent += ` · Inline properties · Read-only${pending ? ` · Indexing ${pending} ${pending === 1 ? 'note' : 'notes'}…` : ''}${failures ? ` · ${failures} ${failures === 1 ? 'note' : 'notes'} could not be read` : ''}`;
     }
     if (!visible) {
-      const message = this.inlineView && !this.filter && this.plugin.inline.pending ? 'Reading inline properties…' : this.inlineView && !this.filter && !this.query && !index.properties.size ? 'No inline properties found in included notes.' : this.filter && n === 0 ? 'No notes match this filter.'
+      const message = this.inlineView && !this.filter && this.plugin.inline.pending ? 'Reading inline properties…' : this.inlineView && !this.filter && !this.query && !index.properties.size ? 'No inline properties found in included notes.' : this.filter && !valuePaths?.size ? 'No notes match this filter.'
         : !this.filter && !this.query && scope?.length === 0 ? 'Choose properties above to start exploring.'
         : 'No matching properties. Adjust your search or selection.';
       el(this.body, 'div', 'pv-empty', message);
@@ -718,9 +756,9 @@ export class PropertiesView extends ItemView {
     this.body.scrollTop = scroll;
     if (focusId) Array.from(this.contentEl.querySelectorAll<HTMLElement>('[data-pv-focus]')).find(e => e.dataset.pvFocus === focusId)?.focus({ preventScroll: true });
   }
-  private nodeButton(row: HTMLElement, property: PropertyNode, node: ValueNode, run: () => void): HTMLButtonElement {
+  private nodeButton(row: HTMLElement, property: PropertyNode, node: ValueNode, run: () => void, count = node.paths.size): HTMLButtonElement {
     const isKey = node === property;
-    const button = this.button(row, '', `${isKey ? 'Toggle' : 'Show notes with'} ${property.label}${isKey ? '' : ': ' + node.label} (${node.paths.size})`, run);
+    const button = this.button(row, '', `${isKey ? 'Toggle' : 'Show notes with'} ${property.label}${isKey ? '' : ': ' + node.label} (${count})`, run);
     button.className = 'pv-node'; button.dataset.pvFocus = JSON.stringify([property.id, isKey ? null : node.id]);
     this.noteMenuDisposers.push(attachNoteMenu(button, point => {
       this.showMenu(new MouseEvent('contextmenu', { clientX: point.x, clientY: point.y }), property, node);
@@ -735,7 +773,7 @@ export class PropertiesView extends ItemView {
     el(button, 'span', 'pv-label', node.label);
     if (isKey && this.plugin.prefs.pinned.includes(property.id)) setIcon(el(button, 'span', 'pv-pin'), 'pin');
     if (!isKey) { const kind = (JSON.parse(node.id) as string[])[0]; if (kind !== 'string') el(button, 'span', 'pv-kind', kind); }
-    if (this.plugin.prefs.counts) el(button, 'span', 'pv-count', String(node.paths.size));
+    if (this.plugin.prefs.counts) el(button, 'span', 'pv-count', String(count));
     return button;
   }
   private renderNotes(parent: HTMLElement, property: PropertyNode, node: ValueNode, id: string, ancestorMatches: boolean): void {

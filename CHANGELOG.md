@@ -8,6 +8,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- After Collapse all in note/path search results, expand properties to values first, then expand values to notes. New searches still reveal matching branches automatically.
+
+- Show distinct search-matching note counts on property and value rows in YAML and inline views, including inside Value filters.
+
+- Keep Value filter note lists and counts synchronized with tree search regardless of whether search or filtering is applied first.
+
+- Enable individual property and value expanders in search results, including within Value filters and after Collapse all.
+
+- Preserve search results when collapsing or expanding all properties in YAML and inline views, including saved views and Value filters.
+
 - Open the view picker below the toolbar with viewport-bounded scrolling, wrapped names, and keyboard navigation, avoiding native dropdowns that open upward and hide views.
 
 - Recognize inline properties and link values inside nested lists and indented list continuations, while continuing to exclude fenced and indented code.
