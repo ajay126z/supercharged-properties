@@ -12,6 +12,7 @@ This guide describes **1.4.2**, with Value filter and its expandable note list, 
 - [Browse properties, values, and notes](#browse-properties-values-and-notes)
 - [Understand values and counts](#understand-values-and-counts)
 - [Search the tree](#search-the-tree)
+- [Inline properties](#inline-properties)
 - [Value filter](#value-filter)
 - [Choose properties](#choose-properties)
 - [Exclude template or other folders](#exclude-template-or-other-folders)
@@ -67,7 +68,7 @@ Open Supercharged Properties, expand `status`, then expand `doing` to find the n
 | Note row | Opens the note; Ctrl/Cmd-click opens a new tab. In mobile selection mode, tapping toggles selection. Right-click (desktop) or long-press (mobile) opens supported property-editing actions. |
 | Note-selection checkbox | Toggles selection without opening the note. Available during selection mode on desktop and mobile. |
 | Expand all properties | Expands currently visible properties. It does not open every value's note list. |
-| Collapse all properties | Collapses displayed properties while keeping the current view, tree search, and Value filter. |
+| Collapse all properties | Collapses displayed properties while preserving the search, active view, and Value filter. |
 | Show more | Reveals another page of a large value or note list. |
 | Refresh property index | Rebuilds the tree and reloads property type icons. |
 
@@ -76,6 +77,8 @@ The tree updates automatically as notes and metadata change, including note and 
 Property rows show type icons based on the vault's configured property types, such as text, list, tags, number, checkbox, date, or date & time. Unrecognized or unavailable types fall back to text. Icons describe the configured property type; individual value rows retain the actual stored value's type.
 
 ## Understand values and counts
+
+During search, property and value counts reflect distinct matching notes, including matches by value or note name/path. Collapsing branches does not change those counts; clearing search restores the full counts.
 
 Counts are **distinct notes**, not the number of assignments. A note with `topics: [writing, writing]` contributes one count to `writing`. A note with two different topics appears under both topics, so adding value counts can exceed the property's note count.
 
@@ -108,9 +111,50 @@ Within nonempty lists, null entries contribute to `(empty)`; blank text and empt
 
 Search uses case-insensitive substring matching. It is a local tree filter, not an Obsidian query parser: enter `Projects/` to find matching paths, rather than `path:Projects`.
 
-Matching branches expand automatically. A matching property can show all its values; a matching value can show all its notes. A note-path match reveals the relevant note branch. Clear the input to return to ordinary browsing. **Escape** or hiding the search input clears the tree search, but keeps an active Value filter. Changing the property view also clears the tree search.
+Matching branches expand automatically. You can then expand or collapse individual properties and value branches with their arrows, including after Collapse all. After Collapse all, expanding a property shows only its values; expand a value separately to see its notes. A new search automatically reveals matching note branches again. These choices stay in place during live refresh and reset when the search or view changes. A matching property can show all its values; a matching value can show all its notes. A note-path match reveals the relevant note branch. Clear the input to return to ordinary browsing. **Escape** or hiding the search input clears the tree search, but keeps an active Value filter. Changing the property view also clears the tree search.
 
 Search operates within your current property selection and excludes hidden properties. It does not limit the scope of bulk edits or the row's copy-links action.
+
+## Inline properties
+
+This feature is unreleased, following 1.4.2. Turn on **Settings → Supercharged Properties → Show inline properties**, then select **Inline Properties** in the view dropdown. It is a built-in, read-only view separate from **All properties** and your saved YAML views.
+
+Supported forms:
+
+```markdown
+author:: AJ
+We discussed [topic:: design] today.
+(rating:: 4)
+related:: [[Project A]]
+- [owner:: Alex]
+> status:: active
+```
+
+Full-line fields use the rest of the line as their value. Bracketed and parenthesized fields can appear within prose, including several fields on one line. Repeated fields contribute their values to the same property; repeated values in one note count once. Empty values appear as `(empty)`. Names and values use the same case-insensitive grouping as the property tree.
+
+Values are **literal text**. Numbers, dates, booleans, commas, and expressions are not evaluated or converted into Dataview types. For example, `topics:: design, art` is one text value; use repeated `topics::` fields for separate values. Complete wikilinks are retained as text. This is support for these field forms, not a full Dataview parser or query engine, and does not require Dataview to be installed.
+
+Fields in nested bullet/numbered lists and their indented continuation lines are supported, including `[[Wikilinks]]` and URL values. List indentation is distinguished from indented code.
+
+The parser ignores YAML frontmatter, fenced and indented code, inline code, HTML comments, and Obsidian `%%` comments. It does not collect implicit Dataview fields, task emoji shorthand, or multiline values. The reserved metadata key `position` is excluded.
+
+Expand **property → value → notes**, search the tree, sort rows, open notes, or copy matching note links. **Filter by Value** and the expandable matching-note list also work within the inline index. Inline rows offer no rename, merge, split, delete, selected-note editing, or **Open in Search / Copy search query** actions. Those Search queries target YAML properties, so they would not describe inline fields correctly.
+
+### Save an inline view
+
+1. Choose **Inline Properties** from the view dropdown.
+2. Open **Choose properties to show** and select the inline fields you want.
+3. Enter a view name and choose **Save new**.
+
+Saved inline views appear as **Inline: Name** in the dropdown. Use **Update**, **Rename**, and **Delete** just as you would for a YAML view. Changing the selection marks a saved view **(modified)** until you update it or select the saved view again. Deleting a view keeps its current selection as a custom selection and does not change any notes.
+
+**Inline Properties** is the built-in all-fields view and cannot be renamed or deleted. **All → Save new** reports that this view already exists; **None → Save new** asks you to select at least one property. All/None preserve the name you have typed. Empty names, duplicate names within inline views, and the built-in view names are rejected. A YAML view and an inline view can share a name because their dropdown labels distinguish them.
+
+Inline selections and saved views are stored separately from YAML selections and views. Saved keys remain available even if no note currently uses them. Search and **Filter by Value** work within an inline saved view without replacing its saved keys. Inline views remain read-only.
+
+YAML pins, hidden-property settings, and configured type icons do not apply to the inline tree; inline properties use a text icon. Sorting and the Show note counts setting apply to both sources. Inline expansion and filtering are local to the view; switching between sources clears search, value filtering, and note selection without changing the saved YAML views.
+
+The setting is off by default. While enabled, the plugin reads included Markdown note bodies in a bounded background queue. The summary reports indexing progress and any unreadable notes. Metadata/body changes update results; renames, moves, deletions, and folder exclusions are respected. Use **Refresh property index** to retry failed reads or force a rescan. Disabling the setting clears the inline index, hides its dropdown entries, and switches an active inline view back to **All properties**. Saved inline views and selections are retained and become available when you enable the setting again. After plugin reload, choose your saved inline view from the dropdown; new panes initially open the YAML source.
 
 ## Value filter
 
@@ -131,13 +175,15 @@ Only one condition is active. Choosing another value replaces the condition and 
 
 Counts are distinct note paths, not property assignments or list items. For one note with `author: AJ`, `rating: 4`, and `topic: design`, filtering `author = AJ` shows **1 note** in the bar and **2 properties · Filtered (1 note)** in the summary. The two properties are rating and topic.
 
-The expandable note list sorts by note name, with numeric ordering (Note 2 before Note 10) and full path as a tie-breaker. Folder labels and full-path tooltips distinguish duplicate names. It initially shows up to 200 notes; **Show more** loads the next batch. The count always includes the whole subset, even before all rows are loaded. Tree search does not narrow this list.
+The expandable note list sorts by note name, with numeric ordering (Note 2 before Note 10) and full path as a tie-breaker. Folder labels and full-path tooltips (when Show tooltips is enabled) distinguish duplicate names. It initially shows up to 200 notes; **Show more** loads the next batch. The count includes all matching notes, even before all rows are loaded.
+
+When a Value filter is active, the matching-note dropdown and its count also follow the tree search (property names, values, or note names/paths). This works whether you search before or after applying the Value filter. Clearing the search restores the full Value filter note list; collapsing branches does not change the list. Search narrows the displayed list only: edit previews continue to use the Value filter's full note subset.
 
 Click or tap a name to open that note in the current editor. Ctrl/Cmd-click opens a new tab; Obsidian's additional opening modifiers are respected. Opening a note leaves the filter and disclosure state intact. This list is for opening notes only; use note rows in the property tree for selection and editing. On desktop, Page preview works according to Obsidian's settings (by default, hold Ctrl/Cmd while hovering). It requires the Page preview core plugin.
 
 With focus on the count, Enter/Space toggles the list and ArrowDown opens it and focuses its first note. Inside the list, Up/Down and Home/End move between loaded notes, Enter opens a note, and Escape collapses the list and returns focus to the count. Tab also reaches the note buttons and **Show more**.
 
-The list keeps its scroll position and focused path when results update. If the focused note disappears, focus moves to a nearby row; when no notes remain, the list collapses and focus moves to Clear. Applying another filter or clearing the current filter resets the list. If an empty filter later matches notes again, it stays collapsed. Each tab has independent disclosure state, which is not saved.
+The list keeps its scroll position and focused path when results update. If the focused note disappears, focus moves to a nearby row; when no notes remain, the list collapses and focus moves to Clear. Applying another filter or clearing the current filter resets the list. If the underlying Value filter becomes empty and later matches notes again, it stays collapsed. A search that temporarily yields no results keeps the disclosure state, so an open list returns when matching search results return. Each tab has independent disclosure state, which is not saved.
 
 On mobile, note rows have larger touch targets. The list scrolls within a limited part of the pane, leaving space for the property tree even when the keyboard reduces the available height.
 
@@ -229,6 +275,8 @@ These changes have automated and simulated mobile-browser coverage; verify keybo
 | Rename | Select a saved view, type its new name, then click **Rename**. |
 | Delete | Select a saved view and click **Delete**. The saved view is removed immediately; the current property selection remains as a custom selection. Notes are untouched. |
 
+The view picker opens below the view bar and scrolls within the available screen space. Long view names wrap in the list. Use Up/Down, Home/End, or type a view name to navigate; Enter/Space selects, Escape cancels, and clicking outside closes the list. The selected view is highlighted.
+
 Names cannot be blank or duplicate another view name, ignoring case. The input allows up to 80 characters. Update, Rename, and Delete require an active saved view.
 
 A view is marked **(modified)** when its current selection differs from the saved selection. Click Update to keep the changes, or choose the saved view again to restore its saved keys. The dropdown count includes only currently present, non-hidden properties. A saved key that is temporarily absent from the vault is retained and becomes useful again when that property reappears.
@@ -289,7 +337,7 @@ Both actions require an explicit confirmation after reviewing the affected and s
 
 ## Data access and privacy
 
-The plugin enumerates Markdown notes in your current vault to build the property index and reads cached frontmatter. This is necessary for vault-wide browsing and matching-note counts. It does not enumerate non-Markdown attachments. It also reads the vault's configured property types for icons.
+The plugin enumerates Markdown notes in your current vault to build the property index and reads cached frontmatter. This is necessary for vault-wide browsing and matching-note counts. It does not enumerate non-Markdown attachments. It also reads the vault's configured property types for icons. When Show inline properties is enabled, it additionally reads included Markdown note bodies for the separate inline index; disabling that setting stops new inline reads and clears that index.
 
 **Copy search query** and **Copy matching note links** write only the generated query or links when you select the action. They replace the current clipboard contents, but never read them. No clipboard monitoring runs in the background. The plugin does not send vault data to external services. Explicit bulk edits write frontmatter after confirmation.
 
@@ -301,6 +349,8 @@ Open **Settings → Supercharged Properties**.
 
 | Setting | Purpose |
 | --- | --- |
+| Show tooltips | Show hover hints on browser controls and rows. On by default; changes apply to open views. Screen-reader labels and note previews remain available when off. |
+| Show inline properties | Add a separate read-only tree of inline fields from note bodies. Off by default. |
 | Show note counts | Shows or hides distinct-note counts beside rows. |
 | Sort by | Selects the shared property/value sort preference. |
 | Excluded folders | One vault-relative folder per line, including subfolders; omitted from the index and new bulk edits. |

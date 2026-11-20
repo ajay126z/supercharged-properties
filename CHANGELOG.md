@@ -8,7 +8,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
-- Keep the active view, search, and Value filter when expanding or collapsing all properties. Collapse only displayed properties and preserve expansion outside the current view.
+- After Collapse all in note/path search results, expand properties to values first, then expand values to notes. New searches still reveal matching branches automatically.
+
+- Show distinct search-matching note counts on property and value rows in YAML and inline views, including inside Value filters.
+
+- Keep Value filter note lists and counts synchronized with tree search regardless of whether search or filtering is applied first.
+
+- Enable individual property and value expanders in search results, including within Value filters and after Collapse all.
+
+- Preserve search results when collapsing or expanding all properties in YAML and inline views, including saved views and Value filters.
+
+- Open the view picker below the toolbar with viewport-bounded scrolling, wrapped names, and keyboard navigation, avoiding native dropdowns that open upward and hide views.
+
+- Recognize inline properties and link values inside nested lists and indented list continuations, while continuing to exclude fenced and indented code.
+
+### Added
+
+- Show tooltips setting, enabled by default, to hide property-browser hover hints while preserving screen-reader labels and note previews.
+
+- Saved inline property views with source-specific selections, Save/Update/Rename/Delete controls, persistent settings, and search and Value filter support. Built-in Inline Properties remains protected and saved inline views stay separate from YAML views.
+
+- Optional Show inline properties setting and separate read-only Inline Properties view. Browse literal Dataview-style fields as property → value → notes, with local search, sorting, distinct-note counts, copied links, and Value filters. Excluded folders apply; YAML views and editing remain separate. Background reads are bounded and discard outdated results.
 
 ## [1.4.2] - 2026-11-18
 

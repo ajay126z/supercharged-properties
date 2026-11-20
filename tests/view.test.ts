@@ -115,59 +115,53 @@ it('removes a new leaf and explains when Search is unavailable', async () => {
   expect((Notice as any).messages).toContain('Enable the Search core plugin to use Open in Search.');
 });
 it.each([
-  ['Search everything', 'Done'],
-  ['Property names', 'status'],
-  ['Values', 'Done'],
-  ['Note names / paths', 'Projects/']
-])('preserves a saved view and %s search when collapsing and expanding', (mode, query) => {
-  plugin.prefs.scope = ['status'];
-  plugin.prefs.profiles = [{ id: 'book', name: 'Book View', keys: ['status'] }];
-  plugin.prefs.activeProfile = 'book';
-  plugin.prefs.expanded = ['status', 'tags'];
-  view.render();
-  click('Toggle search'); click('Search in: Search everything');
-  (Menu as any).items.find((item: any) => item.title === mode).run();
-  const input = document.querySelector('input')!;
-  input.value = query; input.dispatchEvent(new Event('input'));
-  const results = document.querySelector('.pv-tree')!.textContent;
-  click('Collapse all properties');
-  expect(input.value).toBe(query);
-  expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
-  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
-  view.render(); // Live refresh must not expand the collapsed search again.
-  expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
-  click('Expand all properties');
-  expect(document.querySelector('.pv-tree')!.textContent).toBe(results);
-  expect(plugin.prefs.scope).toEqual(['status']);
-  expect(plugin.prefs.activeProfile).toBe('book');
-  expect(plugin.prefs.expanded).toEqual(['status', 'tags']);
-  click('Collapse all properties');
-  input.value = 'Pending'; input.dispatchEvent(new Event('input'));
-  if (mode !== 'Property names' && mode !== 'Note names / paths') {
-    expect(document.querySelectorAll('.pv-values')).toHaveLength(1);
-  }
+  ['Search everything', 'Done'], ['Property names', 'status'],
+  ['Values', 'Done'], ['Note names / paths', 'Projects/']
+])('preserves YAML search and saved view on collapse/expand: %s', (mode, query) => {
+  plugin.prefs.scope=['status'];plugin.prefs.activeProfile='saved';
+  plugin.prefs.profiles=[{id:'saved',name:'Saved',keys:['status']}];
+  plugin.prefs.expanded=['status','tags'];view.render();
+  checkSearchCollapse(mode,query);
+  expect(plugin.prefs.scope).toEqual(['status']);expect(plugin.prefs.activeProfile).toBe('saved');
+  expect(plugin.prefs.expanded).toEqual(['status','tags']);
 });
-it('collapses only visible properties in a custom view', () => {
-  plugin.prefs.scope = ['status'];
-  plugin.prefs.expanded = ['status', 'tags'];
-  view.render(); click('Collapse all properties');
-  expect(plugin.prefs.scope).toEqual(['status']);
-  expect(plugin.prefs.expanded).toEqual(['tags']);
-  expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
-  click('Expand all properties');
-  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+it.each([
+  ['Search everything', 'AJ'], ['Property names', 'author'],
+  ['Values', 'AJ'], ['Note names / paths', 'Inline']
+])('preserves inline search and saved view on collapse/expand: %s', (mode, query) => {
+  enableInlineView();click('Choose properties to show');click('Clear property selection');click('Include author');
+  nameProfile('Authors');click('Save selection as new profile');
+  const saved=structuredClone(plugin.prefs.inlineViews);
+  checkSearchCollapse(mode,query);
+  expect(plugin.prefs.inlineViews).toEqual(saved);
+});
+function checkSearchCollapse(mode: string, query: string) {
+  click('Toggle search');click('Search in: Search everything');
+  (Menu as any).items.find((item:any)=>item.title===mode).run();
+  const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  input.value=query;input.dispatchEvent(new Event('input'));
+  const before=document.querySelector('.pv-tree')!.textContent;
   expect(document.querySelectorAll('.pv-values')).toHaveLength(1);
-});
-it('keeps the value filter when collapsing and expanding properties', () => {
-  click('Expand status'); filterValue('Show notes with status: Done (1)');
-  click('Expand all properties');
-  const results = document.querySelector('.pv-tree')!.textContent;
-  const label = document.querySelector('.pv-filter-label')!.textContent;
   click('Collapse all properties');
-  expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
+  expect(input.value).toBe(query);expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  view.render();expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
   click('Expand all properties');
-  expect(document.querySelector('.pv-tree')!.textContent).toBe(results);
-  expect(document.querySelector('.pv-filter-label')!.textContent).toBe(label);
+  if (mode !== 'Note names / paths') expect(document.querySelector('.pv-tree')!.textContent).toBe(before);
+  else { expect(document.querySelectorAll('.pv-values')).toHaveLength(1); expect(document.querySelectorAll('.pv-file')).toHaveLength(0); }
+  click('Collapse all properties');input.value=query.slice(0,-1);input.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(1);
+}
+it('keeps value filters and hidden branch expansion when collapsing', () => {
+  plugin.prefs.expanded=['status','tags'];plugin.prefs.scope=['status'];view.render();
+  click('Collapse all properties');expect(plugin.prefs.expanded).toEqual(['tags']);
+  chooseView('all');click('Expand status');filterValue('Show notes with status: Done (1)');
+  click('Toggle search');const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  input.value='work';input.dispatchEvent(new Event('input'));
+  const label=document.querySelector('.pv-filter-label')!.textContent;
+  click('Collapse all properties');expect(input.value).toBe('work');
+  click('Expand all properties');expect(document.querySelector('.pv-filter-label')!.textContent).toBe(label);
+  expect(document.querySelector('.pv-summary')!.textContent).toContain('Filtered (1 note)');
 });
 it('renders property text without interpreting HTML', () => {
   plugin.index.update('x.md', { '<img src=x>': '<script>bad</script>' }); view.render();
@@ -242,9 +236,17 @@ it('updates an open property picker without replacing its search field', () => {
   expect(document.querySelector('[aria-label="Include due"]')).not.toBeNull();
 });
 
+function availableViews(): string[] {
+  click('Property view');
+  const values = [...document.querySelectorAll<HTMLElement>('.pv-view-option')].map(option => option.dataset.value!);
+  click('Property view');
+  return values;
+}
 function chooseView(value: string) {
-  const select = document.querySelector('[aria-label="Property view"]') as HTMLSelectElement;
-  select.value = value; select.dispatchEvent(new Event('change'));
+  click('Property view');
+  const option = [...document.querySelectorAll<HTMLButtonElement>('.pv-view-option')].find(option => option.dataset.value === value);
+  expect(option, `View ${value} should exist`).toBeDefined();
+  option!.click();
 }
 function nameProfile(name: string) {
   (document.querySelector('[aria-label="Profile name"]') as HTMLInputElement).value = name;
@@ -311,13 +313,13 @@ it('keeps the default header to action/profile rows and toggles search without h
 });
 it('displays available property counts alongside profile labels and updates them live', () => {
   const dropdown = document.querySelector('[aria-label="Property view"]') as HTMLSelectElement;
-  expect(dropdown.selectedOptions[0].textContent).toBe('All properties (2)');
+  expect(dropdown.textContent).toBe('All properties (2)');
   plugin.prefs.profiles = [{ id: 'writing', name: 'Writing', keys: ['status', 'future'] }];
   chooseView('all');
   chooseView('profile:writing');
-  expect(dropdown.selectedOptions[0].textContent).toBe('Writing (1)');
+  expect(dropdown.textContent).toBe('Writing (1)');
   plugin.index.update('Future.md', { future: 'yes' }); view.render();
-  expect(dropdown.selectedOptions[0].textContent).toBe('Writing (2)');
+  expect(dropdown.textContent).toBe('Writing (2)');
 });
 
 it('opens the four-option sort menu and applies and saves the chosen order', () => {
@@ -763,14 +765,14 @@ it('shows one filtered note, separately from its two remaining properties', () =
   expect(document.querySelector('.pv-filter-toggle')!.textContent).toBe('2 notes');
 });
 
-it('shows the full filter note list independently of tree search and resets disclosure on clear', () => {
+it('narrows the filter note list with tree search and resets disclosure on clear', () => {
   click('Expand status'); filterValue('Show notes with status: Done (1)');
   click('Show 1 filtered note');
   expect(document.querySelectorAll('.pv-filter-note')).toHaveLength(1);
   expect(document.querySelector('.pv-filter-note')!.textContent).toContain('One');
   click('Toggle search'); const input=document.querySelector('.pv-filter') as HTMLInputElement;
   input.value='no match'; input.dispatchEvent(new Event('input'));
-  expect(document.querySelectorAll('.pv-filter-note')).toHaveLength(1);
+  expect(document.querySelectorAll('.pv-filter-note')).toHaveLength(0);
   expect(document.querySelector('.pv-empty')).not.toBeNull();
   click('Clear property filter'); expect((document.querySelector('.pv-filter-notes') as HTMLElement).hidden).toBe(true);
   input.value='';input.dispatchEvent(new Event('input'));
@@ -826,4 +828,269 @@ it('does not detach an existing Search leaf when its loaded view is unavailable'
   await (view as any).search(property, property);
   expect(leaf.detach).not.toHaveBeenCalled();
   expect((Notice as any).messages).toContain('Enable the Search core plugin to use Open in Search.');
+});
+
+function enableInlineView() {
+  plugin.prefs.showInlineProperties=true;
+  const index=new PropertyIndex();index.update('Inline.md',{status:['inline only'],author:['AJ'],rating:['4']});
+  plugin.inline={index,pending:0,failures:new Set()};view.render();
+  chooseView('inline');
+}
+it('offers an optional separate read-only Inline Properties tree without YAML edit actions', () => {
+  expect(availableViews()).not.toContain('inline');enableInlineView();
+  expect(document.querySelector('.pv-summary')!.textContent).toContain('Read-only');
+  expect(document.querySelector('[aria-label="Choose properties to show"]')!.hasAttribute('disabled')).toBe(false);
+  click('Expand status');expect(document.querySelector('.pv-tree')!.textContent).toContain('inline only');expect(document.querySelector('.pv-tree')!.textContent).not.toContain('Done');
+  document.querySelector('[aria-label="Toggle status (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
+  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Copy matching note links']);
+  document.querySelector('[aria-label="Show notes with status: inline only (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
+  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Copy matching note links','Filter by Value']);
+  view.render(); click('Show notes with status: inline only (1)');
+  const note=document.querySelector<HTMLButtonElement>('.pv-file')!;expect(note.hasAttribute('aria-haspopup')).toBe(false);note.click();expect(openFile).toHaveBeenCalledOnce();
+});
+it('preserves YAML saved views and expansion, keeps inline filters separate, and falls back to All on disable', () => {
+  plugin.prefs.scope=['status'];plugin.prefs.profiles=[{id:'custom',name:'Custom',keys:['status']}];plugin.prefs.activeProfile='custom';plugin.prefs.expanded=['status'];
+  const original=structuredClone(plugin.prefs);enableInlineView();
+  expect(plugin.prefs.scope).toEqual(original.scope);expect(plugin.prefs.activeProfile).toBe('custom');
+  click('Expand status');filterValue('Show notes with status: inline only (1)');expect(document.querySelector('.pv-summary')!.textContent).toContain('2 properties');
+  expect(plugin.prefs.expanded).toEqual(['status']);
+  chooseView('profile:custom');
+  expect(document.querySelector('.pv-tree')!.textContent).toContain('Done');expect((document.querySelector('.pv-filter-bar') as HTMLElement).hidden).toBe(true);
+  chooseView('inline');plugin.prefs.showInlineProperties=false;view.render();
+  expect(document.querySelector<HTMLButtonElement>('.pv-profile-select')!.value).toBe('all');expect(availableViews()).not.toContain('inline');expect(plugin.prefs.profiles).toEqual(original.profiles);
+});
+it('shows inline indexing and read-failure status instead of silently presenting missing results', () => {
+ enableInlineView();plugin.inline.index=new PropertyIndex();plugin.inline.pending=2;view.render();expect(document.querySelector('.pv-empty')!.textContent).toBe('Reading inline properties…');
+ plugin.inline.pending=0;plugin.inline.failures.add('bad.md');view.render();expect(document.querySelector('.pv-summary')!.textContent).toContain('1 note could not be read');
+});
+
+
+it('creates, updates, renames and deletes inline views independently of YAML views', () => {
+  plugin.prefs.scope=['status']; plugin.prefs.activeProfile='yaml';
+  plugin.prefs.profiles=[{id:'yaml',name:'Reading',keys:['status']}];
+  const yaml=structuredClone({scope:plugin.prefs.scope,activeProfile:plugin.prefs.activeProfile,profiles:plugin.prefs.profiles});
+  enableInlineView(); click('Choose properties to show'); click('Clear property selection'); click('Include author');
+  nameProfile('Reading'); click('Save selection as new profile');
+  const state=plugin.prefs.inlineViews, profile=state.profiles[0];
+  expect(profile.keys).toEqual(['author']);
+  expect(document.querySelector('.pv-profile-select')!.textContent).toContain('Inline: Reading (1)');
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  click('Include rating'); expect(profile.keys).toEqual(['author']);
+  expect(document.querySelector('.pv-profile-select')!.textContent).toContain('Inline: Reading (modified)');
+  click('Update active profile selection'); expect(profile.keys).toEqual(['author','rating']);
+  nameProfile('Research'); click('Rename active profile'); expect(profile.name).toBe('Research');
+  chooseView('profile:yaml'); expect(document.querySelector('.pv-tree')!.textContent).toContain('status');
+  chooseView(`inline:profile:${profile.id}`);
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(2);
+  click('Choose properties to show'); click('Delete active profile');
+  expect(state.profiles).toEqual([]); expect(state.scope).toEqual(['author','rating']);
+  expect(state.activeProfile).toBeNull();
+  expect({scope:plugin.prefs.scope,activeProfile:plugin.prefs.activeProfile,profiles:plugin.prefs.profiles}).toEqual(yaml);
+});
+it.each([false,true])('protects the built-in inline view and preserves typed names for All/None (mobile=%s)', mobile => {
+  if(mobile) document.body.classList.add('is-mobile');
+  enableInlineView();click('Choose properties to show');nameProfile('Reading');
+  click('Show all properties');click('Save selection as new profile');
+  expect((Notice as any).messages.at(-1)).toBe('Inline Properties View already exists.');
+  expect((document.querySelector('[aria-label="Profile name"]') as HTMLInputElement).value).toBe('Reading');
+  expect((document.querySelector('[aria-label="Delete active profile"]') as HTMLButtonElement).disabled).toBe(true);
+  click('Clear property selection');click('Save selection as new profile');
+  expect((Notice as any).messages.at(-1)).toBe('Please select at least one property.');
+  click('Include author');nameProfile('Inline Properties');click('Save selection as new profile');
+  expect(plugin.prefs.inlineViews.profiles).toEqual([]);
+  nameProfile('Reading');click('Save selection as new profile');
+  nameProfile(' reading ');click('Save selection as new profile');expect(plugin.prefs.inlineViews.profiles).toHaveLength(1);
+});
+it('supports search and value filters inside an inline saved view without changing saved keys', () => {
+  enableInlineView();plugin.inline.index.update('Other.md',{author:['Other'],rating:['5'],status:['inline only']});
+  click('Choose properties to show');click('Clear property selection');click('Include author');click('Include rating');
+  nameProfile('Reading');click('Save selection as new profile');
+  const profile=plugin.prefs.inlineViews.profiles[0];
+  click('Toggle search');const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  input.value='AJ';input.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  filterValue('Show notes with author: AJ (1)');
+  input.value='';input.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  expect(document.querySelector('.pv-tree')!.textContent).toContain('rating');
+  expect(document.querySelector('.pv-summary')!.textContent).toContain('Filtered (1 note)');
+  expect(profile.keys).toEqual(['author','rating']);
+  expect(document.querySelector('.pv-profile-select')!.textContent).not.toContain('modified');
+  click('Clear property filter');expect(document.querySelectorAll('.pv-property-row')).toHaveLength(2);
+});
+it('retains inline saved views and missing keys across disabling and re-enabling', () => {
+  enableInlineView();click('Choose properties to show');click('Clear property selection');click('Include author');
+  nameProfile('Reading');click('Save selection as new profile');
+  const profile=plugin.prefs.inlineViews.profiles[0];profile.keys.push('future');
+  chooseView(`inline:profile:${profile.id}`);
+  expect(document.querySelector('[aria-label="Include future"]')).not.toBeNull();
+  plugin.prefs.showInlineProperties=false;view.render();
+  expect(availableViews()).not.toContain(`inline:profile:${profile.id}`);
+  expect(plugin.prefs.inlineViews.profiles[0]).toEqual(profile);
+  plugin.prefs.showInlineProperties=true;view.render();chooseView(`inline:profile:${profile.id}`);
+  plugin.inline.index.update('New.md',{future:'yes'});view.render();
+  expect(document.querySelector('.pv-tree')!.textContent).toContain('future');
+});
+
+
+it.each([false,true])('allows independent search expansion including note branches (inline=%s)', inline => {
+  if(inline) enableInlineView();
+  click('Toggle search');click('Search in: Search everything');
+  (Menu as any).items.find((item:any)=>item.title==='Note names / paths').run();
+  const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  input.value=inline?'Inline':'Projects/';input.dispatchEvent(new Event('input'));
+  const count=document.querySelectorAll('.pv-property-row').length;
+  const property=inline?'author':'status', value=inline?'AJ':'Done';
+  const toggle=document.querySelector<HTMLButtonElement>(`[aria-label="Collapse ${property}"]`)!;
+  expect(toggle.disabled).toBe(false);toggle.click();
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(count-1);
+  view.render();expect(document.querySelectorAll('.pv-values')).toHaveLength(count-1);
+  click(`Expand ${property}`);expect(document.querySelectorAll('.pv-values')).toHaveLength(count);
+  click(`Collapse notes for ${property}: ${value}`);
+  expect(document.querySelector(`[aria-label="Expand notes for ${property}: ${value}"]`)).not.toBeNull();
+  click(`Expand notes for ${property}: ${value}`);
+  expect(document.querySelector(`[aria-label="Collapse notes for ${property}: ${value}"]`)).not.toBeNull();
+  click('Collapse all properties');click(`Expand ${property}`);
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(1);
+  click('Expand all properties');expect(document.querySelectorAll('.pv-values')).toHaveLength(count);
+  expect(input.value).toBe(inline?'Inline':'Projects/');
+});
+it.each([false,true])('allows individual arrows within Value filters, with and without search (inline=%s)', inline => {
+  if(inline) enableInlineView();
+  click('Expand status');filterValue(`Show notes with status: ${inline?'inline only':'Done'} (1)`);
+  const property=inline?'author':'tags';
+  click(`Expand ${property}`);click(`Collapse ${property}`);click(`Expand ${property}`);
+  click('Toggle search');const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  input.value=property;input.dispatchEvent(new Event('input'));
+  click('Collapse all properties');click(`Expand ${property}`);
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(1);
+  click(`Collapse ${property}`);expect(document.querySelectorAll('.pv-values')).toHaveLength(0);
+  expect(input.value).toBe(property);
+  expect(document.querySelector('.pv-summary')!.textContent).toContain('Filtered (1 note)');
+});
+
+
+it.each([false,true])('updates Value filter note lists with search in either action order (inline=%s)', inline => {
+  if(inline) enableInlineView();
+  const index=inline?plugin.inline.index:plugin.index;
+  index.update('Projects/Alpha.md',{status:'active',author:'AJ',topic:'design'});
+  index.update('Archive/Beta.md',{status:'active',author:'Lee',topic:'writing'});
+  view.render();
+  const search = (query: string) => {
+    const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+    input.value=query;input.dispatchEvent(new Event('input'));
+  };
+  const noteNames = () => [...document.querySelectorAll('.pv-filter-note')].map(note=>note.textContent);
+  click('Expand status');filterValue('Show notes with status: active (2)');click('Show 2 filtered notes');
+  expect(noteNames()).toHaveLength(2);
+  click('Toggle search');search('Projects/');
+  expect(noteNames()).toHaveLength(1);expect(noteNames()[0]).toContain('Alpha');
+  expect(document.querySelector('.pv-summary')!.textContent).toContain('Filtered (1 note)');
+  click('Collapse all properties');expect(noteNames()).toHaveLength(1);
+  search('Archive/');expect(noteNames()[0]).toContain('Beta');
+  search('not-found');expect(noteNames()).toHaveLength(0);
+  search('');expect(noteNames()).toHaveLength(2);
+  click('Clear property filter');search('Projects/');
+  filterValue('Show notes with status: active (1)');click('Show 1 filtered note');
+  expect(noteNames()).toHaveLength(1);expect(noteNames()[0]).toContain('Alpha');
+  index.update('Projects/Gamma.md',{status:'active',author:'AJ',topic:'design'});view.render();
+  expect(noteNames()).toHaveLength(2);
+  index.remove('Projects/Alpha.md');view.render();expect(noteNames()).toHaveLength(1);
+});
+it('uses property/value/note search modes for distinct matching filter notes without narrowing edit scope', () => {
+  plugin.index.update('Projects/Alpha.md',{status:'active',author:'AJ',topic:'design'});
+  plugin.index.update('Archive/Beta.md',{status:'active',author:'Lee',rating:4});view.render();
+  click('Expand status');filterValue('Show notes with status: active (2)');click('Show 2 filtered notes');click('Toggle search');
+  const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  let previous='Search everything';
+  for(const [mode,query,name] of [['Property names','topic','Alpha'],['Values','Lee','Beta'],['Note names / paths','Archive/','Beta'],['Search everything','AJ','Alpha']]) {
+    click(`Search in: ${previous}`);(Menu as any).items.find((item:any)=>item.title===mode).run();previous=mode;
+    input.value=query;input.dispatchEvent(new Event('input'));
+    const notes=[...document.querySelectorAll('.pv-filter-note')];expect(notes).toHaveLength(1);expect(notes[0].textContent).toContain(name);
+    expect((view as any).filterPaths().size).toBe(2);
+  }
+});
+
+
+it.each([false,true])('counts distinct search-matching notes per property and value (inline=%s)', inline => {
+  if(inline) enableInlineView();
+  const index=inline?plugin.inline.index:plugin.index;
+  index.update('Projects/Count A.md',{category:['design','design systems'],status:'counted'});
+  index.update('Archive/Count B.md',{category:['design','writing'],status:'counted'});
+  index.update('Archive/Count C.md',{category:['writing'],status:'counted'});view.render();
+  click('Toggle search');
+  const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  let previous='Search everything';
+  for(const [mode,query,propertyCount,value,valueCount] of [
+    ['Values','design',2,'design',2],
+    ['Search everything','design',2,'design systems',1],
+    ['Note names / paths','Projects/Count',1,'design',1],
+    ['Search everything','Projects/Count',1,'design',1],
+    ['Property names','category',3,'writing',2]
+  ] as const) {
+    click(`Search in: ${previous}`);(Menu as any).items.find((item:any)=>item.title===mode).run();previous=mode;
+    input.value=query;input.dispatchEvent(new Event('input'));
+    expect(document.querySelector(`[aria-label="Toggle category (${propertyCount})"] .pv-count`)!.textContent).toBe(String(propertyCount));
+    expect(document.querySelector(`[aria-label="Show notes with category: ${value} (${valueCount})"] .pv-count`)!.textContent).toBe(String(valueCount));
+    click('Collapse all properties');expect(document.querySelector(`[aria-label="Toggle category (${propertyCount})"]`)).not.toBeNull();
+  }
+  input.value='';input.dispatchEvent(new Event('input'));click('Expand category');
+  expect(document.querySelector('[aria-label="Toggle category (3)"]')).not.toBeNull();
+  filterValue('Show notes with category: design (2)');
+  click(`Search in: ${previous}`);(Menu as any).items.find((item:any)=>item.title==='Note names / paths').run();
+  input.value='Projects/Count';input.dispatchEvent(new Event('input'));
+  expect(document.querySelector('[aria-label="Toggle status (1)"]')).not.toBeNull();
+  expect(document.querySelector('[aria-label="Show notes with status: counted (1)"]')).not.toBeNull();
+  expect(index.properties.get('category').paths.size).toBe(3);
+  expect((view as any).filterPaths().size).toBe(2);
+});
+
+
+it.each([
+  [false,false,'Note names / paths'], [true,false,'Note names / paths'],
+  [false,true,'Search everything'], [true,true,'Search everything']
+])('expands progressively after collapsing a note search (inline=%s, filtered=%s, mode=%s)', (inline, filtered, mode) => {
+  if(inline) enableInlineView();
+  if(filtered) {click('Expand status');filterValue(`Show notes with status: ${inline?'inline only':'Done'} (1)`);}
+  click('Toggle search');click('Search in: Search everything');
+  (Menu as any).items.find((item:any)=>item.title===mode).run();
+  const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  input.value=inline?'Inline':'Projects/';input.dispatchEvent(new Event('input'));
+  const property=inline?'author':filtered?'tags':'status';
+  const value=inline?'AJ':filtered?'work':'Done';
+  expect(document.querySelectorAll('.pv-file').length).toBeGreaterThan(0);
+  // An explicitly opened branch must also be reset by Collapse all.
+  click(`Collapse notes for ${property}: ${value}`);click(`Expand notes for ${property}: ${value}`);
+  click('Collapse all properties');click(`Expand ${property}`);
+  expect(document.querySelectorAll('.pv-values')).toHaveLength(1);
+  expect(document.querySelectorAll('.pv-file')).toHaveLength(0);
+  view.render();expect(document.querySelectorAll('.pv-file')).toHaveLength(0);
+  click(`Expand notes for ${property}: ${value}`);
+  expect(document.querySelectorAll('.pv-file')).toHaveLength(1);
+  if (document.querySelector('[aria-label="Expand all properties"]')) click('Expand all properties');
+  click('Collapse all properties');click('Expand all properties');
+  expect(document.querySelectorAll('.pv-file')).toHaveLength(0);
+  input.value=inline?'Inline.md':'Projects/One';input.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.pv-file').length).toBeGreaterThan(0);
+});
+
+it('disables and restores browser tooltips while preserving accessible controls', () => {
+  const picker=document.querySelector<HTMLButtonElement>('[aria-label="Property view"]')!;
+  expect(picker.title).toContain('All properties');
+  plugin.prefs.showTooltips=false;view.render();
+  expect(document.querySelectorAll('.pv-view [title]')).toHaveLength(0);
+  expect(picker.getAttribute('aria-label')).toBe('Property view');
+  expect(picker.getAttribute('data-tooltip-classes')).toContain('pv-tooltip-disabled');
+  click('Choose properties to show');
+  expect(document.querySelectorAll('.pv-scope-panel [title]')).toHaveLength(0);
+  click('Expand status');filterValue('Show notes with status: Done (1)');click('Show 1 filtered note');
+  expect(document.querySelector('.pv-filter-note')!.hasAttribute('title')).toBe(false);
+  expect(document.querySelector('.pv-filter-note')!.getAttribute('aria-label')).toContain('One');
+  click('Property view');
+  expect(document.querySelector('.pv-view-menu')!.getAttribute('data-tooltip-classes')).toContain('pv-tooltip-disabled');
+  click('Property view');
+  plugin.prefs.showTooltips=true;view.render();
+  expect(picker.title).toContain('All properties');
+  expect(picker.hasAttribute('data-tooltip-classes')).toBe(false);
+  expect(document.querySelector('.pv-filter-note')!.getAttribute('title')).toBe('Projects/One.md');
 });

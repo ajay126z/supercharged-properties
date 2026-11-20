@@ -8,7 +8,7 @@ Choose the properties you want to see, save views for different projects, and ex
 
 ## Explore your notes
 
-- **Browse properties → values → notes.** Expand a property to see its values, then open the notes that use them. Expand/collapse all keeps your current view, search, and Value filter.
+- **Browse properties → values → notes.** Expand a property to see its values, then open the notes that use them. Expand/collapse all preserves your search, active view, and Value filter. Individual branch arrows also work within search and filtered results. After Collapse all, expand properties → values → notes one level at a time. Property/value counts and the Value filter’s matching-note list update as you search.
 - **Find what you need.** Search property names, values, note names, or folder paths. Open matching notes in Obsidian Search or copy their links.
 - **See how properties are used.** Note counts show how common each property or value is. Type icons help distinguish text, lists, numbers, dates, and checkboxes.
 - **Choose your order.** Sort alphabetically or by how many notes use a property or value.
@@ -16,6 +16,18 @@ Choose the properties you want to see, save views for different projects, and ex
 - **Stay up to date.** The view refreshes as your notes change.
 
 ![Browse properties and search matching notes](docs/media/01-browse-and-search.gif)
+
+## Browse inline properties
+
+Enable **Settings → Supercharged Properties → Show inline properties**, then choose **Inline Properties** from the view dropdown. Browse a separate, read-only **property → value → notes** tree for fields written in note bodies:
+
+```markdown
+author:: AJ
+[topic:: design]
+(rating:: 4)
+```
+
+All properties and existing saved views continue to show YAML frontmatter. To save an inline view, choose **Inline Properties**, open **Choose properties to show**, select fields, enter a name, and choose **Save new**. The view picker opens downward with a scrollable list that fits the screen. Inline views appear as **Inline: Name** and have their own Update, Rename, and Delete controls. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. It offers no property/value editing or YAML Search queries. Excluded folders apply, and code, frontmatter, and comments are ignored. Fields in nested lists and indented list continuations are supported, including link values. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. This feature is unreleased, following 1.4.2.
 
 ## Explore notes sharing a value
 
@@ -126,6 +138,8 @@ When choosing properties, **All** and **None** keep the view name you have typed
 
 | Setting | What it does |
 | --- | --- |
+| Show tooltips | Show hover hints in the property browser; enabled by default. |
+| Show inline properties | Add the separate read-only Inline Properties view; disabled by default. |
 | Show note counts | Show how many distinct notes use each property or value. |
 | Sort by | Choose alphabetical order or note frequency. |
 | Excluded folders | Omit selected folders and their subfolders from the view and new bulk edits. |
