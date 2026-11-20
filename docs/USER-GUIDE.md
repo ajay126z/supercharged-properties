@@ -175,7 +175,7 @@ Only one condition is active. Choosing another value replaces the condition and 
 
 Counts are distinct note paths, not property assignments or list items. For one note with `author: AJ`, `rating: 4`, and `topic: design`, filtering `author = AJ` shows **1 note** in the bar and **2 properties · Filtered (1 note)** in the summary. The two properties are rating and topic.
 
-The expandable note list sorts by note name, with numeric ordering (Note 2 before Note 10) and full path as a tie-breaker. Folder labels and full-path tooltips distinguish duplicate names. It initially shows up to 200 notes; **Show more** loads the next batch. The count includes all matching notes, even before all rows are loaded.
+The expandable note list sorts by note name, with numeric ordering (Note 2 before Note 10) and full path as a tie-breaker. Folder labels and full-path tooltips (when Show tooltips is enabled) distinguish duplicate names. It initially shows up to 200 notes; **Show more** loads the next batch. The count includes all matching notes, even before all rows are loaded.
 
 When a Value filter is active, the matching-note dropdown and its count also follow the tree search (property names, values, or note names/paths). This works whether you search before or after applying the Value filter. Clearing the search restores the full Value filter note list; collapsing branches does not change the list. Search narrows the displayed list only: edit previews continue to use the Value filter's full note subset.
 
@@ -183,7 +183,7 @@ Click or tap a name to open that note in the current editor. Ctrl/Cmd-click open
 
 With focus on the count, Enter/Space toggles the list and ArrowDown opens it and focuses its first note. Inside the list, Up/Down and Home/End move between loaded notes, Enter opens a note, and Escape collapses the list and returns focus to the count. Tab also reaches the note buttons and **Show more**.
 
-The list keeps its scroll position and focused path when results update. If the focused note disappears, focus moves to a nearby row; when no notes remain, the list collapses and focus moves to Clear. Applying another filter or clearing the current filter resets the list. If an empty filter later matches notes again, it stays collapsed. Each tab has independent disclosure state, which is not saved.
+The list keeps its scroll position and focused path when results update. If the focused note disappears, focus moves to a nearby row; when no notes remain, the list collapses and focus moves to Clear. Applying another filter or clearing the current filter resets the list. If the underlying Value filter becomes empty and later matches notes again, it stays collapsed. A search that temporarily yields no results keeps the disclosure state, so an open list returns when matching search results return. Each tab has independent disclosure state, which is not saved.
 
 On mobile, note rows have larger touch targets. The list scrolls within a limited part of the pane, leaving space for the property tree even when the keyboard reduces the available height.
 

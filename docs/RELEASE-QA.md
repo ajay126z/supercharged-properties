@@ -243,8 +243,8 @@ Run this checklist against a build candidate before publishing. Automated checks
 - With Page preview enabled, check desktop hover according to the configured modifier requirement; touch must not trigger hover previews.
 - Load more than 200 notes, verify the full count, and use Show more to reach the remaining notes.
 - Move focus and scroll within the list, then edit/rename/delete a matching note; verify stable focus and scroll or sensible fallback.
-- Confirm replacement filters and Clear collapse the list; zero matches disable the count and returning matches stay collapsed.
-- Confirm the list remains independent of tree search and property selection, with distinct controls in separate tabs.
+- Confirm replacement filters and Clear collapse the list. When the underlying Value filter has no matches, returning matches stay collapsed. A temporary zero-result tree search retains disclosure state and restores the open list when matches return.
+- Confirm search updates the list and distinct-note count in either action order, while separate tabs retain independent controls. With no tree search, the list shows the full Value filter subset regardless of property selection.
 - Check a 320px-wide pane and reduced keyboard height: Clear and the count fit, note rows remain tappable, and the tree retains visible space.
 
 ## Mobile tap regression
@@ -278,3 +278,13 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] Search and Filter by Value retain saved keys and distinct-note counts.
 - [ ] Reload the plugin and verify saved inline views can be selected again.
 - [ ] Disable/re-enable inline properties and verify saved inline views are retained.
+
+
+### Search expansion, counts, and tooltips
+
+- [ ] Search by property, value, everything, and note name/path in YAML and inline saved views; verify distinct matching note counts.
+- [ ] Collapse all without clearing search, then expand a property to values and a value to notes. Individual arrows remain enabled.
+- [ ] Repeat inside a Value filter, apply search/filter in both orders, clear search, and verify the matching-note list and counts update.
+- [ ] Open at least ten saved views in the view picker; verify downward opening, bounded scrolling, wrapped names, and keyboard navigation on desktop and mobile.
+- [ ] Turn Show tooltips off/on; check toolbar, tree rows, view picker, and expanded matching-note list. Screen-reader labels and note previews remain available.
+- [ ] Reload the plugin and verify the tooltip preference persists.
