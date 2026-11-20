@@ -5,7 +5,7 @@ import { fitVisibleViewport, usesTouchLayout } from './mobile-layout';
 import { excludedFolders, isFolderExcluded } from './folder-exclusions';
 import { SortOrder, sortOptions, sortOrder, sortNodes } from './sorting';
 import { propertyQuery } from './search';
-import { loadProfiles, sameKeys, PropertyProfile } from './profiles';
+import { loadProfiles, loadViewState, sameKeys, PropertyProfile, PropertyViewState } from './profiles';
 import { PropertyTypeResolver, supportsTextSplit, noteEditType } from './property-types';
 import { ValueEditor, type ValueEditPreview, type ValueEditResult } from './value-editor';
 import { PropertyRenameModal } from './property-rename-dialog';
@@ -14,6 +14,7 @@ import { includeRenamedProperty } from './property-rename';
 import { ValueEditModal } from './value-dialog';
 import { NoteValueModal } from './note-value-dialog';
 import { InlineIndex } from './inline-index';
+import { ViewPicker, type ViewChoice } from './view-picker';
 import { FilterNoteList } from './filter-note-list';
 import { attachNoteMenu } from './note-menu';
 import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-operations';
@@ -21,14 +22,14 @@ import type { PropertyValueKind } from './frontmatter-values';
 import { noteEditError, textOnlyList, type ListItem } from './note-value-operations';
 
 const VIEW = 'supercharged-properties';
-interface Preferences { showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
+interface Preferences { inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
 interface ValueFilter { property: string; value: string; propertyLabel: string; label: string }
-const defaults: Preferences = { showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+const defaults: Preferences = { inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 
 export default class SuperchargedPropertiesPlugin extends Plugin {
   index = new PropertyIndex();
   inline!: InlineIndex;
-  prefs: Preferences = { ...defaults };
+  prefs: Preferences = { ...defaults, inlineViews: loadViewState(null) };
   typeResolver!: PropertyTypeResolver;
   valueEditor!: ValueEditor;
   private timer: number | undefined;
@@ -41,6 +42,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     const profiles = loadProfiles(saved?.profiles);
     this.prefs = {
       showInlineProperties: saved.showInlineProperties === true,
+      inlineViews: loadViewState(saved.inlineViews),
       profiles,
       activeProfile: typeof saved.activeProfile === 'string' && profiles.some(profile => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v: unknown) => typeof v === 'string') : null,
@@ -306,7 +308,7 @@ export class PropertiesView extends ItemView {
   private scopeButton!: HTMLButtonElement;
   private scopePanel!: HTMLElement;
   private scopeChoices!: HTMLElement;
-  private profileSelect!: HTMLSelectElement;
+  private profilePicker!: ViewPicker;
   private profileName!: HTMLInputElement;
   private profileUpdate!: HTMLButtonElement;
   private profileRename!: HTMLButtonElement;
@@ -355,20 +357,22 @@ export class PropertiesView extends ItemView {
       }
     });
     this.scopeButton.setAttribute('aria-expanded', 'false');
-    this.profileSelect = el(profileRow, 'select', 'pv-profile-select');
-    this.profileSelect.setAttribute('aria-label', 'Property view');
-    this.profileSelect.addEventListener('change', () => {
-      const value = this.profileSelect.value;
+    this.profilePicker = new ViewPicker(profileRow, value => {
       const wasInline = this.inlineView;
-      this.inlineView = value === 'inline' && this.plugin.prefs.showInlineProperties;
-      if (wasInline !== this.inlineView) { this.filter = null; this.filterNoteList.reset(); this.selectedNotes = undefined; this.noteAnchor = undefined; }
-      if (this.inlineView) {
+      this.inlineView = (value === 'inline' || value.startsWith('inline:')) && this.plugin.prefs.showInlineProperties;
+      if (wasInline !== this.inlineView) {
+        this.filter = null; this.filterNoteList.reset(); this.selectedNotes = undefined; this.noteAnchor = undefined;
+        this.scopeQuery = '';
         this.scopePanel.hidden = true; this.scopeButton.setAttribute('aria-expanded', 'false');
-      } else if (value === 'all') { this.plugin.prefs.scope = null; this.plugin.prefs.activeProfile = null; }
-      else if (value !== 'custom') {
-        const profile = this.plugin.prefs.profiles.find(item => `profile:${item.id}` === value);
-        if (profile) { this.plugin.prefs.scope = [...profile.keys]; this.plugin.prefs.activeProfile = profile.id; }
-      } else this.plugin.prefs.activeProfile = null;
+      }
+      const prefs = this.viewPrefs;
+      if (value === 'all' || value === 'inline') { prefs.scope = null; prefs.activeProfile = null; }
+      else if (value === 'custom' || value === 'inline:custom') prefs.activeProfile = null;
+      else {
+        const prefix = this.inlineView ? 'inline:profile:' : 'profile:';
+        const profile = prefs.profiles.find(item => `${prefix}${item.id}` === value);
+        if (profile) { prefs.scope = [...profile.keys]; prefs.activeProfile = profile.id; }
+      }
       this.query = ''; this.input.value = ''; this.expandedValues.clear();
       void this.plugin.save(); this.plugin.refresh(); this.render();
     });
@@ -406,6 +410,7 @@ export class PropertiesView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.profilePicker?.close(false);
     this.contentEl.removeEventListener('keydown', this.onSelectionKeydown);
     this.disposeNoteMenus();
     this.selectedNotes = undefined;
@@ -459,6 +464,8 @@ export class PropertiesView extends ItemView {
   private sorted<T extends ValueNode>(nodes: Iterable<T>): T[] {
     return sortNodes(nodes, this.plugin.prefs.sort);
   }
+  private get inlinePrefs(): PropertyViewState { return this.plugin.prefs.inlineViews ??= loadViewState(null); }
+  private get viewPrefs(): PropertyViewState { return this.inlineView ? this.inlinePrefs : this.plugin.prefs; }
   private get expandedKeys(): string[] { return this.inlineView ? this.inlineExpanded : this.plugin.prefs.expanded; }
   private set expandedKeys(keys: string[]) { if (this.inlineView) this.inlineExpanded = keys; else this.plugin.prefs.expanded = keys; }
   private toggleProperty(key: string): void {
@@ -467,11 +474,10 @@ export class PropertiesView extends ItemView {
     this.expandedKeys = [...keys]; void this.plugin.save(); this.render();
   }
   private renderScope(): void {
-    if (this.inlineView) return;
     this.scopePanel.replaceChildren();
     const actions = el(this.scopePanel, 'div', 'pv-actions');
-    this.button(actions, 'All', 'Show all properties', () => { this.plugin.prefs.scope = null; this.plugin.prefs.activeProfile = null; void this.plugin.save(); this.render(); });
-    this.button(actions, 'None', 'Clear property selection', () => { this.plugin.prefs.scope = []; void this.plugin.save(); this.render(); });
+    this.button(actions, 'All', 'Show all properties', () => { this.viewPrefs.scope = null; this.viewPrefs.activeProfile = null; void this.plugin.save(); this.render(); });
+    this.button(actions, 'None', 'Clear property selection', () => { this.viewPrefs.scope = []; void this.plugin.save(); this.render(); });
     const search = el(this.scopePanel, 'div', 'pv-search pv-picker-search');
     setIcon(el(search, 'span', 'pv-icon'), 'search');
     const input = el(search, 'input', 'pv-filter'); input.type = 'search';
@@ -501,35 +507,42 @@ export class PropertiesView extends ItemView {
     this.syncProfiles();
   }
   private syncProfiles(index = this.activeIndex()): void {
-    const profiles = this.plugin.prefs.profiles;
-    const active = profiles.find(profile => profile.id === this.plugin.prefs.activeProfile);
-    this.profileSelect.replaceChildren();
-    const hidden = new Set(this.plugin.prefs.hidden.split('\n').map(fold).filter(Boolean));
-    const count = (keys: Iterable<string>) => new Set([...keys].filter(key => (this.inlineView ? this.plugin.index : index).properties.has(key) && !hidden.has(key))).size;
-    el(this.profileSelect, 'option', '', `All properties (${count(this.plugin.index.properties.keys())})`).value = 'all';
-    if (this.plugin.prefs.scope !== null && !active) el(this.profileSelect, 'option', '', `Custom selection (${count(this.plugin.prefs.scope)})`).value = 'custom';
-    for (const profile of profiles) {
-      const modified = profile === active && !sameKeys(profile.keys, this.plugin.prefs.scope ?? [...this.plugin.index.properties.keys()]);
-      el(this.profileSelect, 'option', '', profile.name + (modified ? ' (modified)' : '') + ` (${count(profile === active ? this.plugin.prefs.scope ?? this.plugin.index.properties.keys() : profile.keys)})`).value = `profile:${profile.id}`;
-    }
-    if (this.plugin.prefs.showInlineProperties) el(this.profileSelect, 'option', '', `Inline Properties (${this.inlineView ? index.properties.size : this.plugin.inline.index.properties.size})`).value = 'inline';
-    this.profileSelect.value = this.inlineView ? 'inline' : active ? `profile:${active.id}` : this.plugin.prefs.scope === null ? 'all' : 'custom';
+    const choices: ViewChoice[] = [];
+    const addSource = (inline: boolean, prefs: PropertyViewState, source: PropertyIndex) => {
+      const active = prefs.profiles.find(profile => profile.id === prefs.activeProfile);
+      const hidden = new Set(inline ? [] : this.plugin.prefs.hidden.split('\n').map(fold).filter(Boolean));
+      const available = inline === this.inlineView ? index : source;
+      const count = (keys: Iterable<string>) => new Set([...keys].filter(key => available.properties.has(key) && !hidden.has(key))).size;
+      const prefix = inline ? 'inline:' : '';
+      choices.push({ label: `${inline ? 'Inline Properties' : 'All properties'} (${count(source.properties.keys())})`, value: inline ? 'inline' : 'all' });
+      if (prefs.scope !== null && !active) choices.push({ label: `${inline ? 'Inline: ' : ''}Custom selection (${count(prefs.scope)})`, value: `${prefix}custom` });
+      for (const profile of prefs.profiles) {
+        const keys = profile === active ? prefs.scope ?? [...source.properties.keys()] : profile.keys;
+        const modified = profile === active && !sameKeys(profile.keys, keys);
+        choices.push({ label: `${inline ? 'Inline: ' : ''}${profile.name}${modified ? ' (modified)' : ''} (${count(keys)})`, value: `${prefix}profile:${profile.id}` });
+      }
+    };
+    addSource(false, this.plugin.prefs, this.plugin.index);
+    if (this.plugin.prefs.showInlineProperties) addSource(true, this.inlinePrefs, this.plugin.inline.index);
+    const prefs = this.viewPrefs;
+    const active = prefs.profiles.find(profile => profile.id === prefs.activeProfile);
+    const prefix = this.inlineView ? 'inline:' : '';
+    this.profilePicker.setChoices(choices, active ? `${prefix}profile:${active.id}` : prefs.scope === null ? this.inlineView ? 'inline' : 'all' : `${prefix}custom`);
     if (this.profileUpdate) {
-      this.profileUpdate.disabled = this.inlineView || !active;
-      this.profileRename.disabled = this.inlineView || !active;
-      this.profileDelete.disabled = this.inlineView || !active;
+      this.profileUpdate.disabled = !active;
+      this.profileRename.disabled = !active;
+      this.profileDelete.disabled = !active;
     }
   }
   private manageProfile(action: 'new' | 'update' | 'rename' | 'delete'): void {
-    if (this.inlineView) return;
-    const prefs = this.plugin.prefs;
+    const prefs = this.viewPrefs;
     const active = prefs.profiles.find(profile => profile.id === prefs.activeProfile);
     const name = this.profileName.value.trim();
-    const keys = [...(prefs.scope ?? this.plugin.index.properties.keys())];
+    const keys = [...(prefs.scope ?? this.sourceIndex().properties.keys())];
     if (action === 'new' || action === 'update') {
       if (!keys.length) { new Notice('Please select at least one property.'); return; }
-      if (prefs.scope === null || sameKeys(keys, [...this.plugin.index.properties.keys()])) {
-        new Notice('All properties View already exists.'); return;
+      if (prefs.scope === null || sameKeys(keys, [...this.sourceIndex().properties.keys()])) {
+        new Notice(this.inlineView ? 'Inline Properties View already exists.' : 'All properties View already exists.'); return;
       }
     }
     if (action === 'new' || action === 'rename') {
@@ -559,21 +572,21 @@ export class PropertiesView extends ItemView {
     const scroll = this.scopeChoices.scrollTop;
     this.scopeChoices.replaceChildren();
     const choices = new Map([...index.properties.values()].map(property => [property.id, property]));
-    for (const key of this.plugin.prefs.scope ?? []) {
+    for (const key of this.viewPrefs.scope ?? []) {
       if (key !== this.filter?.property && !choices.has(key)) choices.set(key, { id: key, label: key, paths: new Set(), values: new Map() });
     }
     const properties = this.sorted(choices.values()).filter(property => fold(property.label).includes(fold(this.scopeQuery)));
     for (const property of properties) {
       const label = el(this.scopeChoices, 'label', 'pv-scope-choice');
       const checkbox = el(label, 'input'); checkbox.type = 'checkbox';
-      checkbox.checked = this.plugin.prefs.scope === null || this.plugin.prefs.scope.includes(property.id);
+      checkbox.checked = this.viewPrefs.scope === null || this.viewPrefs.scope.includes(property.id);
       checkbox.dataset.pvFocus = JSON.stringify(['scope', property.id]);
       checkbox.setAttribute('aria-label', `Include ${property.label}`);
       el(label, 'span', '', property.label);
       checkbox.addEventListener('change', () => {
-        const scope = new Set(this.plugin.prefs.scope ?? this.plugin.index.properties.keys());
+        const scope = new Set(this.viewPrefs.scope ?? this.sourceIndex().properties.keys());
         if (checkbox.checked) scope.add(property.id); else scope.delete(property.id);
-        this.plugin.prefs.scope = [...scope]; void this.plugin.save(); this.render();
+        this.viewPrefs.scope = [...scope]; void this.plugin.save(); this.render();
       });
     }
     if (!properties.length) el(this.scopeChoices, 'p', 'pv-hint', 'No matching properties.');
@@ -613,8 +626,8 @@ export class PropertiesView extends ItemView {
       this.plugin.prefs.scope = null; this.plugin.prefs.activeProfile = null;
       void this.plugin.save();
     }
-    this.scopeButton.disabled = this.inlineView;
-    this.scopeButton.title = this.inlineView ? 'Saved views and property selection apply to frontmatter only' : 'Choose properties to show';
+    this.scopeButton.disabled = false;
+    this.scopeButton.title = 'Choose properties to show';
     const valuePaths = this.filterPaths();
     const index = this.activeIndex(valuePaths);
     this.syncProfiles(index);
@@ -627,7 +640,7 @@ export class PropertiesView extends ItemView {
     const hidden = new Set(this.plugin.prefs.hidden.split('\n').map(fold).filter(Boolean));
     if (this.inlineView) hidden.clear();
     const pinned = new Set(this.inlineView ? [] : this.plugin.prefs.pinned);
-    const scope = this.inlineView ? null : this.plugin.prefs.scope;
+    const scope = this.viewPrefs.scope;
     const properties = this.sorted(index.properties.values()).filter(p => !hidden.has(p.id) && (scope === null || scope.includes(p.id)))
       .sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
     this.sortButton.title = `Sort: ${sortOptions[this.plugin.prefs.sort]}`;

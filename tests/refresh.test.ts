@@ -201,3 +201,15 @@ it('enables inline body indexing separately, updates from metadata text, handles
  await plugin.setShowInlineProperties(false);const reads=read.mock.calls.length;vault.emit('modify',note);expect(read).toHaveBeenCalledTimes(reads);
  expect(plugin.inline.index.properties.size).toBe(0);
 });
+
+it('persists inline view settings separately from YAML view settings', async () => {
+  const inlineViews={profiles:[{id:'inline-a',name:'Reading',keys:['author']}],scope:['author'],activeProfile:'inline-a'};
+  const {plugin}=await setup({inlineViews, profiles:[{id:'yaml-a',name:'Reading',keys:['status']}],scope:['status'],activeProfile:'yaml-a'});
+  expect(plugin.prefs.inlineViews).toEqual(inlineViews);
+  const saveData=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saveData;
+  await plugin.save();
+  expect(saveData.mock.calls[0][0].inlineViews).toEqual(inlineViews);
+  expect(saveData.mock.calls[0][0].scope).toEqual(['status']);
+  const restored=await setup(saveData.mock.calls[0][0]);
+  expect(restored.plugin.prefs.inlineViews).toEqual(inlineViews);
+});

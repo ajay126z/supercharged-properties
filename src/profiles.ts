@@ -16,3 +16,14 @@ export function sameKeys(a: readonly string[], b: readonly string[]): boolean {
   const left = new Set(a); const right = new Set(b);
   return left.size === right.size && [...left].every(key => right.has(key));
 }
+
+export interface PropertyViewState { profiles: PropertyProfile[]; scope: string[] | null; activeProfile: string | null }
+export function loadViewState(raw: unknown): PropertyViewState {
+  const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+  const profiles = loadProfiles(value.profiles);
+  return {
+    profiles,
+    scope: Array.isArray(value.scope) ? [...new Set(value.scope.filter((key): key is string => typeof key === 'string').map(fold).filter(Boolean))] : null,
+    activeProfile: typeof value.activeProfile === 'string' && profiles.some(profile => profile.id === value.activeProfile) ? value.activeProfile : null
+  };
+}

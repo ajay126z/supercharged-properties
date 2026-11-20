@@ -17,3 +17,23 @@ it('keeps comma-separated values and dates as literal text, with no expression e
 it('handles CRLF, prototype-like keys, and an unclosed fence', () => {
  expect({...parseInlineProperties('\uFEFF---\r\nx: 1\r\n---\r\n__proto__:: safe\r\n```\r\nignored:: yes')}).toEqual(JSON.parse('{"__proto__":["safe"]}'));
 });
+
+
+it('reads nested list fields and continuation links with tabs and spaces', () => {
+  const source = '- Back matter\n\t- created:: 2026-01-01\n\t- dates:: 2026-01-02\n- [x] Export notes\n\tLogseqLink:: logseq://graph/Example?page=Notes\n  related:: [[Notes|My notes]]\n  - [owner:: AJ]\n    (status:: active)';
+  expect({...parseInlineProperties(source)}).toEqual({
+    created: ['2026-01-01'], dates: ['2026-01-02'],
+    LogseqLink: ['logseq://graph/Example?page=Notes'], related: ['[[Notes|My notes]]'],
+    owner: ['AJ'], status: ['active']
+  });
+});
+it('reads numbered lists and loose nested lists, and resets on leaving a list', () => {
+  expect({...parseInlineProperties('10. Parent\n    - child:: yes\n\n      next:: yes\nOutside\n\tignored:: code\nreal:: yes')}).toEqual({child:['yes'],next:['yes'],real:['yes']});
+});
+it('ignores indented and fenced code inside lists', () => {
+  const source = '- Parent\n\n      ignored:: indented code\n  real:: yes\n  - ```text\n    hidden:: fenced code\n    ```\n  - ~~~\n    hidden:: fenced code\n    ~~~\n  final:: yes\nOutside\n\n    hidden:: code';
+  expect({...parseInlineProperties(source)}).toEqual({real:['yes'],final:['yes']});
+});
+it('does not invent fields from inline-code documentation or empty names', () => {
+  expect({...parseInlineProperties('- Use `highlight:: text` in notes.\n- `[key:: value]` is an example.\n\t::Links::\nreal:: yes')}).toEqual({real:['yes']});
+});

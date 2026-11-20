@@ -25,7 +25,7 @@ __export(main_exports, {
   default: () => SuperchargedPropertiesPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 
 // src/frontmatter-values.ts
 var EMPTY = Object.freeze({ kind: "empty", text: "" });
@@ -266,6 +266,15 @@ function sameKeys(a, b) {
   const left = new Set(a);
   const right = new Set(b);
   return left.size === right.size && [...left].every((key) => right.has(key));
+}
+function loadViewState(raw) {
+  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const profiles = loadProfiles(value.profiles);
+  return {
+    profiles,
+    scope: Array.isArray(value.scope) ? [...new Set(value.scope.filter((key) => typeof key === "string").map(fold).filter(Boolean))] : null,
+    activeProfile: typeof value.activeProfile === "string" && profiles.some((profile) => profile.id === value.activeProfile) ? value.activeProfile : null
+  };
 }
 
 // src/property-types.ts
@@ -1311,6 +1320,7 @@ function parseInlineProperties(source) {
   const lines = source.replace(/^\uFEFF/, "").split(/\r?\n/);
   let frontmatter = lines[0]?.trim() === "---";
   let fence;
+  const listIndents = [];
   const prose = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -1318,18 +1328,38 @@ function parseInlineProperties(source) {
       if (i > 0 && /^(---|\.\.\.)\s*$/.test(line)) frontmatter = false;
       continue;
     }
-    const unquoted = line.replace(/^(?: {0,3}> ?)+/, "");
-    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(unquoted);
+    const unquoted = line.replace(/^(?: {0,3}> ?)+/, "").replace(/^[ \t]+/, (whitespace) => {
+      let columns = 0;
+      for (const char of whitespace) columns += char === "	" ? 4 - columns % 4 : 1;
+      return " ".repeat(columns);
+    });
     if (fence) {
-      if (marker && marker[1][0] === fence.char && marker[1].length >= fence.length && !marker[2].trim()) fence = void 0;
+      const closing = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(unquoted.slice(fence.indent));
+      if (closing && closing[1][0] === fence.char && closing[1].length >= fence.length) fence = void 0;
       continue;
     }
+    if (!unquoted.trim()) {
+      prose.push("");
+      continue;
+    }
+    const indent = unquoted.length - unquoted.trimStart().length;
+    while (listIndents.length && indent < listIndents[listIndents.length - 1]) listIndents.pop();
+    const containerIndent = listIndents[listIndents.length - 1] ?? 0;
+    if (indent - containerIndent >= 4) continue;
+    let content = unquoted.slice(containerIndent);
+    let contentIndent = containerIndent;
+    const list = /^ {0,3}(?:[-*+]|\d+[.)]) +/.exec(content);
+    if (list) {
+      contentIndent += list[0].length;
+      listIndents.push(contentIndent);
+      content = content.slice(list[0].length).replace(/^\[[ xX]\] /, "");
+    }
+    const marker = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(content);
     if (marker) {
-      fence = { char: marker[1][0], length: marker[1].length };
+      fence = { char: marker[1][0], length: marker[1].length, indent: contentIndent };
       continue;
     }
-    if (/^( {4}|\t)/.test(unquoted)) continue;
-    prose.push(unquoted);
+    prose.push(content);
   }
   const text = prose.join("\n").replace(/<!--[\s\S]*?(?:-->|$)|%%[\s\S]*?(?:%%|$)/g, (match) => match.replace(/[^\n]/g, " ")).replace(/(`+)([\s\S]*?)\1(?!`)/g, (match) => match.replace(/[^\n]/g, " "));
   const add = (raw) => {
@@ -1458,8 +1488,152 @@ var InlineIndex = class {
   }
 };
 
-// src/filter-note-list.ts
+// src/view-picker.ts
 var import_obsidian7 = require("obsidian");
+var ViewPicker = class {
+  constructor(parent, change) {
+    this.change = change;
+    this.choices = [];
+    this.active = 0;
+    this.typed = "";
+    this.typedAt = 0;
+    this.keydown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        this.close();
+        return;
+      }
+      if (event.key === "Tab") {
+        this.close();
+        return;
+      }
+      const last = this.choices.length - 1;
+      if (event.key === "ArrowDown") this.active = Math.min(last, this.active + 1);
+      else if (event.key === "ArrowUp") this.active = Math.max(0, this.active - 1);
+      else if (event.key === "Home") this.active = 0;
+      else if (event.key === "End") this.active = last;
+      else if (event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const now = Date.now();
+        this.typed = (now - this.typedAt < 700 ? this.typed : "") + event.key.toLocaleLowerCase();
+        this.typedAt = now;
+        const match = this.choices.findIndex((choice) => choice.label.toLocaleLowerCase().startsWith(this.typed));
+        if (match >= 0) this.active = match;
+      } else return;
+      event.preventDefault();
+      this.focusOption();
+    };
+    this.position = () => {
+      if (!this.popup) return;
+      const win = this.button.ownerDocument.defaultView;
+      const viewport = win.visualViewport;
+      const left = viewport?.offsetLeft ?? 0, top = viewport?.offsetTop ?? 0;
+      const width = viewport?.width ?? win.innerWidth, height = viewport?.height ?? win.innerHeight;
+      const rect = this.button.getBoundingClientRect();
+      const popupWidth = Math.max(0, Math.min(Math.max(rect.width, 220), width - 16));
+      const y = rect.bottom + 4;
+      this.popup.style.left = `${Math.max(left + 8, Math.min(rect.left, left + width - popupWidth - 8))}px`;
+      this.popup.style.top = `${y}px`;
+      this.popup.style.width = `${popupWidth}px`;
+      this.popup.style.maxHeight = `${Math.max(0, Math.min(360, top + height - y - 8))}px`;
+    };
+    this.button = parent.createEl("button", { cls: "pv-profile-select", attr: { type: "button", "aria-label": "Property view", "aria-haspopup": "listbox", "aria-expanded": "false" } });
+    this.label = this.button.createSpan({ cls: "pv-profile-label" });
+    (0, import_obsidian7.setIcon)(this.button.createSpan({ cls: "pv-profile-chevron" }), "chevron-down");
+    this.button.addEventListener("click", () => this.popup ? this.close() : this.open());
+    this.button.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        this.open(event.key === "ArrowUp");
+      }
+    });
+  }
+  setChoices(choices, value) {
+    this.choices = choices;
+    this.button.value = value;
+    this.label.textContent = choices.find((choice) => choice.value === value)?.label ?? "Choose a view";
+    this.button.title = this.label.textContent;
+    if (this.popup) {
+      const focused = this.popup.contains(this.button.ownerDocument.activeElement);
+      const scroll = this.popup.scrollTop;
+      this.renderOptions();
+      this.position();
+      if (focused) this.focusOption(false);
+      this.popup.scrollTop = scroll;
+    }
+  }
+  open(last = false) {
+    if (this.popup || !this.choices.length) return;
+    const doc = this.button.ownerDocument;
+    const win = doc.defaultView;
+    this.popup = doc.body.createDiv({ cls: "pv-view-menu", attr: { role: "listbox", "aria-label": "Property views" } });
+    this.popup.id = `pv-views-${win.crypto.randomUUID()}`;
+    this.button.setAttribute("aria-controls", this.popup.id);
+    this.button.setAttribute("aria-expanded", "true");
+    this.active = last ? this.choices.length - 1 : 0;
+    this.typed = "";
+    this.renderOptions();
+    this.position();
+    this.focusOption();
+    const outside = (event) => {
+      if (event.target instanceof win.Node && !this.popup?.contains(event.target) && !this.button.contains(event.target)) this.close(false);
+    };
+    const scroll = (event) => {
+      if (event.target !== this.popup) this.position();
+    };
+    doc.addEventListener("pointerdown", outside, true);
+    doc.addEventListener("focusin", outside);
+    doc.addEventListener("scroll", scroll, true);
+    win.addEventListener("resize", this.position);
+    win.visualViewport?.addEventListener("resize", this.position);
+    win.visualViewport?.addEventListener("scroll", this.position);
+    this.popup.addEventListener("keydown", this.keydown);
+    this.removeListeners = () => {
+      doc.removeEventListener("pointerdown", outside, true);
+      doc.removeEventListener("focusin", outside);
+      doc.removeEventListener("scroll", scroll, true);
+      win.removeEventListener("resize", this.position);
+      win.visualViewport?.removeEventListener("resize", this.position);
+      win.visualViewport?.removeEventListener("scroll", this.position);
+    };
+  }
+  renderOptions() {
+    this.popup.replaceChildren();
+    this.active = Math.min(this.active, this.choices.length - 1);
+    for (const [index, choice] of this.choices.entries()) {
+      const option = this.popup.createEl("button", { cls: "pv-view-option", text: choice.label, attr: { type: "button", role: "option", "aria-selected": String(choice.value === this.button.value), tabindex: "-1" } });
+      option.dataset.value = choice.value;
+      option.addEventListener("click", () => {
+        this.close();
+        this.change(choice.value);
+      });
+      option.addEventListener("focus", () => {
+        this.active = index;
+      });
+    }
+  }
+  focusOption(scroll = true) {
+    const option = this.popup?.children[this.active];
+    option?.focus({ preventScroll: true });
+    if (scroll && option && this.popup) {
+      if (option.offsetTop < this.popup.scrollTop) this.popup.scrollTop = option.offsetTop;
+      else if (option.offsetTop + option.offsetHeight > this.popup.scrollTop + this.popup.clientHeight) this.popup.scrollTop = option.offsetTop + option.offsetHeight - this.popup.clientHeight;
+    }
+  }
+  close(restoreFocus = true) {
+    if (!this.popup) return;
+    this.removeListeners?.();
+    this.removeListeners = void 0;
+    this.popup.remove();
+    this.popup = void 0;
+    this.button.setAttribute("aria-expanded", "false");
+    this.button.removeAttribute("aria-controls");
+    if (restoreFocus) this.button.focus({ preventScroll: true });
+  }
+};
+
+// src/filter-note-list.ts
+var import_obsidian8 = require("obsidian");
 var nextListId = 0;
 var batchSize = 200;
 function noteRows(paths) {
@@ -1526,7 +1700,7 @@ var FilterNoteList = class {
   openNote(path, event) {
     const file = this.app.vault.getFileByPath(path);
     if (!file) return;
-    void this.app.workspace.getLeaf(import_obsidian7.Keymap.isModEvent(event)).openFile(file).catch(() => new import_obsidian7.Notice("Could not open this note. It may have been moved or deleted."));
+    void this.app.workspace.getLeaf(import_obsidian8.Keymap.isModEvent(event)).openFile(file).catch(() => new import_obsidian8.Notice("Could not open this note. It may have been moved or deleted."));
   }
   render() {
     const active = this.panel.ownerDocument.activeElement;
@@ -1543,7 +1717,7 @@ var FilterNoteList = class {
     this.toggle.setAttribute("aria-expanded", String(this.open && n > 0));
     this.toggle.setAttribute("aria-label", `${this.open ? "Hide" : "Show"} ${n} filtered ${n === 1 ? "note" : "notes"}`);
     this.toggle.title = this.open ? "Hide matching notes" : "Show matching notes";
-    (0, import_obsidian7.setIcon)(this.icon, this.open ? "chevron-up" : "chevron-down");
+    (0, import_obsidian8.setIcon)(this.icon, this.open ? "chevron-up" : "chevron-down");
     this.panel.hidden = !this.open || !n;
     this.panel.parentElement?.classList.toggle("pv-filter-notes-open", !this.panel.hidden);
     this.panel.replaceChildren();
@@ -1563,7 +1737,7 @@ var FilterNoteList = class {
       button.setAttribute("aria-label", `Open ${row.name}${row.folder ? ` in ${row.folder}` : ""}`);
       const icon = button.createSpan({ cls: "pv-icon" });
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian7.setIcon)(icon, "file-text");
+      (0, import_obsidian8.setIcon)(icon, "file-text");
       button.createSpan({ cls: "pv-filter-note-name", text: row.name });
       if (row.folder) button.createSpan({ cls: "pv-filter-note-folder", text: row.folder });
       button.addEventListener("click", (event) => this.openNote(row.path, event));
@@ -1712,12 +1886,12 @@ function attachNoteMenu(element, open) {
 
 // src/main.ts
 var VIEW = "supercharged-properties";
-var defaults = { showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
-var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
+var defaults = { inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+var SuperchargedPropertiesPlugin = class extends import_obsidian9.Plugin {
   constructor() {
     super(...arguments);
     this.index = new PropertyIndex();
-    this.prefs = { ...defaults };
+    this.prefs = { ...defaults, inlineViews: loadViewState(null) };
     this.saveQueue = Promise.resolve();
   }
   async onload() {
@@ -1726,6 +1900,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
     const profiles = loadProfiles(saved?.profiles);
     this.prefs = {
       showInlineProperties: saved.showInlineProperties === true,
+      inlineViews: loadViewState(saved.inlineViews),
       profiles,
       activeProfile: typeof saved.activeProfile === "string" && profiles.some((profile) => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v) => typeof v === "string") : null,
@@ -1770,7 +1945,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
     }));
     this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRebuild()));
     this.registerEvent(this.app.vault.on("create", (file) => {
-      if (file instanceof import_obsidian8.TFile && file.extension === "md" && this.includesPath(file.path)) {
+      if (file instanceof import_obsidian9.TFile && file.extension === "md" && this.includesPath(file.path)) {
         this.inline.update(file);
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache) {
@@ -1780,17 +1955,17 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
       }
     }));
     this.registerEvent(this.app.vault.on("modify", (file) => {
-      if (file instanceof import_obsidian8.TFile) this.inline.update(file);
+      if (file instanceof import_obsidian9.TFile) this.inline.update(file);
     }));
     this.registerEvent(this.app.vault.on("delete", (file) => {
-      if (file instanceof import_obsidian8.TFile) {
+      if (file instanceof import_obsidian9.TFile) {
         this.index.remove(file.path);
         this.inline.remove(file.path);
         this.refresh();
       } else this.scheduleRebuild();
     }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-      if (file instanceof import_obsidian8.TFile) {
+      if (file instanceof import_obsidian9.TFile) {
         this.index.remove(oldPath);
         this.inline.remove(oldPath);
         this.inline.update(file);
@@ -1851,21 +2026,21 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
   save() {
     const snapshot = JSON.parse(JSON.stringify(this.prefs));
     this.saveQueue = this.saveQueue.then(() => this.saveData(snapshot)).catch(() => {
-      new import_obsidian8.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
+      new import_obsidian9.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
     });
     this.refresh();
     return this.saveQueue;
   }
   async applyValueEdit(preview, verb = "Updated") {
     const result = await this.valueEditor.apply(preview);
-    new import_obsidian8.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
-    for (const failure of result.failures) new import_obsidian8.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian9.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
+    for (const failure of result.failures) new import_obsidian9.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
   }
   async undoValueEdit() {
     const result = await this.valueEditor.undo();
-    new import_obsidian8.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
-    for (const failure of result.failures) new import_obsidian8.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian9.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
+    for (const failure of result.failures) new import_obsidian9.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
   }
   renameProperty(property) {
@@ -1878,8 +2053,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
           includeRenamedProperty(this.prefs, preview.source, preview.target);
           await this.save();
         }
-        new import_obsidian8.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian8.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian9.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian9.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
       }
     }).open();
@@ -1890,8 +2065,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
       preview: () => this.valueEditor.previewPropertyDelete(property.id, property.paths),
       apply: async (preview) => {
         const result = await this.valueEditor.apply(preview);
-        new import_obsidian8.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian8.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian9.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian9.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
       }
     }).open();
@@ -1920,8 +2095,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
         await this.typeResolver.load();
         const result = await this.valueEditor.apply(preview);
         const action = preview.changes.some((change) => change.remove) ? "Removed property from" : "Updated";
-        new import_obsidian8.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
-        for (const failure of result.failures) new import_obsidian8.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian9.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
+        for (const failure of result.failures) new import_obsidian9.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
         complete();
       }
@@ -1938,7 +2113,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
       preview: (edit) => edit.mode === "split" && !supportsTextSplit(property, this.typeResolver) ? { total: 0, changes: [] } : this.valueEditor.preview(edit, node.paths),
       apply: (preview) => {
         if (mode === "split" && !supportsTextSplit(property, this.typeResolver)) {
-          new import_obsidian8.Notice("Split into list is only available for text properties.");
+          new import_obsidian9.Notice("Split into list is only available for text properties.");
           return Promise.resolve();
         }
         return this.applyValueEdit(preview, mode === "delete" ? "Deleted from" : "Updated");
@@ -1962,7 +2137,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian8.Plugin {
 function el2(parent, tag, cls = "", text = "") {
   return parent.createEl(tag, { cls, text });
 }
-var PropertiesView = class extends import_obsidian8.ItemView {
+var PropertiesView = class extends import_obsidian9.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -2006,7 +2181,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.searchHeader = el2(toolbar, "div", "pv-search-header");
     this.searchHeader.hidden = true;
     const search = el2(this.searchHeader, "div", "pv-search");
-    (0, import_obsidian8.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian9.setIcon)(el2(search, "span", "pv-icon"), "search");
     this.input = el2(search, "input", "pv-filter");
     this.input.type = "search";
     this.input.placeholder = "Find properties, values, notes\u2026";
@@ -2033,31 +2208,31 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       }
     });
     this.scopeButton.setAttribute("aria-expanded", "false");
-    this.profileSelect = el2(profileRow, "select", "pv-profile-select");
-    this.profileSelect.setAttribute("aria-label", "Property view");
-    this.profileSelect.addEventListener("change", () => {
-      const value = this.profileSelect.value;
+    this.profilePicker = new ViewPicker(profileRow, (value) => {
       const wasInline = this.inlineView;
-      this.inlineView = value === "inline" && this.plugin.prefs.showInlineProperties;
+      this.inlineView = (value === "inline" || value.startsWith("inline:")) && this.plugin.prefs.showInlineProperties;
       if (wasInline !== this.inlineView) {
         this.filter = null;
         this.filterNoteList.reset();
         this.selectedNotes = void 0;
         this.noteAnchor = void 0;
-      }
-      if (this.inlineView) {
+        this.scopeQuery = "";
         this.scopePanel.hidden = true;
         this.scopeButton.setAttribute("aria-expanded", "false");
-      } else if (value === "all") {
-        this.plugin.prefs.scope = null;
-        this.plugin.prefs.activeProfile = null;
-      } else if (value !== "custom") {
-        const profile = this.plugin.prefs.profiles.find((item) => `profile:${item.id}` === value);
+      }
+      const prefs = this.viewPrefs;
+      if (value === "all" || value === "inline") {
+        prefs.scope = null;
+        prefs.activeProfile = null;
+      } else if (value === "custom" || value === "inline:custom") prefs.activeProfile = null;
+      else {
+        const prefix = this.inlineView ? "inline:profile:" : "profile:";
+        const profile = prefs.profiles.find((item) => `${prefix}${item.id}` === value);
         if (profile) {
-          this.plugin.prefs.scope = [...profile.keys];
-          this.plugin.prefs.activeProfile = profile.id;
+          prefs.scope = [...profile.keys];
+          prefs.activeProfile = profile.id;
         }
-      } else this.plugin.prefs.activeProfile = null;
+      }
       this.query = "";
       this.input.value = "";
       this.expandedValues.clear();
@@ -2103,6 +2278,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.render();
   }
   async onClose() {
+    this.profilePicker?.close(false);
     this.contentEl.removeEventListener("keydown", this.onSelectionKeydown);
     this.disposeNoteMenus();
     this.selectedNotes = void 0;
@@ -2123,7 +2299,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     }
   }
   openSearchScopeMenu() {
-    const menu = new import_obsidian8.Menu();
+    const menu = new import_obsidian9.Menu();
     for (const [value, label] of [["any", "Search everything"], ["key", "Property names"], ["value", "Values"], ["note", "Note names / paths"]]) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.searchScope === value).onClick(() => {
         this.searchScope = value;
@@ -2148,11 +2324,11 @@ var PropertiesView = class extends import_obsidian8.ItemView {
   iconButton(parent, title, icon, run) {
     const button = this.button(parent, "", title, run);
     button.className = "pv-icon-button";
-    (0, import_obsidian8.setIcon)(button, icon);
+    (0, import_obsidian9.setIcon)(button, icon);
     return button;
   }
   openSortMenu() {
-    const menu = new import_obsidian8.Menu();
+    const menu = new import_obsidian9.Menu();
     for (const [value, label] of Object.entries(sortOptions)) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.plugin.prefs.sort === value).onClick(() => {
         this.plugin.prefs.sort = sortOrder(value);
@@ -2166,6 +2342,13 @@ var PropertiesView = class extends import_obsidian8.ItemView {
   }
   sorted(nodes) {
     return sortNodes(nodes, this.plugin.prefs.sort);
+  }
+  get inlinePrefs() {
+    var _a;
+    return (_a = this.plugin.prefs).inlineViews ?? (_a.inlineViews = loadViewState(null));
+  }
+  get viewPrefs() {
+    return this.inlineView ? this.inlinePrefs : this.plugin.prefs;
   }
   get expandedKeys() {
     return this.inlineView ? this.inlineExpanded : this.plugin.prefs.expanded;
@@ -2183,22 +2366,21 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.render();
   }
   renderScope() {
-    if (this.inlineView) return;
     this.scopePanel.replaceChildren();
     const actions = el2(this.scopePanel, "div", "pv-actions");
     this.button(actions, "All", "Show all properties", () => {
-      this.plugin.prefs.scope = null;
-      this.plugin.prefs.activeProfile = null;
+      this.viewPrefs.scope = null;
+      this.viewPrefs.activeProfile = null;
       void this.plugin.save();
       this.render();
     });
     this.button(actions, "None", "Clear property selection", () => {
-      this.plugin.prefs.scope = [];
+      this.viewPrefs.scope = [];
       void this.plugin.save();
       this.render();
     });
     const search = el2(this.scopePanel, "div", "pv-search pv-picker-search");
-    (0, import_obsidian8.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian9.setIcon)(el2(search, "span", "pv-icon"), "search");
     const input = el2(search, "input", "pv-filter");
     input.type = "search";
     input.placeholder = "Find a property\u2026";
@@ -2233,57 +2415,64 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.syncProfiles();
   }
   syncProfiles(index = this.activeIndex()) {
-    const profiles = this.plugin.prefs.profiles;
-    const active = profiles.find((profile) => profile.id === this.plugin.prefs.activeProfile);
-    this.profileSelect.replaceChildren();
-    const hidden = new Set(this.plugin.prefs.hidden.split("\n").map(fold).filter(Boolean));
-    const count = (keys) => new Set([...keys].filter((key) => (this.inlineView ? this.plugin.index : index).properties.has(key) && !hidden.has(key))).size;
-    el2(this.profileSelect, "option", "", `All properties (${count(this.plugin.index.properties.keys())})`).value = "all";
-    if (this.plugin.prefs.scope !== null && !active) el2(this.profileSelect, "option", "", `Custom selection (${count(this.plugin.prefs.scope)})`).value = "custom";
-    for (const profile of profiles) {
-      const modified = profile === active && !sameKeys(profile.keys, this.plugin.prefs.scope ?? [...this.plugin.index.properties.keys()]);
-      el2(this.profileSelect, "option", "", profile.name + (modified ? " (modified)" : "") + ` (${count(profile === active ? this.plugin.prefs.scope ?? this.plugin.index.properties.keys() : profile.keys)})`).value = `profile:${profile.id}`;
-    }
-    if (this.plugin.prefs.showInlineProperties) el2(this.profileSelect, "option", "", `Inline Properties (${this.inlineView ? index.properties.size : this.plugin.inline.index.properties.size})`).value = "inline";
-    this.profileSelect.value = this.inlineView ? "inline" : active ? `profile:${active.id}` : this.plugin.prefs.scope === null ? "all" : "custom";
+    const choices = [];
+    const addSource = (inline, prefs2, source) => {
+      const active2 = prefs2.profiles.find((profile) => profile.id === prefs2.activeProfile);
+      const hidden = new Set(inline ? [] : this.plugin.prefs.hidden.split("\n").map(fold).filter(Boolean));
+      const available = inline === this.inlineView ? index : source;
+      const count = (keys) => new Set([...keys].filter((key) => available.properties.has(key) && !hidden.has(key))).size;
+      const prefix2 = inline ? "inline:" : "";
+      choices.push({ label: `${inline ? "Inline Properties" : "All properties"} (${count(source.properties.keys())})`, value: inline ? "inline" : "all" });
+      if (prefs2.scope !== null && !active2) choices.push({ label: `${inline ? "Inline: " : ""}Custom selection (${count(prefs2.scope)})`, value: `${prefix2}custom` });
+      for (const profile of prefs2.profiles) {
+        const keys = profile === active2 ? prefs2.scope ?? [...source.properties.keys()] : profile.keys;
+        const modified = profile === active2 && !sameKeys(profile.keys, keys);
+        choices.push({ label: `${inline ? "Inline: " : ""}${profile.name}${modified ? " (modified)" : ""} (${count(keys)})`, value: `${prefix2}profile:${profile.id}` });
+      }
+    };
+    addSource(false, this.plugin.prefs, this.plugin.index);
+    if (this.plugin.prefs.showInlineProperties) addSource(true, this.inlinePrefs, this.plugin.inline.index);
+    const prefs = this.viewPrefs;
+    const active = prefs.profiles.find((profile) => profile.id === prefs.activeProfile);
+    const prefix = this.inlineView ? "inline:" : "";
+    this.profilePicker.setChoices(choices, active ? `${prefix}profile:${active.id}` : prefs.scope === null ? this.inlineView ? "inline" : "all" : `${prefix}custom`);
     if (this.profileUpdate) {
-      this.profileUpdate.disabled = this.inlineView || !active;
-      this.profileRename.disabled = this.inlineView || !active;
-      this.profileDelete.disabled = this.inlineView || !active;
+      this.profileUpdate.disabled = !active;
+      this.profileRename.disabled = !active;
+      this.profileDelete.disabled = !active;
     }
   }
   manageProfile(action) {
-    if (this.inlineView) return;
-    const prefs = this.plugin.prefs;
+    const prefs = this.viewPrefs;
     const active = prefs.profiles.find((profile) => profile.id === prefs.activeProfile);
     const name = this.profileName.value.trim();
-    const keys = [...prefs.scope ?? this.plugin.index.properties.keys()];
+    const keys = [...prefs.scope ?? this.sourceIndex().properties.keys()];
     if (action === "new" || action === "update") {
       if (!keys.length) {
-        new import_obsidian8.Notice("Please select at least one property.");
+        new import_obsidian9.Notice("Please select at least one property.");
         return;
       }
-      if (prefs.scope === null || sameKeys(keys, [...this.plugin.index.properties.keys()])) {
-        new import_obsidian8.Notice("All properties View already exists.");
+      if (prefs.scope === null || sameKeys(keys, [...this.sourceIndex().properties.keys()])) {
+        new import_obsidian9.Notice(this.inlineView ? "Inline Properties View already exists." : "All properties View already exists.");
         return;
       }
     }
     if (action === "new" || action === "rename") {
       if (!name) {
-        new import_obsidian8.Notice("Enter a name for this view.");
+        new import_obsidian9.Notice("Enter a name for this view.");
         this.profileName.focus();
         return;
       }
       if (fold(name) === "all properties") {
-        new import_obsidian8.Notice("All properties View already exists.");
+        new import_obsidian9.Notice("All properties View already exists.");
         return;
       }
       if (fold(name) === "inline properties") {
-        new import_obsidian8.Notice("Inline Properties is a built-in view. Choose another name.");
+        new import_obsidian9.Notice("Inline Properties is a built-in view. Choose another name.");
         return;
       }
       if (prefs.profiles.some((profile) => fold(profile.name) === fold(name) && (action === "new" || profile !== active))) {
-        new import_obsidian8.Notice("A view with that name already exists.");
+        new import_obsidian9.Notice("A view with that name already exists.");
         return;
       }
     }
@@ -2315,7 +2504,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     const scroll = this.scopeChoices.scrollTop;
     this.scopeChoices.replaceChildren();
     const choices = new Map([...index.properties.values()].map((property) => [property.id, property]));
-    for (const key of this.plugin.prefs.scope ?? []) {
+    for (const key of this.viewPrefs.scope ?? []) {
       if (key !== this.filter?.property && !choices.has(key)) choices.set(key, { id: key, label: key, paths: /* @__PURE__ */ new Set(), values: /* @__PURE__ */ new Map() });
     }
     const properties = this.sorted(choices.values()).filter((property) => fold(property.label).includes(fold(this.scopeQuery)));
@@ -2323,15 +2512,15 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       const label = el2(this.scopeChoices, "label", "pv-scope-choice");
       const checkbox = el2(label, "input");
       checkbox.type = "checkbox";
-      checkbox.checked = this.plugin.prefs.scope === null || this.plugin.prefs.scope.includes(property.id);
+      checkbox.checked = this.viewPrefs.scope === null || this.viewPrefs.scope.includes(property.id);
       checkbox.dataset.pvFocus = JSON.stringify(["scope", property.id]);
       checkbox.setAttribute("aria-label", `Include ${property.label}`);
       el2(label, "span", "", property.label);
       checkbox.addEventListener("change", () => {
-        const scope = new Set(this.plugin.prefs.scope ?? this.plugin.index.properties.keys());
+        const scope = new Set(this.viewPrefs.scope ?? this.sourceIndex().properties.keys());
         if (checkbox.checked) scope.add(property.id);
         else scope.delete(property.id);
-        this.plugin.prefs.scope = [...scope];
+        this.viewPrefs.scope = [...scope];
         void this.plugin.save();
         this.render();
       });
@@ -2376,8 +2565,8 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       this.plugin.prefs.activeProfile = null;
       void this.plugin.save();
     }
-    this.scopeButton.disabled = this.inlineView;
-    this.scopeButton.title = this.inlineView ? "Saved views and property selection apply to frontmatter only" : "Choose properties to show";
+    this.scopeButton.disabled = false;
+    this.scopeButton.title = "Choose properties to show";
     const valuePaths = this.filterPaths();
     const index = this.activeIndex(valuePaths);
     this.syncProfiles(index);
@@ -2391,7 +2580,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     const hidden = new Set(this.plugin.prefs.hidden.split("\n").map(fold).filter(Boolean));
     if (this.inlineView) hidden.clear();
     const pinned = new Set(this.inlineView ? [] : this.plugin.prefs.pinned);
-    const scope = this.inlineView ? null : this.plugin.prefs.scope;
+    const scope = this.viewPrefs.scope;
     const properties = this.sorted(index.properties.values()).filter((p) => !hidden.has(p.id) && (scope === null || scope.includes(p.id))).sort((a, b) => Number(pinned.has(b.id)) - Number(pinned.has(a.id)));
     this.sortButton.title = `Sort: ${sortOptions[this.plugin.prefs.sort]}`;
     let visible = 0;
@@ -2449,7 +2638,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     this.expandToggle.setAttribute("aria-label", toggleLabel);
     this.expandToggle.setAttribute("aria-pressed", String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
-    (0, import_obsidian8.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
+    (0, import_obsidian9.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
     const n = valuePaths?.size ?? 0;
     const noteCount = `${n} ${n === 1 ? "note" : "notes"}`;
     this.filterBar.hidden = !this.filter;
@@ -2484,10 +2673,10 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       const icon = el2(button, "span", "pv-icon pv-type-icon");
       icon.title = `Type: ${type}`;
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian8.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
+      (0, import_obsidian9.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
     }
     el2(button, "span", "pv-label", node.label);
-    if (isKey && this.plugin.prefs.pinned.includes(property.id)) (0, import_obsidian8.setIcon)(el2(button, "span", "pv-pin"), "pin");
+    if (isKey && this.plugin.prefs.pinned.includes(property.id)) (0, import_obsidian9.setIcon)(el2(button, "span", "pv-pin"), "pin");
     if (!isKey) {
       const kind = JSON.parse(node.id)[0];
       if (kind !== "string") el2(button, "span", "pv-kind", kind);
@@ -2552,7 +2741,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
           Array.from(this.body.querySelectorAll(".pv-file")).find((note) => note.dataset.pvFocus === next.row)?.focus();
         });
       }
-      (0, import_obsidian8.setIcon)(el2(button, "span", "pv-icon"), "file-text");
+      (0, import_obsidian9.setIcon)(el2(button, "span", "pv-icon"), "file-text");
       el2(button, "span", "pv-note-name", path.split("/").pop()?.replace(/\.md$/, "") ?? path);
       const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
       if (folder) el2(button, "small", "pv-note-path", folder);
@@ -2581,7 +2770,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
         this.selectedNotes = void 0;
         this.render();
         const file = this.app.vault.getAbstractFileByPath(path);
-        if (file instanceof import_obsidian8.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian8.Notice("Unable to open note."));
+        if (file instanceof import_obsidian9.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian9.Notice("Unable to open note."));
       });
     }
     if (paths.length > limit) this.button(notes, "Show more notes", "Show 100 more notes", () => {
@@ -2636,7 +2825,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
     });
   }
   showNoteMenu(point, property, path, row) {
-    const menu = new import_obsidian8.Menu();
+    const menu = new import_obsidian9.Menu();
     const selection = this.selectedNotes;
     const paths = selection?.property === property.id && selection.paths.has(path) ? [...selection.paths] : [path];
     menu.addItem((item) => item.setTitle(`Change ${property.label}\u2026`).setIcon("pencil").onClick(() => {
@@ -2661,9 +2850,9 @@ var PropertiesView = class extends import_obsidian8.ItemView {
   async copy(text) {
     try {
       await this.contentEl.ownerDocument.defaultView.navigator.clipboard.writeText(text);
-      new import_obsidian8.Notice("Copied to clipboard.");
+      new import_obsidian9.Notice("Copied to clipboard.");
     } catch {
-      new import_obsidian8.Notice("Clipboard unavailable.");
+      new import_obsidian9.Notice("Clipboard unavailable.");
     }
   }
   async search(property, node) {
@@ -2682,26 +2871,26 @@ var PropertiesView = class extends import_obsidian8.ItemView {
       if (typeof view.setQuery !== "function") {
         created?.detach();
         created = null;
-        new import_obsidian8.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian9.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
       view.setQuery(query);
       created = null;
       if (node !== property && JSON.parse(node.id)[0] === "empty") {
-        new import_obsidian8.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
+        new import_obsidian9.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
       }
     } catch {
       if (created) {
         created.detach();
         created = null;
-        new import_obsidian8.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian9.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
-      new import_obsidian8.Notice("Could not open Search. Your notes remain available in the property tree.");
+      new import_obsidian9.Notice("Could not open Search. Your notes remain available in the property tree.");
     }
   }
   showMenu(event, property, node) {
-    const menu = new import_obsidian8.Menu();
+    const menu = new import_obsidian9.Menu();
     if (!this.inlineView) menu.addItem((item) => item.setTitle("Open in Search").setIcon("search").onClick(() => {
       void this.search(property, node);
     }));
@@ -2725,7 +2914,7 @@ var PropertiesView = class extends import_obsidian8.ItemView {
 ${property.label}`;
         void this.plugin.save();
         this.render();
-        new import_obsidian8.Notice("Property hidden. Restore it in Supercharged Properties settings.");
+        new import_obsidian9.Notice("Property hidden. Restore it in Supercharged Properties settings.");
       }));
     }
     if (node !== property) {
@@ -2747,7 +2936,7 @@ ${property.label}`;
     menu.showAtMouseEvent(event);
   }
 };
-var PreferencesTab = class extends import_obsidian8.PluginSettingTab {
+var PreferencesTab = class extends import_obsidian9.PluginSettingTab {
   constructor(plugin) {
     super(plugin.app, plugin);
     this.plugin = plugin;
@@ -2783,7 +2972,7 @@ var PreferencesTab = class extends import_obsidian8.PluginSettingTab {
   display() {
     this.containerEl.replaceChildren();
     for (const definition of this.getSettingDefinitions()) {
-      const setting = new import_obsidian8.Setting(this.containerEl).setName(definition.name);
+      const setting = new import_obsidian9.Setting(this.containerEl).setName(definition.name);
       if (definition.desc) setting.setDesc(definition.desc);
       definition.render(setting);
     }

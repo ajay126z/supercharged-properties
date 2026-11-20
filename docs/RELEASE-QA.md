@@ -268,3 +268,13 @@ Run this checklist against a build candidate before publishing. Automated checks
 - Switch back to a saved YAML view; confirm its keys, expansion, pins, and hidden settings are preserved.
 - Edit, rename, move, delete, and exclude notes while indexing; confirm no stale paths reappear. Disable while reads are pending; the option must disappear and the active inline view must return to All properties.
 - Confirm loading/failure feedback, forced refresh retries, and no body reads for inline indexing when disabled.
+
+
+### Inline saved views
+
+- [ ] Create an inline view with a subset of fields; verify it appears as Inline: Name.
+- [ ] Modify, update, rename, and delete it without changing YAML saved views or notes.
+- [ ] On desktop and mobile, All/None retain the typed name and reject duplicate-all/empty selections.
+- [ ] Search and Filter by Value retain saved keys and distinct-note counts.
+- [ ] Reload the plugin and verify saved inline views can be selected again.
+- [ ] Disable/re-enable inline properties and verify saved inline views are retained.

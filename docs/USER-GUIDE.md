@@ -132,13 +132,27 @@ Full-line fields use the rest of the line as their value. Bracketed and parenthe
 
 Values are **literal text**. Numbers, dates, booleans, commas, and expressions are not evaluated or converted into Dataview types. For example, `topics:: design, art` is one text value; use repeated `topics::` fields for separate values. Complete wikilinks are retained as text. This is support for these field forms, not a full Dataview parser or query engine, and does not require Dataview to be installed.
 
+Fields in nested bullet/numbered lists and their indented continuation lines are supported, including `[[Wikilinks]]` and URL values. List indentation is distinguished from indented code.
+
 The parser ignores YAML frontmatter, fenced and indented code, inline code, HTML comments, and Obsidian `%%` comments. It does not collect implicit Dataview fields, task emoji shorthand, or multiline values. The reserved metadata key `position` is excluded.
 
 Expand **property → value → notes**, search the tree, sort rows, open notes, or copy matching note links. **Filter by Value** and the expandable matching-note list also work within the inline index. Inline rows offer no rename, merge, split, delete, selected-note editing, or **Open in Search / Copy search query** actions. Those Search queries target YAML properties, so they would not describe inline fields correctly.
 
-YAML property selection, saved-view management, pins, hiding, and configured type icons do not apply to the inline tree. The property picker is disabled there, and inline properties use a text icon. Sorting and the Show note counts setting apply to both sources. Inline expansion and filtering are local to the view; switching between sources clears search, value filtering, and note selection without changing the saved YAML views.
+### Save an inline view
 
-The setting is off by default. While enabled, the plugin reads included Markdown note bodies in a bounded background queue. The summary reports indexing progress and any unreadable notes. Metadata/body changes update results; renames, moves, deletions, and folder exclusions are respected. Use **Refresh property index** to retry failed reads or force a rescan. Disabling the setting clears the inline index, removes the dropdown option, and switches an active inline view back to **All properties**. The setting persists; the selected inline view does not persist across view recreation or plugin reload.
+1. Choose **Inline Properties** from the view dropdown.
+2. Open **Choose properties to show** and select the inline fields you want.
+3. Enter a view name and choose **Save new**.
+
+Saved inline views appear as **Inline: Name** in the dropdown. Use **Update**, **Rename**, and **Delete** just as you would for a YAML view. Changing the selection marks a saved view **(modified)** until you update it or select the saved view again. Deleting a view keeps its current selection as a custom selection and does not change any notes.
+
+**Inline Properties** is the built-in all-fields view and cannot be renamed or deleted. **All → Save new** reports that this view already exists; **None → Save new** asks you to select at least one property. All/None preserve the name you have typed. Empty names, duplicate names within inline views, and the built-in view names are rejected. A YAML view and an inline view can share a name because their dropdown labels distinguish them.
+
+Inline selections and saved views are stored separately from YAML selections and views. Saved keys remain available even if no note currently uses them. Search and **Filter by Value** work within an inline saved view without replacing its saved keys. Inline views remain read-only.
+
+YAML pins, hidden-property settings, and configured type icons do not apply to the inline tree; inline properties use a text icon. Sorting and the Show note counts setting apply to both sources. Inline expansion and filtering are local to the view; switching between sources clears search, value filtering, and note selection without changing the saved YAML views.
+
+The setting is off by default. While enabled, the plugin reads included Markdown note bodies in a bounded background queue. The summary reports indexing progress and any unreadable notes. Metadata/body changes update results; renames, moves, deletions, and folder exclusions are respected. Use **Refresh property index** to retry failed reads or force a rescan. Disabling the setting clears the inline index, hides its dropdown entries, and switches an active inline view back to **All properties**. Saved inline views and selections are retained and become available when you enable the setting again. After plugin reload, choose your saved inline view from the dropdown; new panes initially open the YAML source.
 
 ## Value filter
 
@@ -256,6 +270,8 @@ These changes have automated and simulated mobile-browser coverage; verify keybo
 | Update | Select a saved view, change the checkboxes, then click **Update** to replace its saved selection. |
 | Rename | Select a saved view, type its new name, then click **Rename**. |
 | Delete | Select a saved view and click **Delete**. The saved view is removed immediately; the current property selection remains as a custom selection. Notes are untouched. |
+
+The view picker opens below the view bar and scrolls within the available screen space. Long view names wrap in the list. Use Up/Down, Home/End, or type a view name to navigate; Enter/Space selects, Escape cancels, and clicking outside closes the list. The selected view is highlighted.
 
 Names cannot be blank or duplicate another view name, ignoring case. The input allows up to 80 characters. Update, Rename, and Delete require an active saved view.
 

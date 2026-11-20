@@ -194,9 +194,17 @@ it('updates an open property picker without replacing its search field', () => {
   expect(document.querySelector('[aria-label="Include due"]')).not.toBeNull();
 });
 
+function availableViews(): string[] {
+  click('Property view');
+  const values = [...document.querySelectorAll<HTMLElement>('.pv-view-option')].map(option => option.dataset.value!);
+  click('Property view');
+  return values;
+}
 function chooseView(value: string) {
-  const select = document.querySelector('[aria-label="Property view"]') as HTMLSelectElement;
-  select.value = value; select.dispatchEvent(new Event('change'));
+  click('Property view');
+  const option = [...document.querySelectorAll<HTMLButtonElement>('.pv-view-option')].find(option => option.dataset.value === value);
+  expect(option, `View ${value} should exist`).toBeDefined();
+  option!.click();
 }
 function nameProfile(name: string) {
   (document.querySelector('[aria-label="Profile name"]') as HTMLInputElement).value = name;
@@ -263,13 +271,13 @@ it('keeps the default header to action/profile rows and toggles search without h
 });
 it('displays available property counts alongside profile labels and updates them live', () => {
   const dropdown = document.querySelector('[aria-label="Property view"]') as HTMLSelectElement;
-  expect(dropdown.selectedOptions[0].textContent).toBe('All properties (2)');
+  expect(dropdown.textContent).toBe('All properties (2)');
   plugin.prefs.profiles = [{ id: 'writing', name: 'Writing', keys: ['status', 'future'] }];
   chooseView('all');
   chooseView('profile:writing');
-  expect(dropdown.selectedOptions[0].textContent).toBe('Writing (1)');
+  expect(dropdown.textContent).toBe('Writing (1)');
   plugin.index.update('Future.md', { future: 'yes' }); view.render();
-  expect(dropdown.selectedOptions[0].textContent).toBe('Writing (2)');
+  expect(dropdown.textContent).toBe('Writing (2)');
 });
 
 it('opens the four-option sort menu and applies and saves the chosen order', () => {
@@ -784,12 +792,12 @@ function enableInlineView() {
   plugin.prefs.showInlineProperties=true;
   const index=new PropertyIndex();index.update('Inline.md',{status:['inline only'],author:['AJ'],rating:['4']});
   plugin.inline={index,pending:0,failures:new Set()};view.render();
-  const select=document.querySelector<HTMLSelectElement>('.pv-profile-select')!;select.value='inline';select.dispatchEvent(new Event('change'));
+  chooseView('inline');
 }
 it('offers an optional separate read-only Inline Properties tree without YAML edit actions', () => {
-  expect(document.querySelector('option[value="inline"]')).toBeNull();enableInlineView();
+  expect(availableViews()).not.toContain('inline');enableInlineView();
   expect(document.querySelector('.pv-summary')!.textContent).toContain('Read-only');
-  expect(document.querySelector('[aria-label="Choose properties to show"]')!.hasAttribute('disabled')).toBe(true);
+  expect(document.querySelector('[aria-label="Choose properties to show"]')!.hasAttribute('disabled')).toBe(false);
   click('Expand status');expect(document.querySelector('.pv-tree')!.textContent).toContain('inline only');expect(document.querySelector('.pv-tree')!.textContent).not.toContain('Done');
   document.querySelector('[aria-label="Toggle status (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
   expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Copy matching note links']);
@@ -804,12 +812,80 @@ it('preserves YAML saved views and expansion, keeps inline filters separate, and
   expect(plugin.prefs.scope).toEqual(original.scope);expect(plugin.prefs.activeProfile).toBe('custom');
   click('Expand status');filterValue('Show notes with status: inline only (1)');expect(document.querySelector('.pv-summary')!.textContent).toContain('2 properties');
   expect(plugin.prefs.expanded).toEqual(['status']);
-  const select=document.querySelector<HTMLSelectElement>('.pv-profile-select')!;select.value='profile:custom';select.dispatchEvent(new Event('change'));
+  chooseView('profile:custom');
   expect(document.querySelector('.pv-tree')!.textContent).toContain('Done');expect((document.querySelector('.pv-filter-bar') as HTMLElement).hidden).toBe(true);
-  select.value='inline';select.dispatchEvent(new Event('change'));plugin.prefs.showInlineProperties=false;view.render();
-  expect(select.value).toBe('all');expect(document.querySelector('option[value="inline"]')).toBeNull();expect(plugin.prefs.profiles).toEqual(original.profiles);
+  chooseView('inline');plugin.prefs.showInlineProperties=false;view.render();
+  expect(document.querySelector<HTMLButtonElement>('.pv-profile-select')!.value).toBe('all');expect(availableViews()).not.toContain('inline');expect(plugin.prefs.profiles).toEqual(original.profiles);
 });
 it('shows inline indexing and read-failure status instead of silently presenting missing results', () => {
  enableInlineView();plugin.inline.index=new PropertyIndex();plugin.inline.pending=2;view.render();expect(document.querySelector('.pv-empty')!.textContent).toBe('Reading inline properties…');
  plugin.inline.pending=0;plugin.inline.failures.add('bad.md');view.render();expect(document.querySelector('.pv-summary')!.textContent).toContain('1 note could not be read');
+});
+
+
+it('creates, updates, renames and deletes inline views independently of YAML views', () => {
+  plugin.prefs.scope=['status']; plugin.prefs.activeProfile='yaml';
+  plugin.prefs.profiles=[{id:'yaml',name:'Reading',keys:['status']}];
+  const yaml=structuredClone({scope:plugin.prefs.scope,activeProfile:plugin.prefs.activeProfile,profiles:plugin.prefs.profiles});
+  enableInlineView(); click('Choose properties to show'); click('Clear property selection'); click('Include author');
+  nameProfile('Reading'); click('Save selection as new profile');
+  const state=plugin.prefs.inlineViews, profile=state.profiles[0];
+  expect(profile.keys).toEqual(['author']);
+  expect(document.querySelector('.pv-profile-select')!.textContent).toContain('Inline: Reading (1)');
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  click('Include rating'); expect(profile.keys).toEqual(['author']);
+  expect(document.querySelector('.pv-profile-select')!.textContent).toContain('Inline: Reading (modified)');
+  click('Update active profile selection'); expect(profile.keys).toEqual(['author','rating']);
+  nameProfile('Research'); click('Rename active profile'); expect(profile.name).toBe('Research');
+  chooseView('profile:yaml'); expect(document.querySelector('.pv-tree')!.textContent).toContain('status');
+  chooseView(`inline:profile:${profile.id}`);
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(2);
+  click('Choose properties to show'); click('Delete active profile');
+  expect(state.profiles).toEqual([]); expect(state.scope).toEqual(['author','rating']);
+  expect(state.activeProfile).toBeNull();
+  expect({scope:plugin.prefs.scope,activeProfile:plugin.prefs.activeProfile,profiles:plugin.prefs.profiles}).toEqual(yaml);
+});
+it.each([false,true])('protects the built-in inline view and preserves typed names for All/None (mobile=%s)', mobile => {
+  if(mobile) document.body.classList.add('is-mobile');
+  enableInlineView();click('Choose properties to show');nameProfile('Reading');
+  click('Show all properties');click('Save selection as new profile');
+  expect((Notice as any).messages.at(-1)).toBe('Inline Properties View already exists.');
+  expect((document.querySelector('[aria-label="Profile name"]') as HTMLInputElement).value).toBe('Reading');
+  expect((document.querySelector('[aria-label="Delete active profile"]') as HTMLButtonElement).disabled).toBe(true);
+  click('Clear property selection');click('Save selection as new profile');
+  expect((Notice as any).messages.at(-1)).toBe('Please select at least one property.');
+  click('Include author');nameProfile('Inline Properties');click('Save selection as new profile');
+  expect(plugin.prefs.inlineViews.profiles).toEqual([]);
+  nameProfile('Reading');click('Save selection as new profile');
+  nameProfile(' reading ');click('Save selection as new profile');expect(plugin.prefs.inlineViews.profiles).toHaveLength(1);
+});
+it('supports search and value filters inside an inline saved view without changing saved keys', () => {
+  enableInlineView();plugin.inline.index.update('Other.md',{author:['Other'],rating:['5'],status:['inline only']});
+  click('Choose properties to show');click('Clear property selection');click('Include author');click('Include rating');
+  nameProfile('Reading');click('Save selection as new profile');
+  const profile=plugin.prefs.inlineViews.profiles[0];
+  click('Toggle search');const input=document.querySelector<HTMLInputElement>('[aria-label="Filter properties and values"]')!;
+  input.value='AJ';input.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  filterValue('Show notes with author: AJ (1)');
+  input.value='';input.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.pv-property-row')).toHaveLength(1);
+  expect(document.querySelector('.pv-tree')!.textContent).toContain('rating');
+  expect(document.querySelector('.pv-summary')!.textContent).toContain('Filtered (1 note)');
+  expect(profile.keys).toEqual(['author','rating']);
+  expect(document.querySelector('.pv-profile-select')!.textContent).not.toContain('modified');
+  click('Clear property filter');expect(document.querySelectorAll('.pv-property-row')).toHaveLength(2);
+});
+it('retains inline saved views and missing keys across disabling and re-enabling', () => {
+  enableInlineView();click('Choose properties to show');click('Clear property selection');click('Include author');
+  nameProfile('Reading');click('Save selection as new profile');
+  const profile=plugin.prefs.inlineViews.profiles[0];profile.keys.push('future');
+  chooseView(`inline:profile:${profile.id}`);
+  expect(document.querySelector('[aria-label="Include future"]')).not.toBeNull();
+  plugin.prefs.showInlineProperties=false;view.render();
+  expect(availableViews()).not.toContain(`inline:profile:${profile.id}`);
+  expect(plugin.prefs.inlineViews.profiles[0]).toEqual(profile);
+  plugin.prefs.showInlineProperties=true;view.render();chooseView(`inline:profile:${profile.id}`);
+  plugin.inline.index.update('New.md',{future:'yes'});view.render();
+  expect(document.querySelector('.pv-tree')!.textContent).toContain('future');
 });

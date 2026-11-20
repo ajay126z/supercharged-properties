@@ -6,7 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Open the view picker below the toolbar with viewport-bounded scrolling, wrapped names, and keyboard navigation, avoiding native dropdowns that open upward and hide views.
+
+- Recognize inline properties and link values inside nested lists and indented list continuations, while continuing to exclude fenced and indented code.
+
 ### Added
+
+- Saved inline property views with source-specific selections, Save/Update/Rename/Delete controls, persistent settings, and search and Value filter support. Built-in Inline Properties remains protected and saved inline views stay separate from YAML views.
 
 - Optional Show inline properties setting and separate read-only Inline Properties view. Browse literal Dataview-style fields as property → value → notes, with local search, sorting, distinct-note counts, copied links, and Value filters. Excluded folders apply; YAML views and editing remain separate. Background reads are bounded and discard outdated results.
 

@@ -27,7 +27,7 @@ author:: AJ
 (rating:: 4)
 ```
 
-All properties and saved views continue to show YAML frontmatter. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. It offers no property/value editing or YAML Search queries. Excluded folders apply, and code, frontmatter, and comments are ignored. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. This feature is unreleased, following 1.4.2.
+All properties and existing saved views continue to show YAML frontmatter. To save an inline view, choose **Inline Properties**, open **Choose properties to show**, select fields, enter a name, and choose **Save new**. The view picker opens downward with a scrollable list that fits the screen. Inline views appear as **Inline: Name** and have their own Update, Rename, and Delete controls. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. It offers no property/value editing or YAML Search queries. Excluded folders apply, and code, frontmatter, and comments are ignored. Fields in nested lists and indented list continuations are supported, including link values. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. This feature is unreleased, following 1.4.2.
 
 ## Explore notes sharing a value
 
