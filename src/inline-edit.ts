@@ -88,3 +88,9 @@ export function inlineQuery(property: string, value?: string): string {
   const quote=(text:string)=>JSON.stringify(text);
   return `line:(${quote(property)} ${quote('::')}${value===undefined?'':` ${quote(value)}`})`;
 }
+
+/** Original source fragments removed by a validated property deletion. */
+export function inlineRemovalFragments(source: string, property: string): string[] {
+  transformInline(source, {property, mode: 'delete-property', replacement: ''});
+  return fields(source, property).map(field => source.slice(field.start, field.end));
+}

@@ -150,6 +150,12 @@ Edits honor excluded folders and the active Value filter. Tree search and saved 
 
 Inline property menus also include **Pin/Unpin property** and **Hide property**. Pins in the built-in Inline Properties view are inherited by saved inline views, with local overrides inside each saved view. They do not affect YAML pins. Restore hidden inline properties in **Settings → Supercharged Properties → Hidden inline properties**. Inline note rows remain navigation-only; use property/value menus for inline edits.
 
+### Convert inline fields to YAML
+
+Use **Convert to YAML property…** from an inline property/value menu (right-click on desktop, long-press on mobile). Select notes, choose **Move** or **Keep**, and choose **Skip**, **Merge into list**, or **Overwrite** for existing YAML values. Literal text is the default; optional detection handles numbers, booleans, and ISO date text. Repeated fields become a list. Preview and confirmation are required.
+
+Conversion honors Value filters, excluded folders, and Note names/paths search. It shares **Undo last property edit** with YAML editing and skips notes changed after preview or before undo. This is an explicit write action; ordinary browsing remains read-only. See [conversion options, scope, conflicts, and recovery](BULK-EDITING.md#convert-inline-properties-to-yaml).
+
 ### Save an inline view
 
 1. Choose **Inline Properties** from the view dropdown.

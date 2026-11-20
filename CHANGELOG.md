@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Conversion to YAML
+
+- Add **Convert to YAML property…** to inline property/value menus, including mobile long-press.
+- Support selected notes, Move/Keep, literal text or optional detection, repeated-field lists, and Skip/Merge/Overwrite conflicts.
+- Honor Value filters, excluded folders, and note/path search; preview changes and removed source fragments before confirmation.
+- Share the YAML editor busy guard and undo slot for conversion, protect changed notes, and retain recovery snapshots for partial writes.
+
+
 ### Fixed
 
 - Keep pin/unpin choices local to each YAML saved view or custom selection, while inheriting pins from All properties. Persist local overrides and preserve them through property renames.

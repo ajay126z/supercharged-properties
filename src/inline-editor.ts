@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: MIT
 import type { App } from 'obsidian';
+import type { ValueEditor } from './value-editor';
 import { transformInline, inlineEditError, type InlineEdit } from './inline-edit';
 export interface InlineChange { path:string; before:string; after:string }
 export interface InlinePlan { edit:InlineEdit; changes:InlineChange[]; skipped:Array<{path:string;reason:string}>; error?:string }
 export class InlineEditor {
   private last:InlineChange[]=[];
   private busy=false;
-  constructor(private app:App,private includes:(path:string)=>boolean){}
+  constructor(private app:App,private includes:(path:string)=>boolean, private coordinator?:ValueEditor){}
   canUndo():boolean{return !!this.last.length&&!this.busy;}
   async preview(edit:InlineEdit,paths:Iterable<string>):Promise<InlinePlan>{
     const plan:InlinePlan={edit,changes:[],skipped:[],error:inlineEditError(edit)};if(plan.error)return plan;
@@ -17,6 +18,10 @@ export class InlineEditor {
     }return plan;
   }
   async apply(plan:InlinePlan):Promise<{updated:number;skipped:number;failed:number}>{
+    if(this.coordinator)return this.coordinator.runExclusive(() => this.applyUnlocked(plan));
+    return this.applyUnlocked(plan);
+  }
+  private async applyUnlocked(plan:InlinePlan):Promise<{updated:number;skipped:number;failed:number}>{
     if(this.busy)throw new Error('Another inline edit is running.');if(plan.error)throw new Error(plan.error);
     this.busy=true;const applied:InlineChange[]=[];let skipped=0,failed=0;
     try{for(const change of plan.changes){

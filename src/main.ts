@@ -1,3 +1,5 @@
+import { InlineConverter } from './inline-conversion';
+import { InlineConversionModal } from './inline-conversion-dialog';
 import { InlineEditor } from './inline-editor';
 import { InlineEditModal } from './inline-dialog';
 import { inlineQuery, type InlineEdit } from './inline-edit';
@@ -34,6 +36,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
   index = new PropertyIndex();
   inline!: InlineIndex;
   inlineEditor!: InlineEditor;
+  inlineConverter!: InlineConverter;
   prefs: Preferences = { ...defaults, inlineViews: loadViewState(null) };
   typeResolver!: PropertyTypeResolver;
   valueEditor!: ValueEditor;
@@ -60,12 +63,13 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
       hidden: typeof saved?.hidden === 'string' ? saved.hidden : '',
       expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((v: unknown) => typeof v === 'string') : []
     };
-    this.inlineEditor = new InlineEditor(this.app, path => this.includesPath(path));
     this.inline = new InlineIndex(file => this.app.vault.cachedRead(file), path => this.includesPath(path), () => this.refresh());
     this.inline.setEnabled(this.prefs.showInlineProperties);
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
     this.valueEditor = new ValueEditor(this.app, path => this.includesPath(path), id => noteEditType({ id }, this.typeResolver));
+    this.inlineEditor = new InlineEditor(this.app, path => this.includesPath(path), this.valueEditor);
+    this.inlineConverter = new InlineConverter(this.app, this.valueEditor, path => this.includesPath(path));
     this.registerHoverLinkSource(VIEW, { display: 'Supercharged Properties', defaultMod: true });
     this.registerView(VIEW, leaf => new PropertiesView(leaf, this));
     this.addRibbonIcon('list-tree', 'Open Supercharged Properties', () => { void this.open(); });
@@ -192,6 +196,17 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     new Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 10000);
     for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
     this.rebuild();
+  }
+
+  convertInline(property: PropertyNode, paths: string[]): void {
+    new InlineConversionModal(this.app, {property: property.label, paths,
+      preview: (options, selected) => this.inlineConverter.preview(options, selected),
+      apply: async plan => {
+        const result = await this.inlineConverter.apply(plan);
+        new Notice(`Converted ${result.updated} notes; skipped ${result.skipped}; ${result.failures.length} failed.${result.failures.length ? ' '+result.failures.join('\n') : ''}`);
+        this.rebuild(true);
+      }
+    }).open();
   }
 
   editInline(property: PropertyNode, mode: InlineEdit['mode'], value?: ValueNode): void {
@@ -1056,6 +1071,10 @@ export class PropertiesView extends ItemView {
         new Notice('Property hidden. Restore it in Supercharged Properties settings.');
       }));
     }
+    if (this.inlineView) menu.addItem(item => item.setTitle('Convert to YAML property…').setIcon('arrow-right-left').onClick(() => {
+      const paths = [...node.paths].filter(path => !this.query || this.searchScope !== 'note' || this.matches(path, 'note'));
+      this.plugin.convertInline(property, paths.sort(natural));
+    }));
     if (this.inlineView) menu.addItem(item => item.setTitle(node === property ? 'Replace selected values…' : 'Rename value…').setIcon('pencil').onClick(() => this.plugin.editInline(property, 'replace-values', node === property ? undefined : node)));
     if (node !== property) {
       menu.addItem(item => item.setTitle('Filter by Value').setIcon('filter').onClick(() => {

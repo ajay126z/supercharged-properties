@@ -26,6 +26,9 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
+// src/inline-conversion.ts
+var import_obsidian = require("obsidian");
+
 // src/frontmatter-values.ts
 var EMPTY = Object.freeze({ kind: "empty", text: "" });
 var TRUE = Object.freeze({ kind: "boolean", text: "true" });
@@ -347,436 +350,45 @@ function inlineQuery(property, value) {
   const quote = (text) => JSON.stringify(text);
   return `line:(${quote(property)} ${quote("::")}${value === void 0 ? "" : ` ${quote(value)}`})`;
 }
-
-// src/inline-editor.ts
-var InlineEditor = class {
-  constructor(app, includes) {
-    this.app = app;
-    this.includes = includes;
-    this.last = [];
-    this.busy = false;
-  }
-  canUndo() {
-    return !!this.last.length && !this.busy;
-  }
-  async preview(edit, paths) {
-    const plan = { edit, changes: [], skipped: [], error: inlineEditError(edit) };
-    if (plan.error) return plan;
-    for (const path of new Set(paths)) {
-      const file = this.app.vault.getFileByPath(path);
-      if (!file || !this.includes(path)) continue;
-      try {
-        const before = await this.app.vault.read(file), after = transformInline(before, edit);
-        if (after !== before) plan.changes.push({ path, before, after });
-      } catch (error) {
-        plan.skipped.push({ path, reason: error instanceof Error ? error.message : "Could not read note." });
-      }
-    }
-    return plan;
-  }
-  async apply(plan) {
-    if (this.busy) throw new Error("Another inline edit is running.");
-    if (plan.error) throw new Error(plan.error);
-    this.busy = true;
-    const applied = [];
-    let skipped = 0, failed = 0;
-    try {
-      for (const change of plan.changes) {
-        const file = this.app.vault.getFileByPath(change.path);
-        if (!file || !this.includes(change.path)) {
-          skipped++;
-          continue;
-        }
-        let wrote = false;
-        try {
-          await this.app.vault.process(file, (current) => {
-            if (current !== change.before || !this.includes(file.path) || file.path !== change.path) return current;
-            wrote = true;
-            return change.after;
-          });
-          if (wrote) applied.push(change);
-          else skipped++;
-        } catch {
-          failed++;
-        }
-      }
-      if (applied.length) this.last = applied;
-      return { updated: applied.length, skipped, failed };
-    } finally {
-      this.busy = false;
-    }
-  }
-  async undo() {
-    const changes = this.last.map((c) => ({ path: c.path, before: c.after, after: c.before }));
-    const result = await this.apply({ edit: { mode: "delete-property", property: "", replacement: "" }, changes, skipped: [] });
-    this.last = [];
-    return result;
-  }
-};
-
-// src/inline-dialog.ts
-var import_obsidian = require("obsidian");
-
-// src/mobile-layout.ts
-function usesTouchLayout(element) {
-  return element.ownerDocument.body.classList.contains("is-mobile") || !!element.ownerDocument.defaultView?.matchMedia?.("(pointer: coarse)").matches;
-}
-function fitVisibleViewport(element) {
-  const win = element.ownerDocument.defaultView;
-  if (!win) return () => {
-  };
-  let frame;
-  const viewport = win.visualViewport;
-  const update = () => {
-    frame = void 0;
-    if (!usesTouchLayout(element) || viewport && viewport.scale !== 1) {
-      element.style.removeProperty("--pv-visible-height");
-      return;
-    }
-    const bottom = viewport ? viewport.offsetTop + viewport.height : win.innerHeight;
-    const height = Math.max(0, Math.floor(bottom - element.getBoundingClientRect().top));
-    element.style.setProperty("--pv-visible-height", `${height}px`);
-  };
-  const schedule = () => {
-    if (frame !== void 0) win.cancelAnimationFrame(frame);
-    frame = win.requestAnimationFrame(update);
-  };
-  win.addEventListener("resize", schedule);
-  viewport?.addEventListener("resize", schedule);
-  viewport?.addEventListener("scroll", schedule);
-  element.addEventListener("focusin", schedule);
-  element.addEventListener("focusout", schedule);
-  const observer = typeof ResizeObserver === "undefined" ? void 0 : new ResizeObserver(schedule);
-  if (element.parentElement) observer?.observe(element.parentElement);
-  schedule();
-  return () => {
-    if (frame !== void 0) win.cancelAnimationFrame(frame);
-    win.removeEventListener("resize", schedule);
-    viewport?.removeEventListener("resize", schedule);
-    viewport?.removeEventListener("scroll", schedule);
-    element.removeEventListener("focusin", schedule);
-    element.removeEventListener("focusout", schedule);
-    observer?.disconnect();
-    element.style.removeProperty("--pv-visible-height");
-  };
+function inlineRemovalFragments(source, property) {
+  transformInline(source, { property, mode: "delete-property", replacement: "" });
+  return fields(source, property).map((field) => source.slice(field.start, field.end));
 }
 
-// src/modal-layout.ts
-function fitModalViewport(container) {
-  const win = container.ownerDocument.defaultView;
-  if (!win) return () => {
-  };
-  const viewport = win.visualViewport;
-  let frame;
-  const clear = () => {
-    container.classList.remove("pv-touch-modal");
-    container.style.removeProperty("--pv-dialog-height");
-    container.style.removeProperty("--pv-dialog-top");
-  };
-  const update = () => {
-    frame = void 0;
-    if (!usesTouchLayout(container)) {
-      clear();
-      return;
-    }
-    if (viewport && viewport.scale !== 1) return;
-    container.classList.add("pv-touch-modal");
-    container.style.setProperty("--pv-dialog-height", `${Math.max(0, Math.floor(viewport?.height ?? win.innerHeight))}px`);
-    container.style.setProperty("--pv-dialog-top", `${Math.max(0, Math.floor(viewport?.offsetTop ?? 0))}px`);
-  };
-  const schedule = () => {
-    if (frame !== void 0) win.cancelAnimationFrame(frame);
-    frame = win.requestAnimationFrame(update);
-  };
-  win.addEventListener("resize", schedule);
-  viewport?.addEventListener("resize", schedule);
-  viewport?.addEventListener("scroll", schedule);
-  update();
-  return () => {
-    if (frame !== void 0) win.cancelAnimationFrame(frame);
-    win.removeEventListener("resize", schedule);
-    viewport?.removeEventListener("resize", schedule);
-    viewport?.removeEventListener("scroll", schedule);
-    clear();
-  };
-}
-
-// src/inline-dialog.ts
-var InlineEditModal = class extends import_obsidian.Modal {
-  constructor(app, options) {
-    super(app);
-    this.options = options;
-    this.revision = 0;
-  }
-  onOpen() {
-    const edit = { ...this.options.edit, values: [...this.options.edit.values ?? []] };
-    this.titleEl.textContent = edit.mode === "rename-property" ? "Rename inline property" : edit.mode === "delete-property" ? "Delete inline property" : "Replace inline values";
-    this.contentEl.classList.add("pv-edit-modal", "pv-note-edit");
-    this.containerEl.classList.add("pv-note-modal-container");
-    this.modalEl.classList.add("pv-note-value-modal");
-    this.dispose = fitModalViewport(this.containerEl);
-    const fields2 = this.contentEl.createDiv({ cls: "pv-note-edit-scroll" });
-    fields2.createEl("p", { text: `Property: ${edit.property}. Changes apply to included notes in the active Value filter, regardless of tree search or saved-view selection. YAML frontmatter is not edited.` });
-    fields2.createEl("p", { text: "Preview first, then confirm. Notes changed since preview are skipped. Undo last inline property edit is available until reload; a new inline batch replaces it." });
-    const controls = fields2.createDiv();
-    const inputs = [];
-    if (edit.mode === "replace-values") {
-      controls.createEl("p", { text: "Select values to replace with one new text value:" });
-      for (const value of this.options.values) {
-        const label = controls.createEl("label", { cls: "pv-scope-choice" }), input = label.createEl("input");
-        input.type = "checkbox";
-        const raw = JSON.parse(value.id), text = raw[0] === "empty" ? "" : value.label;
-        input.checked = edit.values.includes(text);
-        input.setAttribute("aria-label", `Replace ${value.label}`);
-        label.createSpan({ text: value.label });
-        inputs.push(input);
-        input.addEventListener("change", () => {
-          edit.values = input.checked ? [...edit.values, text] : edit.values.filter((v) => v !== text);
-          invalidate();
-        });
-      }
-    }
-    if (edit.mode !== "delete-property") {
-      const label = controls.createEl("label", { cls: "pv-edit-field" });
-      label.createSpan({ text: edit.mode === "rename-property" ? "New property name" : "New value" });
-      const input = label.createEl("input");
-      input.type = "text";
-      input.value = edit.replacement;
-      input.setAttribute("aria-label", edit.mode === "rename-property" ? "New inline property name" : "New inline value");
-      inputs.push(input);
-      input.addEventListener("input", () => {
-        edit.replacement = input.value;
-        invalidate();
-      });
-    } else controls.createEl("p", { text: "Deletes every occurrence of this inline property and its values. Surrounding prose and other fields are preserved." });
-    const preview = fields2.createDiv({ cls: "pv-edit-preview" });
-    preview.setAttribute("aria-live", "polite");
-    const actions = this.contentEl.createDiv({ cls: "pv-edit-actions" });
-    const cancel = actions.createEl("button", { text: "Cancel" });
-    cancel.addEventListener("click", () => this.close());
-    const inspect = actions.createEl("button", { text: "Preview changes" });
-    const apply = actions.createEl("button", { text: "Confirm changes", cls: "mod-cta" });
-    apply.disabled = true;
-    let plan;
-    const invalidate = () => {
-      this.revision++;
-      plan = void 0;
-      apply.disabled = true;
-      preview.replaceChildren();
-    };
-    inspect.addEventListener("click", () => {
-      const revision = ++this.revision;
-      apply.disabled = true;
-      inspect.disabled = true;
-      preview.textContent = "Reading notes\u2026";
-      void this.options.preview({ ...edit, values: [...edit.values] }).then((result) => {
-        if (revision !== this.revision) return;
-        plan = result;
-        preview.replaceChildren();
-        preview.createEl("p", { text: result.error ?? `${result.changes.length} notes will change; ${result.skipped.length} skipped.` });
-        for (const change of result.changes) {
-          const row = preview.createDiv({ cls: "pv-edit-change" });
-          row.createEl("strong", { text: change.path });
-          row.createEl("pre", { text: `Before:
-${change.before}
-After:
-${change.after}` });
-        }
-        for (const skip of result.skipped) preview.createEl("p", { text: `${skip.path}: ${skip.reason}` });
-        apply.disabled = !!result.error || !result.changes.length;
-      }).catch(() => {
-        preview.textContent = "Could not preview inline edits.";
-      }).finally(() => {
-        inspect.disabled = false;
-      });
-    });
-    apply.addEventListener("click", () => {
-      if (!plan || apply.disabled) return;
-      apply.disabled = true;
-      inspect.disabled = true;
-      cancel.disabled = true;
-      for (const input of inputs) input.disabled = true;
-      void this.options.apply(plan).then(() => this.close()).catch((error) => {
-        new import_obsidian.Notice(error instanceof Error ? error.message : "Could not edit inline properties.");
-        invalidate();
-        inspect.disabled = false;
-        cancel.disabled = false;
-        for (const input of inputs) input.disabled = false;
-      });
-    });
-  }
-  onClose() {
-    this.revision++;
-    this.dispose?.();
-    this.contentEl.replaceChildren();
-  }
-};
-
-// src/tooltips.ts
-function applyTooltips(root, enabled) {
-  const selector = "[title], [data-pv-tooltip-title], [aria-label], [data-tooltip-classes]";
-  const elements = Array.from(root.querySelectorAll(selector));
-  if (root.matches(selector)) elements.push(root);
-  for (const element of elements) {
-    if (!enabled) {
-      if (element.hasAttribute("title")) {
-        element.dataset.pvTooltipTitle = element.getAttribute("title");
-        element.removeAttribute("title");
-      }
-    } else if (element.dataset.pvTooltipTitle !== void 0) {
-      if (!element.hasAttribute("title")) element.title = element.dataset.pvTooltipTitle;
-      delete element.dataset.pvTooltipTitle;
-    }
-    const classes = new Set((element.getAttribute("data-tooltip-classes") ?? "").split(/\s+/).filter(Boolean));
-    if (!enabled && element.hasAttribute("aria-label")) classes.add("pv-tooltip-disabled");
-    else classes.delete("pv-tooltip-disabled");
-    if (classes.size) element.setAttribute("data-tooltip-classes", [...classes].join(" "));
-    else element.removeAttribute("data-tooltip-classes");
-  }
-}
-
-// src/main.ts
-var import_obsidian10 = require("obsidian");
-
-// src/folder-exclusions.ts
-function excludedFolders(text) {
-  return [...new Set(text.split("\n").map((line) => line.trim().replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/")).filter((path) => path && !path.split("/").includes("..")))];
-}
-function isFolderExcluded(path, folders) {
-  return folders.some((folder) => path.startsWith(`${folder}/`));
-}
-
-// src/sorting.ts
-var sortOptions = {
-  name: "Property name (A to Z)",
-  "name-desc": "Property name (Z to A)",
-  count: "Frequency (high to low)",
-  "count-asc": "Frequency (low to high)"
-};
-function sortOrder(value) {
-  return typeof value === "string" && Object.prototype.hasOwnProperty.call(sortOptions, value) ? value : "name";
-}
-function sortNodes(nodes, order) {
-  return Array.from(nodes).sort((a, b) => {
-    const alphabetical = natural(a.label, b.label) || a.id.localeCompare(b.id);
-    if (order === "name-desc") return -alphabetical;
-    if (order === "count") return b.paths.size - a.paths.size || alphabetical;
-    if (order === "count-asc") return a.paths.size - b.paths.size || alphabetical;
-    return alphabetical;
-  });
-}
-
-// src/search.ts
-function propertyQuery(key, value, empty = false) {
-  const quote = (text) => JSON.stringify(text);
-  return value === void 0 ? `[${quote(key)}]` : `[${quote(key)}:${empty ? "null" : quote(value)}]`;
-}
-
-// src/profiles.ts
-function loadProfiles(raw) {
-  if (!Array.isArray(raw)) return [];
-  const ids = /* @__PURE__ */ new Set();
-  const names = /* @__PURE__ */ new Set();
-  return raw.flatMap((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
-    const value = entry;
-    if (!value || typeof value.id !== "string" || !value.id || typeof value.name !== "string" || !value.name.trim() || !Array.isArray(value.keys)) return [];
-    if (ids.has(value.id) || names.has(fold(value.name))) return [];
-    ids.add(value.id);
-    names.add(fold(value.name));
-    const pinOverrides = loadPinOverrides(value.pinOverrides);
-    return [{ ...pinOverrides ? { pinOverrides } : {}, id: value.id, name: value.name.trim(), keys: [...new Set(value.keys.filter((key) => typeof key === "string").map(fold).filter(Boolean))] }];
-  });
-}
-function sameKeys(a, b) {
-  const left = new Set(a);
-  const right = new Set(b);
-  return left.size === right.size && [...left].every((key) => right.has(key));
-}
-function loadViewState(raw) {
-  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  const profiles = loadProfiles(value.profiles);
-  return {
-    profiles,
-    ...value.pinned !== void 0 ? { pinned: Array.isArray(value.pinned) ? value.pinned.filter((v) => typeof v === "string").map(fold) : [] } : {},
-    ...typeof value.hidden === "string" ? { hidden: value.hidden } : {},
-    ...loadPinOverrides(value.customPinOverrides) ? { customPinOverrides: loadPinOverrides(value.customPinOverrides) } : {},
-    scope: Array.isArray(value.scope) ? [...new Set(value.scope.filter((key) => typeof key === "string").map(fold).filter(Boolean))] : null,
-    activeProfile: typeof value.activeProfile === "string" && profiles.some((profile) => profile.id === value.activeProfile) ? value.activeProfile : null
-  };
-}
-function loadPinOverrides(raw) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
-  return Object.fromEntries(Object.entries(raw).filter(([key, value]) => fold(key) && typeof value === "boolean").map(([key, value]) => [fold(key), value]));
-}
-
-// src/property-types.ts
-var import_obsidian2 = require("obsidian");
-var TYPE_ICONS = /* @__PURE__ */ new Map([
-  ["text", "text"],
-  ["multitext", "list"],
-  ["aliases", "list"],
-  ["tags", "tags"],
-  ["number", "hash"],
-  ["checkbox", "check-square"],
-  ["date", "calendar"],
-  ["datetime", "calendar-clock"]
-]);
-var BUILTIN_TYPES = /* @__PURE__ */ new Map([
-  ["tags", "tags"],
-  ["aliases", "aliases"],
-  ["cssclasses", "multitext"]
-]);
-var PropertyTypeResolver = class {
-  constructor(app) {
-    this.app = app;
-    this.types = /* @__PURE__ */ new Map();
-  }
-  /** Reload types.json. Missing, malformed, or unreadable files keep the built-in fallbacks. */
-  async load() {
-    let raw;
-    try {
-      const path = (0, import_obsidian2.normalizePath)(`${this.app.vault.configDir}/types.json`);
-      if (!await this.app.vault.adapter.exists(path)) {
-        this.types.clear();
-        return;
-      }
-      const parsed = JSON.parse(await this.app.vault.adapter.read(path));
-      raw = parsed?.types;
-    } catch {
-      return;
-    }
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
-    const types = /* @__PURE__ */ new Map();
-    for (const [key, value] of Object.entries(raw)) {
-      if (typeof value !== "string") continue;
-      const normalizedKey = fold(key);
-      const normalizedType = fold(value);
-      if (normalizedKey && normalizedType) types.set(normalizedKey, normalizedType);
-    }
-    this.types = types;
-  }
-  typeFor(property) {
-    const id = fold(property.id);
-    return this.types.get(id) ?? BUILTIN_TYPES.get(id) ?? "text";
-  }
-  iconFor(property) {
-    return TYPE_ICONS.get(this.typeFor(property)) ?? "text";
-  }
-};
-function noteEditType(property, resolver) {
-  const id = fold(property.id), type = resolver.typeFor(property);
-  if (id === "tags" || type === "tags") return void 0;
-  if (id === "aliases" || id === "cssclasses" || ["multitext", "list", "aliases"].includes(type)) return "list";
-  if (["text", "number", "checkbox", "date", "datetime"].includes(type)) return type;
+// src/property-rename.ts
+function propertyNameError(name) {
+  if (!name.trim()) return "Enter a property name.";
+  if (/[\r\n]/.test(name) || name.includes(String.fromCharCode(0))) return "Property names cannot contain line breaks or null characters.";
+  if (fold(name) === "position") return "The name position is reserved for metadata.";
   return void 0;
 }
-function supportsTextSplit(property, resolver) {
-  return !BUILTIN_TYPES.has(fold(property.id)) && resolver.typeFor(property) === "text";
+function matchingKeys(frontmatter, name) {
+  return Object.keys(frontmatter).filter((key) => key !== "position" && fold(key) === fold(name));
 }
-
-// src/value-editor.ts
-var import_obsidian3 = require("obsidian");
+function canRename(frontmatter, source, target) {
+  const keys = matchingKeys(frontmatter, source);
+  return !propertyNameError(target) && source !== target && keys.length === 1 && keys[0] === source && matchingKeys(frontmatter, target).every((key) => key === source);
+}
+function setOwnValue(frontmatter, key, value) {
+  Object.defineProperty(frontmatter, key, { value, enumerable: true, writable: true, configurable: true });
+}
+function includeRenamedProperty(prefs, source, target) {
+  const from = fold(source), to = fold(target);
+  if (from === to) return;
+  const include = (keys) => keys.some((key) => fold(key) === from) && !keys.some((key) => fold(key) === to) ? [...keys, to] : keys;
+  if (prefs.scope) prefs.scope = include(prefs.scope);
+  prefs.pinned = include(prefs.pinned);
+  prefs.expanded = include(prefs.expanded);
+  prefs.hidden = include(prefs.hidden.split("\n")).join("\n");
+  const carryPins = (overrides) => {
+    if (overrides && Object.prototype.hasOwnProperty.call(overrides, from) && !Object.prototype.hasOwnProperty.call(overrides, to)) Object.defineProperty(overrides, to, { value: overrides[from], enumerable: true, configurable: true, writable: true });
+  };
+  carryPins(prefs.customPinOverrides);
+  for (const profile of prefs.profiles) {
+    profile.keys = include(profile.keys);
+    carryPins(profile.pinOverrides);
+  }
+}
 
 // src/note-value-operations.ts
 function textOnlyList(property) {
@@ -839,41 +451,6 @@ function transformNoteValue(original, edit, property) {
   const compatible = edit.type === "number" ? typeof original === "number" && Number.isFinite(original) : edit.type === "checkbox" ? typeof original === "boolean" : typeof original === "string";
   if (!empty && !compatible) return { error: `Stored value does not match the ${edit.type} property type.` };
   return { value: edit.value };
-}
-
-// src/property-rename.ts
-function propertyNameError(name) {
-  if (!name.trim()) return "Enter a property name.";
-  if (/[\r\n]/.test(name) || name.includes(String.fromCharCode(0))) return "Property names cannot contain line breaks or null characters.";
-  if (fold(name) === "position") return "The name position is reserved for metadata.";
-  return void 0;
-}
-function matchingKeys(frontmatter, name) {
-  return Object.keys(frontmatter).filter((key) => key !== "position" && fold(key) === fold(name));
-}
-function canRename(frontmatter, source, target) {
-  const keys = matchingKeys(frontmatter, source);
-  return !propertyNameError(target) && source !== target && keys.length === 1 && keys[0] === source && matchingKeys(frontmatter, target).every((key) => key === source);
-}
-function setOwnValue(frontmatter, key, value) {
-  Object.defineProperty(frontmatter, key, { value, enumerable: true, writable: true, configurable: true });
-}
-function includeRenamedProperty(prefs, source, target) {
-  const from = fold(source), to = fold(target);
-  if (from === to) return;
-  const include = (keys) => keys.some((key) => fold(key) === from) && !keys.some((key) => fold(key) === to) ? [...keys, to] : keys;
-  if (prefs.scope) prefs.scope = include(prefs.scope);
-  prefs.pinned = include(prefs.pinned);
-  prefs.expanded = include(prefs.expanded);
-  prefs.hidden = include(prefs.hidden.split("\n")).join("\n");
-  const carryPins = (overrides) => {
-    if (overrides && Object.prototype.hasOwnProperty.call(overrides, from) && !Object.prototype.hasOwnProperty.call(overrides, to)) Object.defineProperty(overrides, to, { value: overrides[from], enumerable: true, configurable: true, writable: true });
-  };
-  carryPins(prefs.customPinOverrides);
-  for (const profile of prefs.profiles) {
-    profile.keys = include(profile.keys);
-    carryPins(profile.pinOverrides);
-  }
 }
 
 // src/value-operations.ts
@@ -975,8 +552,8 @@ function transformScalar(raw, request, inList) {
       if (inList || typeof raw !== "string") return raw;
       const delimiter = request.delimiter ?? ",";
       if (!delimiter) return raw;
-      const parts = raw.split(delimiter).map((part) => part.trim()).filter(Boolean);
-      return parts.length > 1 ? parts : raw;
+      const parts2 = raw.split(delimiter).map((part) => part.trim()).filter(Boolean);
+      return parts2.length > 1 ? parts2 : raw;
     }
     case "delete":
       return raw;
@@ -993,7 +570,744 @@ function coerce(kind, replacement) {
   return replacement;
 }
 
+// src/inline-conversion.ts
+function parts(source) {
+  const info = (0, import_obsidian.getFrontMatterInfo)(source);
+  const raw = info.exists ? (0, import_obsidian.parseYaml)(info.frontmatter) : {};
+  if (raw !== null && (typeof raw !== "object" || Array.isArray(raw))) throw new Error("Frontmatter must be a property mapping.");
+  if (!info.exists && /^\uFEFF?---\s*(?:\r?\n|$)/.test(source)) throw new Error("Unclosed frontmatter.");
+  return { body: source.slice(info.exists ? info.contentStart : 0), prefix: source.slice(0, info.exists ? info.contentStart : 0), frontmatter: raw ?? {} };
+}
+function detect(text) {
+  if (/^(true|false)$/i.test(text)) return text.toLowerCase() === "true";
+  return parseNoteNumber(text) ?? text;
+}
+function planConversion(source, options, path) {
+  if (["position", "tags", "aliases", "cssclasses"].includes(fold(options.property))) throw new Error("Reserved and built-in properties cannot be converted.");
+  const parsed = parseInlineProperties(source), keys = Object.keys(parsed).filter((key2) => fold(key2) === fold(options.property));
+  if (keys.length !== 1) throw new Error(keys.length ? "Ambiguous folded inline keys." : "Inline property is missing.");
+  const key = keys[0], originalParts = parts(source), fm = originalParts.frontmatter;
+  const existing = matchingKeys(fm, key);
+  if (existing.length > 1 || existing.length === 1 && existing[0] !== key) throw new Error("Folded YAML key collision.");
+  const existed = existing.length === 1;
+  if (existed && options.conflict === "skip") throw new Error("YAML property already exists.");
+  const texts = parsed[key].map((value) => value ?? "");
+  const values = texts.map((value) => options.detect ? detect(value) : value);
+  let replacement = values.length === 1 ? values[0] : values;
+  if (existed && options.conflict === "merge") {
+    const original = fm[key];
+    if (original !== null && typeof original === "object" && !Array.isArray(original)) throw new Error("Cannot merge a YAML object into a property list.");
+    const merged = Array.isArray(original) ? [...original] : [original];
+    if (merged.some((value) => value !== null && typeof value === "object")) throw new Error("Cannot merge nested YAML values.");
+    for (const value of values) if (!merged.some((item) => sameValue(item, value))) merged.push(value);
+    replacement = merged;
+  }
+  const removed = transformInline(source, { property: key, mode: "delete-property", replacement: "" });
+  return { path, before: source, removed: options.move ? inlineRemovalFragments(source, key) : [], body: originalParts.body, afterBody: options.move ? parts(removed).body : originalParts.body, key, existed, original: cloneValue(fm[key]), replacement, frontmatter: fm };
+}
+var InlineConverter = class {
+  constructor(app, editor, includes) {
+    this.app = app;
+    this.editor = editor;
+    this.includes = includes;
+  }
+  async preview(options, paths) {
+    const plan = { options: { ...options }, changes: [], skipped: [] };
+    for (const path of new Set(paths)) {
+      const file = this.app.vault.getFileByPath(path);
+      if (!file || !this.includes(path)) {
+        plan.skipped.push({ path, reason: "Note missing or folder excluded." });
+        continue;
+      }
+      try {
+        plan.changes.push(planConversion(await this.app.vault.read(file), options, path));
+      } catch (error) {
+        plan.skipped.push({ path, reason: error instanceof Error ? error.message : "Could not read note." });
+      }
+    }
+    return plan;
+  }
+  async apply(plan) {
+    return this.editor.runExclusive(async () => {
+      const snapshots = [], failures = [];
+      let skipped = 0, updated = 0;
+      for (const change of plan.changes) {
+        const file = this.app.vault.getFileByPath(change.path);
+        if (!file || !this.includes(change.path)) {
+          skipped++;
+          continue;
+        }
+        let stage;
+        try {
+          if (await this.app.vault.read(file) !== change.before) {
+            skipped++;
+            continue;
+          }
+          let wrote = false;
+          await this.app.fileManager.processFrontMatter(file, (fm) => {
+            if (file.path !== change.path || !this.includes(file.path) || !sameValue(fm, change.frontmatter)) throw new Error("Note changed since preview.");
+            setOwnValue(fm, change.key, cloneValue(change.replacement));
+            wrote = true;
+          });
+          if (!wrote) {
+            skipped++;
+            continue;
+          }
+          const written = await this.app.vault.read(file);
+          const current = parts(written);
+          const expected = { ...change.frontmatter };
+          setOwnValue(expected, change.key, change.replacement);
+          if (!sameValue(current.frontmatter, expected) || current.body !== change.body) {
+            await this.app.fileManager.processFrontMatter(file, (fm) => {
+              if (!sameValue(fm, expected)) throw new Error("Note changed during conversion; YAML may have been copied. Review the note.");
+              if (change.existed) setOwnValue(fm, change.key, cloneValue(change.original));
+              else delete fm[change.key];
+            });
+            throw new Error("Note changed during conversion; YAML assignment reverted and source fields retained.");
+          }
+          stage = written;
+          let after = stage;
+          if (plan.options.move) {
+            let removed = false;
+            await this.app.vault.process(file, (text) => {
+              if (text !== stage || file.path !== change.path || !this.includes(file.path)) return text;
+              const verified = planConversion(text, { ...plan.options, conflict: "overwrite" }, change.path);
+              if (verified.body !== change.body || verified.afterBody !== change.afterBody) return text;
+              after = parts(text).prefix + change.afterBody;
+              removed = true;
+              return after;
+            });
+            if (!removed) throw new Error("Note changed during conversion; source fields retained.");
+          }
+          snapshots.push({ change, after });
+          updated++;
+        } catch (error) {
+          if (stage !== void 0) {
+            const current = await this.app.vault.read(file).catch(() => void 0);
+            if (current === stage || current === void 0) snapshots.push({ change, after: stage });
+            else {
+              const expected = { ...change.frontmatter };
+              setOwnValue(expected, change.key, change.replacement);
+              try {
+                await this.app.fileManager.processFrontMatter(file, (fm) => {
+                  if (!sameValue(fm, expected)) throw new Error("Frontmatter also changed.");
+                  if (change.existed) setOwnValue(fm, change.key, cloneValue(change.original));
+                  else delete fm[change.key];
+                });
+              } catch {
+                failures.push(`${change.path}: Could not revert the YAML copy; review this note.`);
+              }
+            }
+          }
+          failures.push(`${change.path}: ${error instanceof Error ? error.message : "Write failed."}`);
+        }
+      }
+      if (snapshots.length) this.editor.rememberUndo(() => this.undo(snapshots));
+      return { updated, skipped, failures };
+    });
+  }
+  async undo(snapshots) {
+    let restored = 0, skipped = 0;
+    const failures = [];
+    for (const { change, after } of snapshots) {
+      const file = this.app.vault.getFileByPath(change.path);
+      if (!file || !this.includes(change.path)) {
+        skipped++;
+        continue;
+      }
+      try {
+        let done = false;
+        await this.app.vault.process(file, (text) => {
+          if (text !== after || file.path !== change.path || !this.includes(file.path)) return text;
+          done = true;
+          return change.before;
+        });
+        if (done) restored++;
+        else skipped++;
+      } catch (error) {
+        failures.push({ path: change.path, message: error instanceof Error ? error.message : "Undo failed." });
+      }
+    }
+    return { restored, skipped, failures };
+  }
+};
+
+// src/inline-conversion-dialog.ts
+var import_obsidian2 = require("obsidian");
+
+// src/mobile-layout.ts
+function usesTouchLayout(element) {
+  return element.ownerDocument.body.classList.contains("is-mobile") || !!element.ownerDocument.defaultView?.matchMedia?.("(pointer: coarse)").matches;
+}
+function fitVisibleViewport(element) {
+  const win = element.ownerDocument.defaultView;
+  if (!win) return () => {
+  };
+  let frame;
+  const viewport = win.visualViewport;
+  const update = () => {
+    frame = void 0;
+    if (!usesTouchLayout(element) || viewport && viewport.scale !== 1) {
+      element.style.removeProperty("--pv-visible-height");
+      return;
+    }
+    const bottom = viewport ? viewport.offsetTop + viewport.height : win.innerHeight;
+    const height = Math.max(0, Math.floor(bottom - element.getBoundingClientRect().top));
+    element.style.setProperty("--pv-visible-height", `${height}px`);
+  };
+  const schedule = () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    frame = win.requestAnimationFrame(update);
+  };
+  win.addEventListener("resize", schedule);
+  viewport?.addEventListener("resize", schedule);
+  viewport?.addEventListener("scroll", schedule);
+  element.addEventListener("focusin", schedule);
+  element.addEventListener("focusout", schedule);
+  const observer = typeof ResizeObserver === "undefined" ? void 0 : new ResizeObserver(schedule);
+  if (element.parentElement) observer?.observe(element.parentElement);
+  schedule();
+  return () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    win.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("scroll", schedule);
+    element.removeEventListener("focusin", schedule);
+    element.removeEventListener("focusout", schedule);
+    observer?.disconnect();
+    element.style.removeProperty("--pv-visible-height");
+  };
+}
+
+// src/modal-layout.ts
+function fitModalViewport(container) {
+  const win = container.ownerDocument.defaultView;
+  if (!win) return () => {
+  };
+  const viewport = win.visualViewport;
+  let frame;
+  const clear = () => {
+    container.classList.remove("pv-touch-modal");
+    container.style.removeProperty("--pv-dialog-height");
+    container.style.removeProperty("--pv-dialog-top");
+  };
+  const update = () => {
+    frame = void 0;
+    if (!usesTouchLayout(container)) {
+      clear();
+      return;
+    }
+    if (viewport && viewport.scale !== 1) return;
+    container.classList.add("pv-touch-modal");
+    container.style.setProperty("--pv-dialog-height", `${Math.max(0, Math.floor(viewport?.height ?? win.innerHeight))}px`);
+    container.style.setProperty("--pv-dialog-top", `${Math.max(0, Math.floor(viewport?.offsetTop ?? 0))}px`);
+  };
+  const schedule = () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    frame = win.requestAnimationFrame(update);
+  };
+  win.addEventListener("resize", schedule);
+  viewport?.addEventListener("resize", schedule);
+  viewport?.addEventListener("scroll", schedule);
+  update();
+  return () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    win.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("scroll", schedule);
+    clear();
+  };
+}
+
+// src/inline-conversion-dialog.ts
+var InlineConversionModal = class extends import_obsidian2.Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+    this.revision = 0;
+  }
+  onOpen() {
+    this.titleEl.textContent = "Convert to YAML property";
+    this.containerEl.classList.add("pv-note-modal-container");
+    this.modalEl.classList.add("pv-note-value-modal");
+    this.contentEl.classList.add("pv-edit-modal", "pv-note-edit");
+    this.dispose = fitModalViewport(this.containerEl);
+    const scroll = this.contentEl.createDiv({ cls: "pv-note-edit-scroll" });
+    scroll.createEl("p", { text: `Convert all occurrences of ${this.options.property} in the selected notes. Value filters, note/path search, and excluded folders limit this list.` });
+    scroll.createEl("p", { text: "Repeated fields become a list. Preview before confirming. Undo last property edit restores this batch until reload or another property edit. YAML formatting may change." });
+    const options = { property: this.options.property, move: true, detect: false, conflict: "skip" };
+    const inputs = [];
+    const select = (name, choices, update) => {
+      const label2 = scroll.createEl("label", { cls: "pv-edit-field" });
+      label2.createSpan({ text: name });
+      const input = label2.createEl("select");
+      input.setAttribute("aria-label", name);
+      inputs.push(input);
+      for (const [value, text] of choices) input.createEl("option", { value, text });
+      input.addEventListener("change", () => {
+        update(input.value);
+        invalidate();
+      });
+    };
+    select("Source text", [["move", "Move \u2014 remove inline fields"], ["keep", "Keep \u2014 copy only"]], (value) => {
+      options.move = value === "move";
+    });
+    select("Existing YAML property", [["skip", "Skip"], ["merge", "Merge into list"], ["overwrite", "Overwrite"]], (value) => {
+      options.conflict = value;
+    });
+    const label = scroll.createEl("label", { cls: "pv-scope-choice" }), detection = label.createEl("input");
+    detection.type = "checkbox";
+    inputs.push(detection);
+    label.createSpan({ text: "Detect numbers, checkboxes, and dates" });
+    detection.setAttribute("aria-label", "Detect numbers, checkboxes, and dates");
+    detection.addEventListener("change", () => {
+      options.detect = detection.checked;
+      invalidate();
+    });
+    scroll.createEl("p", { text: "Default: literal text, including links and leading zeros. Detection converts numeric text and true/false; ISO dates remain date-compatible text. Property display types are managed by Obsidian." });
+    const selected = new Set(this.options.paths);
+    const notes = scroll.createEl("details");
+    notes.createEl("summary", { text: `${selected.size} eligible notes \u2014 choose notes` });
+    let shown = 0;
+    const more = notes.createEl("button", { text: "Show more notes" });
+    const showNotes = () => {
+      for (const path of this.options.paths.slice(shown, shown + 50)) {
+        const row = notes.createEl("label", { cls: "pv-scope-choice" }), input = row.createEl("input");
+        input.type = "checkbox";
+        input.checked = selected.has(path);
+        inputs.push(input);
+        row.createSpan({ text: path });
+        input.addEventListener("change", () => {
+          if (input.checked) selected.add(path);
+          else selected.delete(path);
+          invalidate();
+        });
+        notes.insertBefore(row, more);
+      }
+      shown += 50;
+      more.hidden = shown >= this.options.paths.length;
+    };
+    more.addEventListener("click", showNotes);
+    showNotes();
+    const preview = scroll.createDiv({ cls: "pv-edit-preview" });
+    preview.setAttribute("aria-live", "polite");
+    const actions = this.contentEl.createDiv({ cls: "pv-edit-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel" });
+    cancel.addEventListener("click", () => this.close());
+    const inspect = actions.createEl("button", { text: "Preview changes" }), apply = actions.createEl("button", { text: "Confirm conversion", cls: "mod-cta" });
+    apply.disabled = true;
+    let plan;
+    const invalidate = () => {
+      this.revision++;
+      plan = void 0;
+      apply.disabled = true;
+      preview.replaceChildren();
+    };
+    inspect.addEventListener("click", () => {
+      const revision = ++this.revision;
+      apply.disabled = true;
+      inspect.disabled = true;
+      preview.textContent = "Reading notes\u2026";
+      void this.options.preview({ ...options }, [...selected]).then((result) => {
+        if (revision !== this.revision) return;
+        plan = result;
+        preview.replaceChildren();
+        preview.createEl("p", { text: `${result.changes.length} notes will change; ${result.skipped.length} skipped. Showing up to 50 notes; excerpts are limited to 4,000 characters.` });
+        for (const change of result.changes.slice(0, 50)) {
+          const row = preview.createDiv({ cls: "pv-edit-change" });
+          row.createEl("strong", { text: change.path });
+          row.createEl("pre", { text: `YAML ${change.key}
+Before: ${change.existed ? JSON.stringify(change.original) : "(missing)"}
+After: ${JSON.stringify(change.replacement)}`.slice(0, 4e3) });
+          row.createEl("pre", { text: result.options.move ? `Removed from body:
+${change.removed.join("\n").slice(0, 4e3)}
+Body after:
+${change.afterBody.slice(0, 4e3)}` : "Inline fields kept." });
+        }
+        for (const skip of result.skipped.slice(0, 50)) preview.createEl("p", { text: `${skip.path}: ${skip.reason}` });
+        apply.disabled = !result.changes.length;
+      }).catch(() => {
+        if (revision === this.revision) preview.textContent = "Could not preview conversion.";
+      }).finally(() => {
+        inspect.disabled = false;
+      });
+    });
+    apply.addEventListener("click", () => {
+      if (!plan || apply.disabled) return;
+      apply.disabled = true;
+      inspect.disabled = true;
+      cancel.disabled = true;
+      more.disabled = true;
+      inputs.forEach((input) => {
+        input.disabled = true;
+      });
+      void this.options.apply(plan).then(() => this.close()).catch((error) => {
+        new import_obsidian2.Notice(error instanceof Error ? error.message : "Conversion failed.");
+        invalidate();
+        inspect.disabled = false;
+        cancel.disabled = false;
+        more.disabled = false;
+        inputs.forEach((input) => {
+          input.disabled = false;
+        });
+      });
+    });
+  }
+  onClose() {
+    this.revision++;
+    this.dispose?.();
+    this.contentEl.replaceChildren();
+  }
+};
+
+// src/inline-editor.ts
+var InlineEditor = class {
+  constructor(app, includes, coordinator) {
+    this.app = app;
+    this.includes = includes;
+    this.coordinator = coordinator;
+    this.last = [];
+    this.busy = false;
+  }
+  canUndo() {
+    return !!this.last.length && !this.busy;
+  }
+  async preview(edit, paths) {
+    const plan = { edit, changes: [], skipped: [], error: inlineEditError(edit) };
+    if (plan.error) return plan;
+    for (const path of new Set(paths)) {
+      const file = this.app.vault.getFileByPath(path);
+      if (!file || !this.includes(path)) continue;
+      try {
+        const before = await this.app.vault.read(file), after = transformInline(before, edit);
+        if (after !== before) plan.changes.push({ path, before, after });
+      } catch (error) {
+        plan.skipped.push({ path, reason: error instanceof Error ? error.message : "Could not read note." });
+      }
+    }
+    return plan;
+  }
+  async apply(plan) {
+    if (this.coordinator) return this.coordinator.runExclusive(() => this.applyUnlocked(plan));
+    return this.applyUnlocked(plan);
+  }
+  async applyUnlocked(plan) {
+    if (this.busy) throw new Error("Another inline edit is running.");
+    if (plan.error) throw new Error(plan.error);
+    this.busy = true;
+    const applied = [];
+    let skipped = 0, failed = 0;
+    try {
+      for (const change of plan.changes) {
+        const file = this.app.vault.getFileByPath(change.path);
+        if (!file || !this.includes(change.path)) {
+          skipped++;
+          continue;
+        }
+        let wrote = false;
+        try {
+          await this.app.vault.process(file, (current) => {
+            if (current !== change.before || !this.includes(file.path) || file.path !== change.path) return current;
+            wrote = true;
+            return change.after;
+          });
+          if (wrote) applied.push(change);
+          else skipped++;
+        } catch {
+          failed++;
+        }
+      }
+      if (applied.length) this.last = applied;
+      return { updated: applied.length, skipped, failed };
+    } finally {
+      this.busy = false;
+    }
+  }
+  async undo() {
+    const changes = this.last.map((c) => ({ path: c.path, before: c.after, after: c.before }));
+    const result = await this.apply({ edit: { mode: "delete-property", property: "", replacement: "" }, changes, skipped: [] });
+    this.last = [];
+    return result;
+  }
+};
+
+// src/inline-dialog.ts
+var import_obsidian3 = require("obsidian");
+var InlineEditModal = class extends import_obsidian3.Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+    this.revision = 0;
+  }
+  onOpen() {
+    const edit = { ...this.options.edit, values: [...this.options.edit.values ?? []] };
+    this.titleEl.textContent = edit.mode === "rename-property" ? "Rename inline property" : edit.mode === "delete-property" ? "Delete inline property" : "Replace inline values";
+    this.contentEl.classList.add("pv-edit-modal", "pv-note-edit");
+    this.containerEl.classList.add("pv-note-modal-container");
+    this.modalEl.classList.add("pv-note-value-modal");
+    this.dispose = fitModalViewport(this.containerEl);
+    const fields2 = this.contentEl.createDiv({ cls: "pv-note-edit-scroll" });
+    fields2.createEl("p", { text: `Property: ${edit.property}. Changes apply to included notes in the active Value filter, regardless of tree search or saved-view selection. YAML frontmatter is not edited.` });
+    fields2.createEl("p", { text: "Preview first, then confirm. Notes changed since preview are skipped. Undo last inline property edit is available until reload; a new inline batch replaces it." });
+    const controls = fields2.createDiv();
+    const inputs = [];
+    if (edit.mode === "replace-values") {
+      controls.createEl("p", { text: "Select values to replace with one new text value:" });
+      for (const value of this.options.values) {
+        const label = controls.createEl("label", { cls: "pv-scope-choice" }), input = label.createEl("input");
+        input.type = "checkbox";
+        const raw = JSON.parse(value.id), text = raw[0] === "empty" ? "" : value.label;
+        input.checked = edit.values.includes(text);
+        input.setAttribute("aria-label", `Replace ${value.label}`);
+        label.createSpan({ text: value.label });
+        inputs.push(input);
+        input.addEventListener("change", () => {
+          edit.values = input.checked ? [...edit.values, text] : edit.values.filter((v) => v !== text);
+          invalidate();
+        });
+      }
+    }
+    if (edit.mode !== "delete-property") {
+      const label = controls.createEl("label", { cls: "pv-edit-field" });
+      label.createSpan({ text: edit.mode === "rename-property" ? "New property name" : "New value" });
+      const input = label.createEl("input");
+      input.type = "text";
+      input.value = edit.replacement;
+      input.setAttribute("aria-label", edit.mode === "rename-property" ? "New inline property name" : "New inline value");
+      inputs.push(input);
+      input.addEventListener("input", () => {
+        edit.replacement = input.value;
+        invalidate();
+      });
+    } else controls.createEl("p", { text: "Deletes every occurrence of this inline property and its values. Surrounding prose and other fields are preserved." });
+    const preview = fields2.createDiv({ cls: "pv-edit-preview" });
+    preview.setAttribute("aria-live", "polite");
+    const actions = this.contentEl.createDiv({ cls: "pv-edit-actions" });
+    const cancel = actions.createEl("button", { text: "Cancel" });
+    cancel.addEventListener("click", () => this.close());
+    const inspect = actions.createEl("button", { text: "Preview changes" });
+    const apply = actions.createEl("button", { text: "Confirm changes", cls: "mod-cta" });
+    apply.disabled = true;
+    let plan;
+    const invalidate = () => {
+      this.revision++;
+      plan = void 0;
+      apply.disabled = true;
+      preview.replaceChildren();
+    };
+    inspect.addEventListener("click", () => {
+      const revision = ++this.revision;
+      apply.disabled = true;
+      inspect.disabled = true;
+      preview.textContent = "Reading notes\u2026";
+      void this.options.preview({ ...edit, values: [...edit.values] }).then((result) => {
+        if (revision !== this.revision) return;
+        plan = result;
+        preview.replaceChildren();
+        preview.createEl("p", { text: result.error ?? `${result.changes.length} notes will change; ${result.skipped.length} skipped.` });
+        for (const change of result.changes) {
+          const row = preview.createDiv({ cls: "pv-edit-change" });
+          row.createEl("strong", { text: change.path });
+          row.createEl("pre", { text: `Before:
+${change.before}
+After:
+${change.after}` });
+        }
+        for (const skip of result.skipped) preview.createEl("p", { text: `${skip.path}: ${skip.reason}` });
+        apply.disabled = !!result.error || !result.changes.length;
+      }).catch(() => {
+        preview.textContent = "Could not preview inline edits.";
+      }).finally(() => {
+        inspect.disabled = false;
+      });
+    });
+    apply.addEventListener("click", () => {
+      if (!plan || apply.disabled) return;
+      apply.disabled = true;
+      inspect.disabled = true;
+      cancel.disabled = true;
+      for (const input of inputs) input.disabled = true;
+      void this.options.apply(plan).then(() => this.close()).catch((error) => {
+        new import_obsidian3.Notice(error instanceof Error ? error.message : "Could not edit inline properties.");
+        invalidate();
+        inspect.disabled = false;
+        cancel.disabled = false;
+        for (const input of inputs) input.disabled = false;
+      });
+    });
+  }
+  onClose() {
+    this.revision++;
+    this.dispose?.();
+    this.contentEl.replaceChildren();
+  }
+};
+
+// src/tooltips.ts
+function applyTooltips(root, enabled) {
+  const selector = "[title], [data-pv-tooltip-title], [aria-label], [data-tooltip-classes]";
+  const elements = Array.from(root.querySelectorAll(selector));
+  if (root.matches(selector)) elements.push(root);
+  for (const element of elements) {
+    if (!enabled) {
+      if (element.hasAttribute("title")) {
+        element.dataset.pvTooltipTitle = element.getAttribute("title");
+        element.removeAttribute("title");
+      }
+    } else if (element.dataset.pvTooltipTitle !== void 0) {
+      if (!element.hasAttribute("title")) element.title = element.dataset.pvTooltipTitle;
+      delete element.dataset.pvTooltipTitle;
+    }
+    const classes = new Set((element.getAttribute("data-tooltip-classes") ?? "").split(/\s+/).filter(Boolean));
+    if (!enabled && element.hasAttribute("aria-label")) classes.add("pv-tooltip-disabled");
+    else classes.delete("pv-tooltip-disabled");
+    if (classes.size) element.setAttribute("data-tooltip-classes", [...classes].join(" "));
+    else element.removeAttribute("data-tooltip-classes");
+  }
+}
+
+// src/main.ts
+var import_obsidian12 = require("obsidian");
+
+// src/folder-exclusions.ts
+function excludedFolders(text) {
+  return [...new Set(text.split("\n").map((line) => line.trim().replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/")).filter((path) => path && !path.split("/").includes("..")))];
+}
+function isFolderExcluded(path, folders) {
+  return folders.some((folder) => path.startsWith(`${folder}/`));
+}
+
+// src/sorting.ts
+var sortOptions = {
+  name: "Property name (A to Z)",
+  "name-desc": "Property name (Z to A)",
+  count: "Frequency (high to low)",
+  "count-asc": "Frequency (low to high)"
+};
+function sortOrder(value) {
+  return typeof value === "string" && Object.prototype.hasOwnProperty.call(sortOptions, value) ? value : "name";
+}
+function sortNodes(nodes, order) {
+  return Array.from(nodes).sort((a, b) => {
+    const alphabetical = natural(a.label, b.label) || a.id.localeCompare(b.id);
+    if (order === "name-desc") return -alphabetical;
+    if (order === "count") return b.paths.size - a.paths.size || alphabetical;
+    if (order === "count-asc") return a.paths.size - b.paths.size || alphabetical;
+    return alphabetical;
+  });
+}
+
+// src/search.ts
+function propertyQuery(key, value, empty = false) {
+  const quote = (text) => JSON.stringify(text);
+  return value === void 0 ? `[${quote(key)}]` : `[${quote(key)}:${empty ? "null" : quote(value)}]`;
+}
+
+// src/profiles.ts
+function loadProfiles(raw) {
+  if (!Array.isArray(raw)) return [];
+  const ids = /* @__PURE__ */ new Set();
+  const names = /* @__PURE__ */ new Set();
+  return raw.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const value = entry;
+    if (!value || typeof value.id !== "string" || !value.id || typeof value.name !== "string" || !value.name.trim() || !Array.isArray(value.keys)) return [];
+    if (ids.has(value.id) || names.has(fold(value.name))) return [];
+    ids.add(value.id);
+    names.add(fold(value.name));
+    const pinOverrides = loadPinOverrides(value.pinOverrides);
+    return [{ ...pinOverrides ? { pinOverrides } : {}, id: value.id, name: value.name.trim(), keys: [...new Set(value.keys.filter((key) => typeof key === "string").map(fold).filter(Boolean))] }];
+  });
+}
+function sameKeys(a, b) {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((key) => right.has(key));
+}
+function loadViewState(raw) {
+  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const profiles = loadProfiles(value.profiles);
+  return {
+    profiles,
+    ...value.pinned !== void 0 ? { pinned: Array.isArray(value.pinned) ? value.pinned.filter((v) => typeof v === "string").map(fold) : [] } : {},
+    ...typeof value.hidden === "string" ? { hidden: value.hidden } : {},
+    ...loadPinOverrides(value.customPinOverrides) ? { customPinOverrides: loadPinOverrides(value.customPinOverrides) } : {},
+    scope: Array.isArray(value.scope) ? [...new Set(value.scope.filter((key) => typeof key === "string").map(fold).filter(Boolean))] : null,
+    activeProfile: typeof value.activeProfile === "string" && profiles.some((profile) => profile.id === value.activeProfile) ? value.activeProfile : null
+  };
+}
+function loadPinOverrides(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
+  return Object.fromEntries(Object.entries(raw).filter(([key, value]) => fold(key) && typeof value === "boolean").map(([key, value]) => [fold(key), value]));
+}
+
+// src/property-types.ts
+var import_obsidian4 = require("obsidian");
+var TYPE_ICONS = /* @__PURE__ */ new Map([
+  ["text", "text"],
+  ["multitext", "list"],
+  ["aliases", "list"],
+  ["tags", "tags"],
+  ["number", "hash"],
+  ["checkbox", "check-square"],
+  ["date", "calendar"],
+  ["datetime", "calendar-clock"]
+]);
+var BUILTIN_TYPES = /* @__PURE__ */ new Map([
+  ["tags", "tags"],
+  ["aliases", "aliases"],
+  ["cssclasses", "multitext"]
+]);
+var PropertyTypeResolver = class {
+  constructor(app) {
+    this.app = app;
+    this.types = /* @__PURE__ */ new Map();
+  }
+  /** Reload types.json. Missing, malformed, or unreadable files keep the built-in fallbacks. */
+  async load() {
+    let raw;
+    try {
+      const path = (0, import_obsidian4.normalizePath)(`${this.app.vault.configDir}/types.json`);
+      if (!await this.app.vault.adapter.exists(path)) {
+        this.types.clear();
+        return;
+      }
+      const parsed = JSON.parse(await this.app.vault.adapter.read(path));
+      raw = parsed?.types;
+    } catch {
+      return;
+    }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
+    const types = /* @__PURE__ */ new Map();
+    for (const [key, value] of Object.entries(raw)) {
+      if (typeof value !== "string") continue;
+      const normalizedKey = fold(key);
+      const normalizedType = fold(value);
+      if (normalizedKey && normalizedType) types.set(normalizedKey, normalizedType);
+    }
+    this.types = types;
+  }
+  typeFor(property) {
+    const id = fold(property.id);
+    return this.types.get(id) ?? BUILTIN_TYPES.get(id) ?? "text";
+  }
+  iconFor(property) {
+    return TYPE_ICONS.get(this.typeFor(property)) ?? "text";
+  }
+};
+function noteEditType(property, resolver) {
+  const id = fold(property.id), type = resolver.typeFor(property);
+  if (id === "tags" || type === "tags") return void 0;
+  if (id === "aliases" || id === "cssclasses" || ["multitext", "list", "aliases"].includes(type)) return "list";
+  if (["text", "number", "checkbox", "date", "datetime"].includes(type)) return type;
+  return void 0;
+}
+function supportsTextSplit(property, resolver) {
+  return !BUILTIN_TYPES.has(fold(property.id)) && resolver.typeFor(property) === "text";
+}
+
 // src/value-editor.ts
+var import_obsidian5 = require("obsidian");
 var ValueEditor = class {
   constructor(app, includesPath = () => true, noteEditType2 = () => "text") {
     this.app = app;
@@ -1001,8 +1315,21 @@ var ValueEditor = class {
     this.noteEditType = noteEditType2;
     this.busy = false;
   }
+  async runExclusive(action) {
+    if (this.busy) throw new Error("Another property edit is running.");
+    this.busy = true;
+    try {
+      return await action();
+    } finally {
+      this.busy = false;
+    }
+  }
+  rememberUndo(action) {
+    this.last = void 0;
+    this.externalUndo = action;
+  }
   canUndo() {
-    return !!this.last && !this.busy;
+    return (!!this.last || !!this.externalUndo) && !this.busy;
   }
   preview(request, paths) {
     const changes = [];
@@ -1159,7 +1486,10 @@ var ValueEditor = class {
           failures.push({ path: change.path, message: message(error) });
         }
       }
-      if (snapshots.length) this.last = { snapshots };
+      if (snapshots.length) {
+        this.last = { snapshots };
+        this.externalUndo = void 0;
+      }
       return { updated: snapshots.length, unchanged, failures };
     } finally {
       this.busy = false;
@@ -1167,6 +1497,14 @@ var ValueEditor = class {
   }
   async undo() {
     if (this.busy) throw new Error("Another value edit is running.");
+    if (this.externalUndo) {
+      const undo = this.externalUndo;
+      return this.runExclusive(async () => {
+        const result = await undo();
+        this.externalUndo = void 0;
+        return result;
+      });
+    }
     const last = this.last;
     if (!last) return { restored: 0, skipped: 0, failures: [] };
     this.busy = true;
@@ -1217,7 +1555,7 @@ var ValueEditor = class {
   }
   file(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian3.TFile ? file : void 0;
+    return file instanceof import_obsidian5.TFile ? file : void 0;
   }
   frontmatter(file) {
     return this.app.metadataCache.getFileCache(file)?.frontmatter;
@@ -1228,8 +1566,8 @@ function message(error) {
 }
 
 // src/property-rename-dialog.ts
-var import_obsidian4 = require("obsidian");
-var PropertyRenameModal = class extends import_obsidian4.Modal {
+var import_obsidian6 = require("obsidian");
+var PropertyRenameModal = class extends import_obsidian6.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -1288,7 +1626,7 @@ var PropertyRenameModal = class extends import_obsidian4.Modal {
         input.disabled = false;
         cancel.disabled = false;
         render();
-        new import_obsidian4.Notice("Could not rename properties.");
+        new import_obsidian6.Notice("Could not rename properties.");
       });
     });
     render();
@@ -1301,8 +1639,8 @@ var PropertyRenameModal = class extends import_obsidian4.Modal {
 };
 
 // src/property-delete-dialog.ts
-var import_obsidian5 = require("obsidian");
-var PropertyDeleteModal = class extends import_obsidian5.Modal {
+var import_obsidian7 = require("obsidian");
+var PropertyDeleteModal = class extends import_obsidian7.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -1346,7 +1684,7 @@ var PropertyDeleteModal = class extends import_obsidian5.Modal {
       void this.options.apply(this.displayed).then(() => this.close()).catch(() => {
         this.busy = false;
         cancel.disabled = false;
-        new import_obsidian5.Notice("Could not delete properties.");
+        new import_obsidian7.Notice("Could not delete properties.");
         render();
       });
     });
@@ -1359,8 +1697,8 @@ var PropertyDeleteModal = class extends import_obsidian5.Modal {
 };
 
 // src/value-dialog.ts
-var import_obsidian6 = require("obsidian");
-var ValueEditModal = class extends import_obsidian6.Modal {
+var import_obsidian8 = require("obsidian");
+var ValueEditModal = class extends import_obsidian8.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -1479,7 +1817,7 @@ var ValueEditModal = class extends import_obsidian6.Modal {
       if (this.select) this.select.disabled = false;
       this.applyButton.textContent = this.applyLabel(this.displayed?.total ?? 0);
       this.updatePreview();
-      new import_obsidian6.Notice("Could not update property values.");
+      new import_obsidian8.Notice("Could not update property values.");
     }
   }
 };
@@ -1502,7 +1840,7 @@ function el(parent, tag, cls = "", text = "") {
 }
 
 // src/note-value-dialog.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 
 // src/note-value-input.ts
 function createNoteValueInput(parent, options, changed) {
@@ -1613,7 +1951,7 @@ function createNoteValueInput(parent, options, changed) {
 }
 
 // src/note-value-dialog.ts
-var NoteValueModal = class extends import_obsidian7.Modal {
+var NoteValueModal = class extends import_obsidian9.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -1702,7 +2040,7 @@ var NoteValueModal = class extends import_obsidian7.Modal {
         editor.setDisabled(false);
         cancel.disabled = false;
         render();
-        new import_obsidian7.Notice("Could not change property values. Review the preview before retrying.");
+        new import_obsidian9.Notice("Could not change property values. Review the preview before retrying.");
       });
     });
     render();
@@ -1813,7 +2151,7 @@ var InlineIndex = class {
 };
 
 // src/view-picker.ts
-var import_obsidian8 = require("obsidian");
+var import_obsidian10 = require("obsidian");
 var ViewPicker = class {
   constructor(parent, change, showTooltips = () => true) {
     this.change = change;
@@ -1864,7 +2202,7 @@ var ViewPicker = class {
     };
     this.button = parent.createEl("button", { cls: "pv-profile-select", attr: { type: "button", "aria-label": "Property view", "aria-haspopup": "listbox", "aria-expanded": "false" } });
     this.label = this.button.createSpan({ cls: "pv-profile-label" });
-    (0, import_obsidian8.setIcon)(this.button.createSpan({ cls: "pv-profile-chevron" }), "chevron-down");
+    (0, import_obsidian10.setIcon)(this.button.createSpan({ cls: "pv-profile-chevron" }), "chevron-down");
     this.button.addEventListener("click", () => this.popup ? this.close() : this.open());
     this.button.addEventListener("keydown", (event) => {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -1960,7 +2298,7 @@ var ViewPicker = class {
 };
 
 // src/filter-note-list.ts
-var import_obsidian9 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 var nextListId = 0;
 var batchSize = 200;
 function noteRows(paths) {
@@ -2029,7 +2367,7 @@ var FilterNoteList = class {
   openNote(path, event) {
     const file = this.app.vault.getFileByPath(path);
     if (!file) return;
-    void this.app.workspace.getLeaf(import_obsidian9.Keymap.isModEvent(event)).openFile(file).catch(() => new import_obsidian9.Notice("Could not open this note. It may have been moved or deleted."));
+    void this.app.workspace.getLeaf(import_obsidian11.Keymap.isModEvent(event)).openFile(file).catch(() => new import_obsidian11.Notice("Could not open this note. It may have been moved or deleted."));
   }
   render() {
     const active = this.panel.ownerDocument.activeElement;
@@ -2045,7 +2383,7 @@ var FilterNoteList = class {
     this.toggle.setAttribute("aria-expanded", String(this.open && n > 0));
     this.toggle.setAttribute("aria-label", `${this.open ? "Hide" : "Show"} ${n} filtered ${n === 1 ? "note" : "notes"}`);
     this.toggle.title = this.open ? "Hide matching notes" : "Show matching notes";
-    (0, import_obsidian9.setIcon)(this.icon, this.open ? "chevron-up" : "chevron-down");
+    (0, import_obsidian11.setIcon)(this.icon, this.open ? "chevron-up" : "chevron-down");
     applyTooltips(this.toggle, this.showTooltips());
     this.panel.hidden = !this.open || !n;
     this.panel.parentElement?.classList.toggle("pv-filter-notes-open", !this.panel.hidden);
@@ -2066,7 +2404,7 @@ var FilterNoteList = class {
       button.setAttribute("aria-label", `Open ${row.name}${row.folder ? ` in ${row.folder}` : ""}`);
       const icon = button.createSpan({ cls: "pv-icon" });
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian9.setIcon)(icon, "file-text");
+      (0, import_obsidian11.setIcon)(icon, "file-text");
       button.createSpan({ cls: "pv-filter-note-name", text: row.name });
       if (row.folder) button.createSpan({ cls: "pv-filter-note-folder", text: row.folder });
       button.addEventListener("click", (event) => this.openNote(row.path, event));
@@ -2217,7 +2555,7 @@ function attachNoteMenu(element, open) {
 // src/main.ts
 var VIEW = "supercharged-properties";
 var defaults = { showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
-var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
+var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
   constructor() {
     super(...arguments);
     this.index = new PropertyIndex();
@@ -2243,12 +2581,13 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
       hidden: typeof saved?.hidden === "string" ? saved.hidden : "",
       expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((v) => typeof v === "string") : []
     };
-    this.inlineEditor = new InlineEditor(this.app, (path) => this.includesPath(path));
     this.inline = new InlineIndex((file) => this.app.vault.cachedRead(file), (path) => this.includesPath(path), () => this.refresh());
     this.inline.setEnabled(this.prefs.showInlineProperties);
     this.typeResolver = new PropertyTypeResolver(this.app);
     await this.typeResolver.load();
     this.valueEditor = new ValueEditor(this.app, (path) => this.includesPath(path), (id) => noteEditType({ id }, this.typeResolver));
+    this.inlineEditor = new InlineEditor(this.app, (path) => this.includesPath(path), this.valueEditor);
+    this.inlineConverter = new InlineConverter(this.app, this.valueEditor, (path) => this.includesPath(path));
     this.registerHoverLinkSource(VIEW, { display: "Supercharged Properties", defaultMod: true });
     this.registerView(VIEW, (leaf) => new PropertiesView(leaf, this));
     this.addRibbonIcon("list-tree", "Open Supercharged Properties", () => {
@@ -2273,7 +2612,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
     this.addCommand({ id: "undo-inline-edit", name: "Undo last inline property edit", checkCallback: (checking) => {
       if (!this.inlineEditor.canUndo()) return false;
       if (!checking) void this.inlineEditor.undo().then((result) => {
-        new import_obsidian10.Notice(`Restored ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed.`);
+        new import_obsidian12.Notice(`Restored ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed.`);
         this.rebuild(true);
       });
       return true;
@@ -2286,7 +2625,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
     }));
     this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRebuild()));
     this.registerEvent(this.app.vault.on("create", (file) => {
-      if (file instanceof import_obsidian10.TFile && file.extension === "md" && this.includesPath(file.path)) {
+      if (file instanceof import_obsidian12.TFile && file.extension === "md" && this.includesPath(file.path)) {
         this.inline.update(file);
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache) {
@@ -2296,17 +2635,17 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
       }
     }));
     this.registerEvent(this.app.vault.on("modify", (file) => {
-      if (file instanceof import_obsidian10.TFile) this.inline.update(file);
+      if (file instanceof import_obsidian12.TFile) this.inline.update(file);
     }));
     this.registerEvent(this.app.vault.on("delete", (file) => {
-      if (file instanceof import_obsidian10.TFile) {
+      if (file instanceof import_obsidian12.TFile) {
         this.index.remove(file.path);
         this.inline.remove(file.path);
         this.refresh();
       } else this.scheduleRebuild();
     }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-      if (file instanceof import_obsidian10.TFile) {
+      if (file instanceof import_obsidian12.TFile) {
         this.index.remove(oldPath);
         this.inline.remove(oldPath);
         this.inline.update(file);
@@ -2367,22 +2706,34 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
   save() {
     const snapshot = JSON.parse(JSON.stringify(this.prefs));
     this.saveQueue = this.saveQueue.then(() => this.saveData(snapshot)).catch(() => {
-      new import_obsidian10.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
+      new import_obsidian12.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
     });
     this.refresh();
     return this.saveQueue;
   }
   async applyValueEdit(preview, verb = "Updated") {
     const result = await this.valueEditor.apply(preview);
-    new import_obsidian10.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
-    for (const failure of result.failures) new import_obsidian10.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian12.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
+    for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
   }
   async undoValueEdit() {
     const result = await this.valueEditor.undo();
-    new import_obsidian10.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
-    for (const failure of result.failures) new import_obsidian10.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian12.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
+    for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
+  }
+  convertInline(property, paths) {
+    new InlineConversionModal(this.app, {
+      property: property.label,
+      paths,
+      preview: (options, selected) => this.inlineConverter.preview(options, selected),
+      apply: async (plan) => {
+        const result = await this.inlineConverter.apply(plan);
+        new import_obsidian12.Notice(`Converted ${result.updated} notes; skipped ${result.skipped}; ${result.failures.length} failed.${result.failures.length ? " " + result.failures.join("\n") : ""}`);
+        this.rebuild(true);
+      }
+    }).open();
   }
   editInline(property, mode, value) {
     const selected = value ? [JSON.parse(value.id)[0] === "empty" ? "" : value.label] : [];
@@ -2399,7 +2750,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
           Object.assign(state, { scope: prefs.scope, pinned: prefs.pinned, hidden: prefs.hidden });
           await this.save();
         }
-        new import_obsidian10.Notice(`Updated ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed. Use Undo last inline property edit to restore the last batch.`, 1e4);
+        new import_obsidian12.Notice(`Updated ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed. Use Undo last inline property edit to restore the last batch.`, 1e4);
         this.rebuild(true);
       }
     }).open();
@@ -2414,8 +2765,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
           includeRenamedProperty(this.prefs, preview.source, preview.target);
           await this.save();
         }
-        new import_obsidian10.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian10.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian12.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
       }
     }).open();
@@ -2426,8 +2777,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
       preview: () => this.valueEditor.previewPropertyDelete(property.id, property.paths),
       apply: async (preview) => {
         const result = await this.valueEditor.apply(preview);
-        new import_obsidian10.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian10.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian12.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
       }
     }).open();
@@ -2456,8 +2807,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
         await this.typeResolver.load();
         const result = await this.valueEditor.apply(preview);
         const action = preview.changes.some((change) => change.remove) ? "Removed property from" : "Updated";
-        new import_obsidian10.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
-        for (const failure of result.failures) new import_obsidian10.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian12.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
+        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
         complete();
       }
@@ -2474,7 +2825,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
       preview: (edit) => edit.mode === "split" && !supportsTextSplit(property, this.typeResolver) ? { total: 0, changes: [] } : this.valueEditor.preview(edit, node.paths),
       apply: (preview) => {
         if (mode === "split" && !supportsTextSplit(property, this.typeResolver)) {
-          new import_obsidian10.Notice("Split into list is only available for text properties.");
+          new import_obsidian12.Notice("Split into list is only available for text properties.");
           return Promise.resolve();
         }
         return this.applyValueEdit(preview, mode === "delete" ? "Deleted from" : "Updated");
@@ -2498,7 +2849,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian10.Plugin {
 function el2(parent, tag, cls = "", text = "") {
   return parent.createEl(tag, { cls, text });
 }
-var PropertiesView = class extends import_obsidian10.ItemView {
+var PropertiesView = class extends import_obsidian12.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -2547,7 +2898,7 @@ var PropertiesView = class extends import_obsidian10.ItemView {
     this.searchHeader = el2(toolbar, "div", "pv-search-header");
     this.searchHeader.hidden = true;
     const search = el2(this.searchHeader, "div", "pv-search");
-    (0, import_obsidian10.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian12.setIcon)(el2(search, "span", "pv-icon"), "search");
     this.input = el2(search, "input", "pv-filter");
     this.input.type = "search";
     this.input.placeholder = "Find properties, values, notes\u2026";
@@ -2671,7 +3022,7 @@ var PropertiesView = class extends import_obsidian10.ItemView {
     }
   }
   openSearchScopeMenu() {
-    const menu = new import_obsidian10.Menu();
+    const menu = new import_obsidian12.Menu();
     for (const [value, label] of [["any", "Search everything"], ["key", "Property names"], ["value", "Values"], ["note", "Note names / paths"]]) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.searchScope === value).onClick(() => {
         this.searchScope = value;
@@ -2696,11 +3047,11 @@ var PropertiesView = class extends import_obsidian10.ItemView {
   iconButton(parent, title, icon, run) {
     const button = this.button(parent, "", title, run);
     button.className = "pv-icon-button";
-    (0, import_obsidian10.setIcon)(button, icon);
+    (0, import_obsidian12.setIcon)(button, icon);
     return button;
   }
   openSortMenu() {
-    const menu = new import_obsidian10.Menu();
+    const menu = new import_obsidian12.Menu();
     for (const [value, label] of Object.entries(sortOptions)) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.plugin.prefs.sort === value).onClick(() => {
         this.plugin.prefs.sort = sortOrder(value);
@@ -2785,7 +3136,7 @@ var PropertiesView = class extends import_obsidian10.ItemView {
       this.render();
     });
     const search = el2(this.scopePanel, "div", "pv-search pv-picker-search");
-    (0, import_obsidian10.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian12.setIcon)(el2(search, "span", "pv-icon"), "search");
     const input = el2(search, "input", "pv-filter");
     input.type = "search";
     input.placeholder = "Find a property\u2026";
@@ -2855,30 +3206,30 @@ var PropertiesView = class extends import_obsidian10.ItemView {
     const keys = [...prefs.scope ?? this.sourceIndex().properties.keys()];
     if (action === "new" || action === "update") {
       if (!keys.length) {
-        new import_obsidian10.Notice("Please select at least one property.");
+        new import_obsidian12.Notice("Please select at least one property.");
         return;
       }
       if (prefs.scope === null || sameKeys(keys, [...this.sourceIndex().properties.keys()])) {
-        new import_obsidian10.Notice(this.inlineView ? "Inline Properties View already exists." : "All properties View already exists.");
+        new import_obsidian12.Notice(this.inlineView ? "Inline Properties View already exists." : "All properties View already exists.");
         return;
       }
     }
     if (action === "new" || action === "rename") {
       if (!name) {
-        new import_obsidian10.Notice("Enter a name for this view.");
+        new import_obsidian12.Notice("Enter a name for this view.");
         this.profileName.focus();
         return;
       }
       if (fold(name) === "all properties") {
-        new import_obsidian10.Notice("All properties View already exists.");
+        new import_obsidian12.Notice("All properties View already exists.");
         return;
       }
       if (fold(name) === "inline properties") {
-        new import_obsidian10.Notice("Inline Properties is a built-in view. Choose another name.");
+        new import_obsidian12.Notice("Inline Properties is a built-in view. Choose another name.");
         return;
       }
       if (prefs.profiles.some((profile) => fold(profile.name) === fold(name) && (action === "new" || profile !== active))) {
-        new import_obsidian10.Notice("A view with that name already exists.");
+        new import_obsidian12.Notice("A view with that name already exists.");
         return;
       }
     }
@@ -3061,7 +3412,7 @@ var PropertiesView = class extends import_obsidian10.ItemView {
     this.expandToggle.setAttribute("aria-label", toggleLabel);
     this.expandToggle.setAttribute("aria-pressed", String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
-    (0, import_obsidian10.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
+    (0, import_obsidian12.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
     const displayedPaths = this.filter && this.query ? searchPaths : valuePaths;
     const n = displayedPaths?.size ?? 0;
     const noteCount = `${n} ${n === 1 ? "note" : "notes"}`;
@@ -3098,10 +3449,10 @@ var PropertiesView = class extends import_obsidian10.ItemView {
       const icon = el2(button, "span", "pv-icon pv-type-icon");
       icon.title = `Type: ${type}`;
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian10.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
+      (0, import_obsidian12.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
     }
     el2(button, "span", "pv-label", node.label);
-    if (isKey && this.effectivePins().has(property.id)) (0, import_obsidian10.setIcon)(el2(button, "span", "pv-pin"), "pin");
+    if (isKey && this.effectivePins().has(property.id)) (0, import_obsidian12.setIcon)(el2(button, "span", "pv-pin"), "pin");
     if (!isKey) {
       const kind = JSON.parse(node.id)[0];
       if (kind !== "string") el2(button, "span", "pv-kind", kind);
@@ -3166,7 +3517,7 @@ var PropertiesView = class extends import_obsidian10.ItemView {
           Array.from(this.body.querySelectorAll(".pv-file")).find((note) => note.dataset.pvFocus === next.row)?.focus();
         });
       }
-      (0, import_obsidian10.setIcon)(el2(button, "span", "pv-icon"), "file-text");
+      (0, import_obsidian12.setIcon)(el2(button, "span", "pv-icon"), "file-text");
       el2(button, "span", "pv-note-name", path.split("/").pop()?.replace(/\.md$/, "") ?? path);
       const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
       if (folder) el2(button, "small", "pv-note-path", folder);
@@ -3195,7 +3546,7 @@ var PropertiesView = class extends import_obsidian10.ItemView {
         this.selectedNotes = void 0;
         this.render();
         const file = this.app.vault.getAbstractFileByPath(path);
-        if (file instanceof import_obsidian10.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian10.Notice("Unable to open note."));
+        if (file instanceof import_obsidian12.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian12.Notice("Unable to open note."));
       });
     }
     if (paths.length > limit) this.button(notes, "Show more notes", "Show 100 more notes", () => {
@@ -3250,7 +3601,7 @@ var PropertiesView = class extends import_obsidian10.ItemView {
     });
   }
   showNoteMenu(point, property, path, row) {
-    const menu = new import_obsidian10.Menu();
+    const menu = new import_obsidian12.Menu();
     const selection = this.selectedNotes;
     const paths = selection?.property === property.id && selection.paths.has(path) ? [...selection.paths] : [path];
     menu.addItem((item) => item.setTitle(`Change ${property.label}\u2026`).setIcon("pencil").onClick(() => {
@@ -3276,9 +3627,9 @@ var PropertiesView = class extends import_obsidian10.ItemView {
   async copy(text) {
     try {
       await this.contentEl.ownerDocument.defaultView.navigator.clipboard.writeText(text);
-      new import_obsidian10.Notice("Copied to clipboard.");
+      new import_obsidian12.Notice("Copied to clipboard.");
     } catch {
-      new import_obsidian10.Notice("Clipboard unavailable.");
+      new import_obsidian12.Notice("Clipboard unavailable.");
     }
   }
   async search(property, node) {
@@ -3297,27 +3648,27 @@ var PropertiesView = class extends import_obsidian10.ItemView {
       if (typeof view.setQuery !== "function") {
         created?.detach();
         created = null;
-        new import_obsidian10.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian12.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
       view.setQuery(query);
       created = null;
-      if (this.inlineView) new import_obsidian10.Notice("Inline Search matches text on the same line and can include code examples or other fields.");
+      if (this.inlineView) new import_obsidian12.Notice("Inline Search matches text on the same line and can include code examples or other fields.");
       if (!this.inlineView && node !== property && JSON.parse(node.id)[0] === "empty") {
-        new import_obsidian10.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
+        new import_obsidian12.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
       }
     } catch {
       if (created) {
         created.detach();
         created = null;
-        new import_obsidian10.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian12.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
-      new import_obsidian10.Notice("Could not open Search. Your notes remain available in the property tree.");
+      new import_obsidian12.Notice("Could not open Search. Your notes remain available in the property tree.");
     }
   }
   showMenu(event, property, node) {
-    const menu = new import_obsidian10.Menu();
+    const menu = new import_obsidian12.Menu();
     menu.addItem((item) => item.setTitle("Open in Search").setIcon("search").onClick(() => {
       void this.search(property, node);
     }));
@@ -3341,9 +3692,13 @@ ${property.label}`;
 ${property.label}`;
         void this.plugin.save();
         this.render();
-        new import_obsidian10.Notice("Property hidden. Restore it in Supercharged Properties settings.");
+        new import_obsidian12.Notice("Property hidden. Restore it in Supercharged Properties settings.");
       }));
     }
+    if (this.inlineView) menu.addItem((item) => item.setTitle("Convert to YAML property\u2026").setIcon("arrow-right-left").onClick(() => {
+      const paths = [...node.paths].filter((path) => !this.query || this.searchScope !== "note" || this.matches(path, "note"));
+      this.plugin.convertInline(property, paths.sort(natural));
+    }));
     if (this.inlineView) menu.addItem((item) => item.setTitle(node === property ? "Replace selected values\u2026" : "Rename value\u2026").setIcon("pencil").onClick(() => this.plugin.editInline(property, "replace-values", node === property ? void 0 : node)));
     if (node !== property) {
       menu.addItem((item) => item.setTitle("Filter by Value").setIcon("filter").onClick(() => {
@@ -3364,7 +3719,7 @@ ${property.label}`;
     menu.showAtMouseEvent(event);
   }
 };
-var PreferencesTab = class extends import_obsidian10.PluginSettingTab {
+var PreferencesTab = class extends import_obsidian12.PluginSettingTab {
   constructor(plugin) {
     super(plugin.app, plugin);
     this.plugin = plugin;
@@ -3412,7 +3767,7 @@ var PreferencesTab = class extends import_obsidian10.PluginSettingTab {
   display() {
     this.containerEl.replaceChildren();
     for (const definition of this.getSettingDefinitions()) {
-      const setting = new import_obsidian10.Setting(this.containerEl).setName(definition.name);
+      const setting = new import_obsidian12.Setting(this.containerEl).setName(definition.name);
       if (definition.desc) setting.setDesc(definition.desc);
       definition.render(setting);
     }

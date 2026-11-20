@@ -842,9 +842,9 @@ it('offers separate inline search and edit actions without YAML note editing', (
   expect(document.querySelector('[aria-label="Choose properties to show"]')!.hasAttribute('disabled')).toBe(false);
   click('Expand status');expect(document.querySelector('.pv-tree')!.textContent).toContain('inline only');expect(document.querySelector('.pv-tree')!.textContent).not.toContain('Done');
   document.querySelector('[aria-label="Toggle status (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
-  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Open in Search','Copy search query','Copy matching note links','Rename property…','Delete property…','Pin property','Hide property','Replace selected values…']);
+  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Open in Search','Copy search query','Copy matching note links','Rename property…','Delete property…','Pin property','Hide property','Convert to YAML property…','Replace selected values…']);
   document.querySelector('[aria-label="Show notes with status: inline only (1)"]')!.dispatchEvent(new MouseEvent('contextmenu'));
-  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Open in Search','Copy search query','Copy matching note links','Rename value…','Filter by Value']);
+  expect((Menu as any).items.map((i:any)=>i.title)).toEqual(['Open in Search','Copy search query','Copy matching note links','Convert to YAML property…','Rename value…','Filter by Value']);
   view.render(); click('Show notes with status: inline only (1)');
   const note=document.querySelector<HTMLButtonElement>('.pv-file')!;expect(note.hasAttribute('aria-haspopup')).toBe(false);note.click();expect(openFile).toHaveBeenCalledOnce();
 });
@@ -1133,4 +1133,20 @@ it('routes inline edits and search to inline handlers and keeps pins/hiding sepa
   menu();(Menu as any).items.find((item:any)=>item.title==='Pin property').run();expect(plugin.prefs.inlineViews.pinned).toEqual(['author']);expect(plugin.prefs.pinned).toEqual([]);
   menu();(Menu as any).items.find((item:any)=>item.title==='Hide property').run();expect(plugin.prefs.inlineViews.hidden).toContain('author');expect(plugin.prefs.hidden).toBe('');
   expect(document.querySelector('[aria-label="Toggle author (1)"]')).toBeNull();
+});
+
+it('scopes inline conversion to the value filter and active note/path search', () => {
+  enableInlineView();plugin.convertInline=vi.fn();
+  plugin.inline.index.update('Books/A.md',{author:['AJ'],status:['active']});
+  plugin.inline.index.update('Books/B.md',{author:['AJ'],status:['closed']});
+  plugin.inline.index.update('Other/C.md',{author:['AJ'],status:['active']});
+  (view as any).filter={property:'status',value:JSON.stringify(['string','active']),propertyLabel:'status',label:'active'};
+  // Inline text IDs use the same typed identity as the index.
+  const status=plugin.inline.index.properties.get('status')!;
+  (view as any).filter.value=[...status.values.values()].find((v:any)=>v.label==='active')!.id;
+  (view as any).searchScope='note';(view as any).query='books/';view.render();
+  const property=plugin.inline.index.scoped((view as any).filterPaths(),'status').properties.get('author');
+  (view as any).showMenu(new MouseEvent('contextmenu'),property,property);
+  (Menu as any).items.find((item:any)=>item.title==='Convert to YAML property…').run();
+  expect(plugin.convertInline).toHaveBeenCalledWith(property,['Books/A.md']);
 });

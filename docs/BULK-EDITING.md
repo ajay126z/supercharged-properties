@@ -18,7 +18,7 @@ Preview values use JSON-style notation: `"false"` is text, `false` is a boolean,
 
 Apply is disabled when the input is invalid, the preview is updating, or no notes would change. Closing or cancelling the dialog before Apply does not write notes. Once Apply starts, closing the dialog does not cancel the running batch.
 
-**Scope:** each action covers the indexed notes for the selected value in included folders. With an active [Value filter](USER-GUIDE.md#value-filter), only matching notes in that subset are included, and merge targets come from values in the subset. Without a Value filter, the action covers matching notes across the vault. Excluded folders are omitted from previews and checked again before writes. Search, saved views, and collapsed branches do not restrict the edit to visible notes. There is no per-note inclusion checkbox. Inspect the full preview before confirming.
+**Scope:** each action covers the indexed notes for the selected value in included folders. With an active [Value filter](USER-GUIDE.md#value-filter), only matching notes in that subset are included, and merge targets come from values in the subset. Without a Value filter, the action covers matching notes across the vault. Excluded folders are omitted from previews and checked again before writes. Search, saved views, and collapsed branches do not restrict the edit to visible notes. Ordinary YAML bulk edits have no per-note inclusion checkbox; inline-to-YAML conversion below does. Inspect the full preview before confirming.
 
 Before writing each note, the plugin compares the current property value with the previewed value. If it changed, the note is skipped. Other property changes do not block the edit. The completion notice reports updated, skipped, and failed notes; failures also identify the affected paths.
 
@@ -219,3 +219,25 @@ Version 1.2.0 respects **Settings → Supercharged Properties → Excluded folde
 ## Change selected notes instead
 
 To assign one destination to specific notes, right-click a note on desktop or long-press on mobile and choose **Change property…** (the menu uses the actual property name). **Select notes…** supports several notes within the same property. Selected-note editing supports typed Text, Number, Checkbox, Date, and Date & time assignments, plus List add/remove operations. Scalar edits support explicit empty values. **Remove property** deletes the entire key and value from selected notes for every supported type, including lists. With **Remove values**, removing the last list item keeps the key with `[]`; choose **Remove property** to delete the key instead. Note selection does not limit the property/value-row bulk actions described above. See [changing selected notes](NOTE-VALUE-EDITING.md).
+
+
+## Convert inline properties to YAML
+
+In **Inline Properties** or a saved inline view, right-click a property or value (long-press on mobile) and choose **Convert to YAML property…**. This makes inline fields available in the YAML tree, Obsidian Properties, and Bases.
+
+1. Review **eligible notes** and deselect notes you want to leave unchanged. A property row includes notes with that property; a value row includes notes with that value. All occurrences of the property in each selected note are converted, including its other values.
+2. Choose **Move** (default) to remove the inline fields, or **Keep** to copy them and leave the body unchanged.
+3. Leave detection off to preserve literal text, including numbers with leading zeros and `[[Wikilinks]]`. **Detect numbers, checkboxes, and dates** converts finite numeric text and `true`/`false`; ISO dates remain date-compatible text without timezone conversion. It does not change the vault-wide property type; use Obsidian Properties to choose the display type if needed.
+4. Choose what happens when the exact YAML key already exists: **Skip** (default), **Merge into list**, or **Overwrite**. Merge retains existing scalar/list values and adds distinct converted values. Overwrite replaces the existing value.
+5. Click **Preview changes**. Review each note's old/new YAML value and the exact body fragments to remove. The preview shows at most 50 changed notes and 50 skip reasons, with excerpts limited to 4,000 characters; the total count includes the entire batch.
+6. Click **Confirm conversion**. Changing any option or note selection requires a new preview.
+
+The same key spelling is retained. Repeated inline fields become a YAML list, even if their values repeat. Empty inline values become empty text. Differently cased or Unicode-equivalent YAML keys, ambiguous inline keys, malformed frontmatter, and `position`, `tags`, `aliases`, and `cssclasses` are skipped with a reason. Merge skips objects and nested YAML values. Code, comments, and indented code within list continuations are ignored by the inline parser. Unsupported or ambiguous field formatting skips the note rather than removing surrounding prose.
+
+**Scope:** conversion honors the active Value filter, excluded folders, and **Note names/paths** search (including a folder path entered there). Property/value/everything search and saved-view property selection do not add a note restriction. These conversion rules differ from ordinary bulk edits: conversion lets you deselect individual notes and respects note/path search. Notes outside that selection are untouched by apply and undo.
+
+Notes changed after preview are skipped. Frontmatter and body writes use separate Obsidian APIs, with checks between them. If a concurrent edit prevents body removal, the plugin preserves the body and attempts to revert its YAML assignment. A failed body write can leave the YAML copy and original inline fields together; the result identifies affected paths, and the successful YAML write retains an undo snapshot. Review any reported failure before retrying.
+
+Use **Supercharged Properties: Undo last property edit** to restore the most recent conversion, including its removed body text. Conversion shares the session-scoped undo slot with YAML edits; a new successful conversion or YAML batch replaces it, and reload clears it. Undo skips notes changed afterward, missing notes, and currently excluded folders. The plugin keeps the original note text for restoration, but YAML serialization can change comments and quoting during conversion; do not rely on formatting being preserved exactly. This is separate from **Undo last inline property edit**, used for ordinary inline rename/delete actions. All these writes share a busy guard so batches cannot overlap.
+
+Inline Search still uses text queries, not YAML property queries. After a Move, converted fields disappear from the inline index and appear in the YAML index; after Keep, they appear in both. Existing inline rename, delete, replace, pin, and hide actions remain available.

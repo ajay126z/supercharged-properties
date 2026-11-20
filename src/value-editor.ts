@@ -28,10 +28,19 @@ interface LastEdit { readonly snapshots: Snapshot[] }
 export class ValueEditor {
   private busy = false;
   private last: LastEdit | undefined;
+  private externalUndo: (() => Promise<ValueUndoResult>) | undefined;
+
+  async runExclusive<T>(action: () => Promise<T>): Promise<T> {
+    if (this.busy) throw new Error("Another property edit is running.");
+    this.busy = true;
+    try { return await action(); } finally { this.busy = false; }
+  }
+
+  rememberUndo(action: () => Promise<ValueUndoResult>): void { this.last = undefined; this.externalUndo = action; }
 
   constructor(private readonly app: App, private readonly includesPath: (path: string) => boolean = () => true, private readonly noteEditType: (property: string) => NoteEditType | undefined = () => 'text') {}
 
-  canUndo(): boolean { return !!this.last && !this.busy; }
+  canUndo(): boolean { return (!!this.last || !!this.externalUndo) && !this.busy; }
 
   preview(request: ValueEditRequest, paths: Iterable<string>): ValueEditPreview {
     const changes: ValueEditChange[] = [];
@@ -149,13 +158,17 @@ export class ValueEditor {
           else unchanged++;
         } catch (error) { failures.push({ path: change.path, message: message(error) }); }
       }
-      if (snapshots.length) this.last = { snapshots };
+      if (snapshots.length) { this.last = { snapshots }; this.externalUndo = undefined; }
       return { updated: snapshots.length, unchanged, failures };
     } finally { this.busy = false; }
   }
 
   async undo(): Promise<ValueUndoResult> {
     if (this.busy) throw new Error('Another value edit is running.');
+    if (this.externalUndo) {
+      const undo = this.externalUndo;
+      return this.runExclusive(async () => { const result = await undo(); this.externalUndo = undefined; return result; });
+    }
     const last = this.last;
     if (!last) return { restored: 0, skipped: 0, failures: [] };
     this.busy = true;
