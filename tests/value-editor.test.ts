@@ -337,3 +337,16 @@ it('rechecks the configured type for removal and retains prior undo when no keys
   type = 'number'; expect(await editor.apply(plan)).toMatchObject({ updated: 0, unchanged: 1 });
   expect((await editor.undo()).restored).toBe(1); expect(data['a.md'].status).toBe('doing');
 });
+
+it.each(['value','rename','delete'])('keeps notes outside folder-scoped %s edits byte-identical through apply and undo',async mode=>{
+ const {PropertyIndex}=await import('../src/index');const {folderPaths}=await import('../src/folder-filter');
+ const data:Record<string,any>={'Books/A.md':{status:'doing'},'Books/Sub/B.md':{status:'doing'},'Books Archive/C.md':{status:'doing'},'Elsewhere/D.md':{status:'doing'},'Books/Templates/T.md':{status:'doing'}};
+ const disk=new Map(Object.keys(data).map(path=>[path,`---\n# Keep exact formatting\nstatus: 'doing'\n---\n${path}\n`]));const before=new Map(disk);
+ const files=Object.fromEntries(Object.keys(data).map(path=>[path,Object.assign(new TFile(),{path})]));const index=new PropertyIndex();for(const [path,fm] of Object.entries(data))if(!path.includes('/Templates/'))index.update(path,fm);
+ const app:any={vault:{getAbstractFileByPath:(path:string)=>files[path]},metadataCache:{getFileCache:(file:any)=>({frontmatter:data[file.path]})},fileManager:{processFrontMatter:vi.fn(async(file:any,fn:any)=>{const next=structuredClone(data[file.path]);fn(next);data[file.path]=next;disk.set(file.path,`---\n${JSON.stringify(next)}\n---\n${file.path}\n`);})}};
+ const editor=new ValueEditor(app);const scoped=index.scoped(folderPaths(index.paths(),['Books']));const property=scoped.properties.get('status')!;
+ const plan=mode==='value'?editor.preview(request,property.values.values().next().value!.paths):mode==='rename'?editor.previewPropertyRename('status','state',property.paths):editor.previewPropertyDelete('status',property.paths);
+ expect((await editor.apply(plan)).updated).toBe(2);expect((await editor.undo()).restored).toBe(2);
+ for(const path of ['Books Archive/C.md','Elsewhere/D.md','Books/Templates/T.md'])expect(disk.get(path)).toBe(before.get(path));
+ expect(app.fileManager.processFrontMatter.mock.calls.every(([file]:any)=>['Books/A.md','Books/Sub/B.md'].includes(file.path))).toBe(true);
+});

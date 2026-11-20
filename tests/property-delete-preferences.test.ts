@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
 vi.mock('obsidian', () => ({
+  FuzzySuggestModal: class {},
   Plugin: class {}, ItemView: class {}, PluginSettingTab: class {},
   Modal: class {}, Notice: class {}, TFile: class {}
 }));

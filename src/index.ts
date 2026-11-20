@@ -55,6 +55,9 @@ export class PropertyIndex {
     }
     this.memberships.set(path, membership);
   }
+  /** Distinct note paths represented by properties, including in a scoped index. */
+  paths(): Set<string> { return new Set([...this.properties.values()].flatMap(property => [...property.paths])); }
+
   /** Derive a read-only index for a note subset. Do not update the result. */
   scoped(paths: ReadonlySet<string>, excludeKey?: string): PropertyIndex {
     const result = new PropertyIndex();

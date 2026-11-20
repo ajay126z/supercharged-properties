@@ -1,5 +1,6 @@
 import { expect, it, vi } from 'vitest';
-vi.mock('obsidian', () => ({ Plugin: class {}, ItemView: class {}, PluginSettingTab: class {}, Modal: class {}, Notice: class {}, TFile: class {} }));
+vi.mock('obsidian', () => ({
+  FuzzySuggestModal: class {}, Plugin: class {}, ItemView: class {}, PluginSettingTab: class {}, Modal: class {}, Notice: class {}, TFile: class {} }));
 const dialog = vi.hoisted(() => ({ options: undefined as any }));
 vi.mock('../src/note-value-dialog', () => ({ NoteValueModal: class {
   constructor(_app: unknown, options: unknown) { dialog.options = options; }

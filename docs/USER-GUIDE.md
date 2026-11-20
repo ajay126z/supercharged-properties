@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. YAML edits write frontmatter; inline edits write note-body fields. Both require preview and confirmation.
 
-This guide describes **1.4.2**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
+This guide describes **1.4.2**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. It also documents unreleased inline editing, inline-to-YAML conversion, and saved folder filters after 1.4.2. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 ## Contents
 
@@ -13,6 +13,7 @@ This guide describes **1.4.2**, with Value filter and its expandable note list, 
 - [Understand values and counts](#understand-values-and-counts)
 - [Search the tree](#search-the-tree)
 - [Inline properties](#inline-properties)
+- [Folder filters](#folder-filters)
 - [Value filter](#value-filter)
 - [Choose properties](#choose-properties)
 - [Exclude template or other folders](#exclude-template-or-other-folders)
@@ -146,7 +147,7 @@ Right-click a property row (long-press on mobile) for **Rename property…**, **
 
 Choose **Preview changes**, review each note's complete before/after text and skipped notes, then **Confirm changes**. Changing an input invalidates the preview. Delete property removes every occurrence of that inline field and its values, including inline wrappers. Rename preserves values and formatting and skips notes where the destination inline property already exists. YAML frontmatter, code, comments, other fields, and surrounding prose remain untouched. Ambiguous or unsupported formatting and replacements that would break inline syntax are skipped.
 
-Edits honor excluded folders and the active Value filter. Tree search and saved views do not further restrict the affected notes. Notes changed after preview are skipped. Use **Supercharged Properties: Undo last inline property edit** to restore the last successful inline batch until reload. Undo restores the complete previous note only if the note still matches the applied version; later edits, missing notes, and currently excluded folders are skipped. Inline undo is separate from YAML's **Undo last property edit**.
+Edits honor excluded folders, folder filters, and the active Value filter. Tree search and saved views do not further restrict the affected notes. Notes changed after preview are skipped. Use **Supercharged Properties: Undo last inline property edit** to restore the last successful inline batch until reload. Undo restores the complete previous note only if the note still matches the applied version; later edits, missing notes, and currently excluded folders are skipped. Inline undo is separate from YAML's **Undo last property edit**.
 
 Inline property menus also include **Pin/Unpin property** and **Hide property**. Pins in the built-in Inline Properties view are inherited by saved inline views, with local overrides inside each saved view. They do not affect YAML pins. Restore hidden inline properties in **Settings → Supercharged Properties → Hidden inline properties**. Inline note rows remain navigation-only; use property/value menus for inline edits.
 
@@ -154,7 +155,7 @@ Inline property menus also include **Pin/Unpin property** and **Hide property**.
 
 Use **Convert to YAML property…** from an inline property/value menu (right-click on desktop, long-press on mobile). Select notes, choose **Move** or **Keep**, and choose **Skip**, **Merge into list**, or **Overwrite** for existing YAML values. Literal text is the default; optional detection handles numbers, booleans, and ISO date text. Repeated fields become a list. Preview and confirmation are required.
 
-Conversion honors Value filters, excluded folders, and Note names/paths search. It shares **Undo last property edit** with YAML editing and skips notes changed after preview or before undo. This is an explicit write action; ordinary browsing remains read-only. See [conversion options, scope, conflicts, and recovery](BULK-EDITING.md#convert-inline-properties-to-yaml).
+Conversion honors Value filters, folder filters, and excluded folders; tree search stays display-only. It shares **Undo last property edit** with YAML editing and skips notes changed after preview or before undo. This is an explicit write action; ordinary browsing remains read-only. See [conversion options, scope, conflicts, and recovery](BULK-EDITING.md#convert-inline-properties-to-yaml).
 
 ### Save an inline view
 
@@ -164,7 +165,7 @@ Conversion honors Value filters, excluded folders, and Note names/paths search. 
 
 Saved inline views appear as **Inline: Name** in the dropdown. Use **Update**, **Rename**, and **Delete** just as you would for a YAML view. Changing the selection marks a saved view **(modified)** until you update it or select the saved view again. Deleting a view keeps its current selection as a custom selection and does not change any notes.
 
-**Inline Properties** is the built-in all-fields view and cannot be renamed or deleted. **All → Save new** reports that this view already exists; **None → Save new** asks you to select at least one property. All/None preserve the name you have typed. Empty names, duplicate names within inline views, and the built-in view names are rejected. A YAML view and an inline view can share a name because their dropdown labels distinguish them.
+**Inline Properties** is the built-in all-fields view and cannot be renamed or deleted. **All → Save new** without folders reports that this view already exists; all properties with a folder filter can be saved as a custom view; **None → Save new** asks you to select at least one property. All/None preserve the name you have typed. Empty names, duplicate names within inline views, and the built-in view names are rejected. A YAML view and an inline view can share a name because their dropdown labels distinguish them.
 
 Inline selections and saved views are stored separately from YAML selections and views. Saved keys remain available even if no note currently uses them. Search and **Filter by Value** work within an inline saved view without replacing its saved keys.
 
@@ -245,11 +246,12 @@ This setting does not change your notes or Obsidian's global Search settings. **
 | Tree search | Filters displayed branches; row counts still represent their full indexed note set. | Copies the row's full indexed note set, not just visible search matches. | Does not restrict the selected row's batch to search matches. |
 | Property selection / saved view | Shows selected properties; does not filter notes within a property. | Uses the selected row's full indexed note set. | Does not narrow the selected row's notes. |
 | Hidden properties | Hides named properties without removing their indexed notes. | Available from visible rows. | Does not act as a note exclusion rule. |
+| Folder filter | Includes notes from selected folders and descendants; intersects the Value filter. | Only links inside the combined scope. | Only notes inside the combined scope. |
 | Excluded folders | Removes notes from the index, values, and counts. | Excluded notes are omitted. | Excluded notes are omitted from previews and skipped before writes. |
 
-The table describes property/value-row bulk actions. “Full indexed note set” means the row's subset when a Value filter is active. **Change status…** from a note row edits only the explicitly selected notes. Selection checkboxes do not narrow a value-row Rename, Merge, or Delete batch. Changing the search, property scope, or Value filter clears note selection.
+The table describes property/value-row bulk actions. “Full indexed note set” means the row's subset after folder and Value filters. **Change status…** from a note row edits only the explicitly selected notes. Selection checkboxes do not narrow a value-row Rename, Merge, or Delete batch. Changing the search, property scope, folder filter, or Value filter clears note selection.
 
-**Open in Search** and **Copy search query** generate queries for Obsidian's core Search. They do not add folder-exclusion or Value filter conditions. Earlier edits can still be undone after their folders are excluded.
+**Open in Search** and **Copy search query** generate queries for Obsidian's core Search. They do not add folder-exclusion, folder-filter, or Value filter conditions. Earlier edits can still be undone after their folders are excluded.
 
 ## Save and manage views
 
@@ -268,11 +270,12 @@ Choose a saved view from the **Property view** dropdown to restore its selection
 
 In 1.2.1, **All** and **None** preserve any view name you have typed on both desktop and mobile. You can adjust the selection and then save without retyping the name.
 
-- **All → Save new:** shows **All properties View already exists.** No duplicate view is created, and your typed name stays in the field.
+- **All → Save new (without folders):** shows **All properties View already exists.** No duplicate view is created, and your typed name stays in the field.
 - **None → Save new:** shows **Please select at least one property.** Select one or more properties and retry with the same name.
 - Selecting every indexed property manually produces the same All-properties message.
 - **Update** also rejects empty or all-property selections and preserves the existing saved view.
 - **All properties** is the built-in default and cannot be renamed or deleted. Choosing All clears the active saved-view selection, disables its Update/Rename/Delete controls, and keeps your saved views intact.
+- **All → Save new with folders:** saves a custom view containing the full property selection and the folder filter.
 - The name **All properties** is reserved for the default view. Done/Enter uses the same validation as Save new.
 
 ### Save a view on mobile
@@ -287,7 +290,7 @@ These changes have automated and simulated mobile-browser coverage; verify keybo
 
 | Action | Steps and result |
 | --- | --- |
-| Update | Select a saved view, change the checkboxes, then click **Update** to replace its saved selection. |
+| Update | Select a saved view, change the checkboxes or folders, then click **Update** to replace its saved selection. |
 | Rename | Select a saved view, type its new name, then click **Rename**. |
 | Delete | Select a saved view and click **Delete**. The saved view is removed immediately; the current property selection remains as a custom selection. Notes are untouched. |
 
@@ -295,7 +298,23 @@ The view picker opens below the view bar and scrolls within the available screen
 
 Names cannot be blank or duplicate another view name, ignoring case. The input allows up to 80 characters. Update, Rename, and Delete require an active saved view.
 
-A view is marked **(modified)** when its current selection differs from the saved selection. Click Update to keep the changes, or choose the saved view again to restore its saved keys. The dropdown count includes only currently present, non-hidden properties. A saved key that is temporarily absent from the vault is retained and becomes useful again when that property reappears.
+A view is marked **(modified)** when its current selection differs from the saved selection. Click Update to keep the changes, or choose the saved view again to restore its saved keys and folders. The dropdown count includes only currently present, non-hidden properties. A saved key that is temporarily absent from the vault is retained and becomes useful again when that property reappears.
+
+## Folder filters
+
+Use **Choose properties to show → Folders → + Add folder** to limit the current view to notes in selected folders. Type part of a folder path in the fuzzy chooser, then select it. The root, already selected folders, their descendants, and globally excluded folders are omitted from suggestions. Desktop and mobile use the same controls.
+
+Selected folders appear as removable chips in the panel and in a bar below the toolbar. Remove a chip with **×**, or choose **Clear** in the folder bar to remove the folder filter. Multiple folders include notes from any of those folders, including descendants. Paths are case-sensitive and use exact folder boundaries: `Templates` does not match `Templates Archive`. There are no glob patterns. Adding an ancestor absorbs its selected descendants.
+
+Folder filters are **per-view include lists**. **Excluded folders** remains a global blacklist and always wins, including excluded subfolders inside a selected folder. Folder filters narrow the tree, property/value counts, copied note links, selected-note edits, bulk value edits, property rename/delete, inline edits, and inline-to-YAML conversion. A Value filter intersects this folder scope: notes must match both. Clearing one filter leaves the other in place. The summary shows **N properties · Filtered (M notes)**; counts use distinct indexed notes, not property assignments.
+
+Choose **Save new** or **Update** to save the folder chips with a YAML or Inline view. Each source stores its selection independently. **All** properties with at least one folder is a valid custom view; **All** without folders is the built-in view. **None** still requires selecting a property before saving. All/None in the property panel change only property selection and preserve the folder chips and typed view name. Choosing the built-in **All properties** or **Inline Properties** view clears that source's folder filter. Applying an older saved view without folders also clears it.
+
+A saved view is marked **(modified)** when its selected keys or normalized folders differ; folder order and redundant descendants do not matter. Saved property keys come from the full source index, so narrowing to folders never silently drops keys. Update saves both the property selection and folders. Deleting a saved view keeps the current folders as a custom selection.
+
+Deleted or newly excluded folders remain as muted, dashed chips. They are not automatically removed or rewritten on folder rename. Remove them or choose replacement folders, then Update the saved view. An empty folder scope shows **No notes in the selected folders.**
+
+**Open in Search** and **Copy search query** remain vault-wide. Tree search changes what you see, not the edit scope; use the folder chips and Value filter to limit edits. Preview and confirm every batch. Undo restores only notes changed by that batch; notes outside its folder scope are untouched.
 
 ## Sort, pin, and hide
 

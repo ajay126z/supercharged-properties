@@ -1,5 +1,6 @@
+import { normalizeFolders } from './folder-filter';
 import { fold } from './index';
-export interface PropertyProfile { id: string; name: string; keys: string[]; pinOverrides?: Record<string, boolean> }
+export interface PropertyProfile { id: string; name: string; keys: string[]; folders?: string[]; pinOverrides?: Record<string, boolean> }
 export function loadProfiles(raw: unknown): PropertyProfile[] {
   if (!Array.isArray(raw)) return [];
   const ids = new Set<string>(); const names = new Set<string>();
@@ -10,7 +11,7 @@ export function loadProfiles(raw: unknown): PropertyProfile[] {
     if (ids.has(value.id) || names.has(fold(value.name))) return [];
     ids.add(value.id); names.add(fold(value.name));
     const pinOverrides = loadPinOverrides(value.pinOverrides);
-    return [{ ...(pinOverrides ? { pinOverrides } : {}), id: value.id, name: value.name.trim(), keys: [...new Set<string>(value.keys.filter((key: unknown): key is string => typeof key === 'string').map(fold).filter(Boolean))] }];
+    return [{ ...(value.folders !== undefined ? { folders: normalizeFolders(value.folders) } : {}), ...(pinOverrides ? { pinOverrides } : {}), id: value.id, name: value.name.trim(), keys: [...new Set<string>(value.keys.filter((key: unknown): key is string => typeof key === 'string').map(fold).filter(Boolean))] }];
   });
 }
 export function sameKeys(a: readonly string[], b: readonly string[]): boolean {
@@ -18,12 +19,13 @@ export function sameKeys(a: readonly string[], b: readonly string[]): boolean {
   return left.size === right.size && [...left].every(key => right.has(key));
 }
 
-export interface PropertyViewState { pinned?: string[]; hidden?: string; profiles: PropertyProfile[]; scope: string[] | null; activeProfile: string | null; customPinOverrides?: Record<string, boolean> }
+export interface PropertyViewState { folders?: string[]; pinned?: string[]; hidden?: string; profiles: PropertyProfile[]; scope: string[] | null; activeProfile: string | null; customPinOverrides?: Record<string, boolean> }
 export function loadViewState(raw: unknown): PropertyViewState {
   const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
   const profiles = loadProfiles(value.profiles);
   return {
     profiles,
+    ...(value.folders !== undefined ? { folders: normalizeFolders(value.folders) } : {}),
     ...(value.pinned !== undefined ? { pinned: Array.isArray(value.pinned) ? value.pinned.filter((v): v is string => typeof v === 'string').map(fold) : [] } : {}),
     ...(typeof value.hidden === 'string' ? { hidden: value.hidden } : {}),
     ...(loadPinOverrides(value.customPinOverrides) ? { customPinOverrides: loadPinOverrides(value.customPinOverrides) } : {}),

@@ -26,6 +26,35 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
+// src/folder-exclusions.ts
+function excludedFolders(text) {
+  return [...new Set(text.split("\n").map((line) => line.trim().replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/")).filter((path) => path && !path.split("/").includes("..")))];
+}
+function isFolderExcluded(path, folders) {
+  return folders.some((folder) => path.startsWith(`${folder}/`));
+}
+
+// src/folder-filter.ts
+function normalizeFolders(raw) {
+  if (!Array.isArray(raw)) return [];
+  const paths = excludedFolders(raw.filter((value) => typeof value === "string").join("\n")).sort();
+  return paths.filter((path) => !isFolderExcluded(path, paths));
+}
+function sameFolders(a, b) {
+  const left = normalizeFolders(a), right = normalizeFolders(b);
+  return left.length === right.length && left.every((path, index) => path === right[index]);
+}
+function folderPaths(paths, folders, excluded = []) {
+  return new Set([...paths].filter((path) => isFolderExcluded(path, folders) && !isFolderExcluded(path, excluded)));
+}
+function folderChoices(paths, selected, excluded) {
+  return [...new Set(paths)].filter((path) => path && path !== "/" && !selected.includes(path) && !isFolderExcluded(path, selected) && !excluded.includes(path) && !isFolderExcluded(path, excluded)).sort();
+}
+function intersectPaths(left, right) {
+  if (!left) return right ? new Set(right) : null;
+  return new Set([...left].filter((path) => !right || right.has(path)));
+}
+
 // src/inline-conversion.ts
 var import_obsidian = require("obsidian");
 
@@ -151,6 +180,10 @@ var PropertyIndex = class _PropertyIndex {
       }
     }
     this.memberships.set(path, membership);
+  }
+  /** Distinct note paths represented by properties, including in a scoped index. */
+  paths() {
+    return new Set([...this.properties.values()].flatMap((property) => [...property.paths]));
   }
   /** Derive a read-only index for a note subset. Do not update the result. */
   scoped(paths, excludeKey) {
@@ -833,7 +866,7 @@ var InlineConversionModal = class extends import_obsidian2.Modal {
     this.contentEl.classList.add("pv-edit-modal", "pv-note-edit");
     this.dispose = fitModalViewport(this.containerEl);
     const scroll = this.contentEl.createDiv({ cls: "pv-note-edit-scroll" });
-    scroll.createEl("p", { text: `Convert all occurrences of ${this.options.property} in the selected notes. Value filters, note/path search, and excluded folders limit this list.` });
+    scroll.createEl("p", { text: `Convert all occurrences of ${this.options.property} in the selected notes. Value filters, folder filters, and excluded folders limit this list. Tree search does not limit conversion.` });
     scroll.createEl("p", { text: "Repeated fields become a list. Preview before confirming. Undo last property edit restores this batch until reload or another property edit. YAML formatting may change." });
     const options = { property: this.options.property, move: true, detect: false, conflict: "skip" };
     const inputs = [];
@@ -1169,14 +1202,6 @@ function applyTooltips(root, enabled) {
 // src/main.ts
 var import_obsidian12 = require("obsidian");
 
-// src/folder-exclusions.ts
-function excludedFolders(text) {
-  return [...new Set(text.split("\n").map((line) => line.trim().replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/")).filter((path) => path && !path.split("/").includes("..")))];
-}
-function isFolderExcluded(path, folders) {
-  return folders.some((folder) => path.startsWith(`${folder}/`));
-}
-
 // src/sorting.ts
 var sortOptions = {
   name: "Property name (A to Z)",
@@ -1216,7 +1241,7 @@ function loadProfiles(raw) {
     ids.add(value.id);
     names.add(fold(value.name));
     const pinOverrides = loadPinOverrides(value.pinOverrides);
-    return [{ ...pinOverrides ? { pinOverrides } : {}, id: value.id, name: value.name.trim(), keys: [...new Set(value.keys.filter((key) => typeof key === "string").map(fold).filter(Boolean))] }];
+    return [{ ...value.folders !== void 0 ? { folders: normalizeFolders(value.folders) } : {}, ...pinOverrides ? { pinOverrides } : {}, id: value.id, name: value.name.trim(), keys: [...new Set(value.keys.filter((key) => typeof key === "string").map(fold).filter(Boolean))] }];
   });
 }
 function sameKeys(a, b) {
@@ -1229,6 +1254,7 @@ function loadViewState(raw) {
   const profiles = loadProfiles(value.profiles);
   return {
     profiles,
+    ...value.folders !== void 0 ? { folders: normalizeFolders(value.folders) } : {},
     ...value.pinned !== void 0 ? { pinned: Array.isArray(value.pinned) ? value.pinned.filter((v) => typeof v === "string").map(fold) : [] } : {},
     ...typeof value.hidden === "string" ? { hidden: value.hidden } : {},
     ...loadPinOverrides(value.customPinOverrides) ? { customPinOverrides: loadPinOverrides(value.customPinOverrides) } : {},
@@ -2571,6 +2597,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       showTooltips: saved.showTooltips !== false,
       inlineViews: loadViewState(saved.inlineViews),
       profiles,
+      ...saved.folders !== void 0 ? { folders: normalizeFolders(saved.folders) } : {},
       customPinOverrides: loadPinOverrides(saved.customPinOverrides),
       activeProfile: typeof saved.activeProfile === "string" && profiles.some((profile) => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v) => typeof v === "string") : null,
@@ -2941,12 +2968,14 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       if (value === "all" || value === "inline") {
         prefs.scope = null;
         prefs.activeProfile = null;
+        prefs.folders = [];
       } else if (value === "custom" || value === "inline:custom") prefs.activeProfile = null;
       else {
         const prefix = this.inlineView ? "inline:profile:" : "profile:";
         const profile = prefs.profiles.find((item) => `${prefix}${item.id}` === value);
         if (profile) {
           prefs.scope = [...profile.keys];
+          prefs.folders = normalizeFolders(profile.folders);
           prefs.activeProfile = profile.id;
         }
       }
@@ -2984,6 +3013,8 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.searchToggle.setAttribute("aria-expanded", "false");
     this.scopePanel = el2(toolbar, "div", "pv-scope-panel");
     this.scopePanel.hidden = true;
+    this.folderBar = el2(this.contentEl, "div", "pv-folder-bar");
+    this.folderBar.setAttribute("aria-label", "Folder filter");
     this.filterBar = el2(this.contentEl, "div", "pv-filter-bar");
     this.filterBar.hidden = true;
     this.filterLabel = el2(this.filterBar, "span", "pv-filter-label");
@@ -3076,7 +3107,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   get pinOverrides() {
     const prefs = this.viewPrefs;
     const profile = prefs.profiles.find((item) => item.id === prefs.activeProfile);
-    return profile ? profile.pinOverrides : prefs.scope !== null ? prefs.customPinOverrides : void 0;
+    return profile ? profile.pinOverrides : prefs.scope !== null || normalizeFolders(prefs.folders).length ? prefs.customPinOverrides : void 0;
   }
   effectivePins() {
     const pins = new Set(this.inlineView ? this.inlinePrefs.pinned ?? [] : this.plugin.prefs.pinned);
@@ -3090,7 +3121,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     const prefs = this.inlineView ? this.inlinePrefs : this.plugin.prefs;
     const pinned = this.effectivePins().has(key);
     const profile = prefs.profiles.find((item) => item.id === prefs.activeProfile);
-    if (profile || prefs.scope !== null) {
+    if (profile || prefs.scope !== null || normalizeFolders(prefs.folders).length) {
       const overrides = { ...this.pinOverrides, [key]: !pinned };
       if (profile) profile.pinOverrides = overrides;
       else prefs.customPinOverrides = overrides;
@@ -3135,6 +3166,8 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       void this.plugin.save();
       this.render();
     });
+    this.folderRow = el2(this.scopePanel, "div", "pv-folder-row");
+    this.renderFolders();
     const search = el2(this.scopePanel, "div", "pv-search pv-picker-search");
     (0, import_obsidian12.setIcon)(el2(search, "span", "pv-icon"), "search");
     const input = el2(search, "input", "pv-filter");
@@ -3180,10 +3213,10 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       const count = (keys) => new Set([...keys].filter((key) => available.properties.has(key) && !hidden.has(key))).size;
       const prefix2 = inline ? "inline:" : "";
       choices.push({ label: `${inline ? "Inline Properties" : "All properties"} (${count(source.properties.keys())})`, value: inline ? "inline" : "all" });
-      if (prefs2.scope !== null && !active2) choices.push({ label: `${inline ? "Inline: " : ""}Custom selection (${count(prefs2.scope)})`, value: `${prefix2}custom` });
+      if ((prefs2.scope !== null || normalizeFolders(prefs2.folders).length) && !active2) choices.push({ label: `${inline ? "Inline: " : ""}Custom selection (${count(prefs2.scope ?? source.properties.keys())})`, value: `${prefix2}custom` });
       for (const profile of prefs2.profiles) {
         const keys = profile === active2 ? prefs2.scope ?? [...source.properties.keys()] : profile.keys;
-        const modified = profile === active2 && !sameKeys(profile.keys, keys);
+        const modified = profile === active2 && (!sameKeys(profile.keys, keys) || !sameFolders(profile.folders, prefs2.folders));
         choices.push({ label: `${inline ? "Inline: " : ""}${profile.name}${modified ? " (modified)" : ""} (${count(keys)})`, value: `${prefix2}profile:${profile.id}` });
       }
     };
@@ -3192,7 +3225,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     const prefs = this.viewPrefs;
     const active = prefs.profiles.find((profile) => profile.id === prefs.activeProfile);
     const prefix = this.inlineView ? "inline:" : "";
-    this.profilePicker.setChoices(choices, active ? `${prefix}profile:${active.id}` : prefs.scope === null ? this.inlineView ? "inline" : "all" : `${prefix}custom`);
+    this.profilePicker.setChoices(choices, active ? `${prefix}profile:${active.id}` : prefs.scope === null && !normalizeFolders(prefs.folders).length ? this.inlineView ? "inline" : "all" : `${prefix}custom`);
     if (this.profileUpdate) {
       this.profileUpdate.disabled = !active;
       this.profileRename.disabled = !active;
@@ -3204,12 +3237,13 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     const active = prefs.profiles.find((profile) => profile.id === prefs.activeProfile);
     const name = this.profileName.value.trim();
     const keys = [...prefs.scope ?? this.sourceIndex().properties.keys()];
+    const folders = normalizeFolders(prefs.folders);
     if (action === "new" || action === "update") {
-      if (!keys.length) {
+      if (!keys.length && !(prefs.scope === null && folders.length)) {
         new import_obsidian12.Notice("Please select at least one property.");
         return;
       }
-      if (prefs.scope === null || sameKeys(keys, [...this.sourceIndex().properties.keys()])) {
+      if (!folders.length && (prefs.scope === null || sameKeys(keys, [...this.sourceIndex().properties.keys()]))) {
         new import_obsidian12.Notice(this.inlineView ? "Inline Properties View already exists." : "All properties View already exists.");
         return;
       }
@@ -3235,12 +3269,13 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     }
     if (action === "new") {
       const id = this.contentEl.ownerDocument.defaultView.crypto.randomUUID();
-      prefs.profiles.push({ id, name, keys, ...this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {} });
+      prefs.profiles.push({ id, name, keys, ...folders.length ? { folders } : {}, ...this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {} });
       prefs.activeProfile = id;
       prefs.scope = [...keys];
     } else if (!active) return;
     else if (action === "update") {
       active.keys = keys;
+      active.folders = folders;
       prefs.scope = [...keys];
     } else if (action === "rename") active.name = name;
     else {
@@ -3297,9 +3332,80 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.render();
     (this.inlineView ? this.searchToggle : this.scopeButton).focus({ preventScroll: true });
   }
+  get folders() {
+    return normalizeFolders(this.viewPrefs.folders);
+  }
+  selectedFolderPaths() {
+    return this.folders.length ? folderPaths(this.sourceIndex().paths(), this.folders, excludedFolders(this.plugin.prefs.excludedFolders ?? "")) : null;
+  }
+  setFolders(folders) {
+    const normalized2 = normalizeFolders(folders);
+    if (sameFolders(this.folders, normalized2)) return;
+    this.viewPrefs.folders = normalized2;
+    this.selectedNotes = void 0;
+    this.noteAnchor = void 0;
+    this.filterNoteList.reset();
+    void this.plugin.save();
+    this.render();
+  }
+  addFolder() {
+    const items = () => folderChoices(this.app.vault.getAllFolders().map((folder) => folder.path), this.folders, excludedFolders(this.plugin.prefs.excludedFolders ?? ""));
+    const choose = (path) => this.setFolders([...this.folders, path]);
+    class FolderSuggest extends import_obsidian12.FuzzySuggestModal {
+      getItems() {
+        return items();
+      }
+      getItemText(path) {
+        return path;
+      }
+      onChooseItem(path) {
+        choose(path);
+      }
+    }
+    const modal = new FolderSuggest(this.app);
+    modal.setPlaceholder("Find a folder\u2026");
+    modal.open();
+  }
+  renderFolders() {
+    if (!this.folderBar) return;
+    const focused = this.contentEl.ownerDocument.activeElement;
+    const focusParent = focused && this.folderBar.contains(focused) ? this.folderBar : focused && this.folderRow?.contains(focused) ? this.folderRow : void 0;
+    const focusLabel = focusParent ? focused?.getAttribute("aria-label") : null;
+    const folders = this.folders, excluded = excludedFolders(this.plugin.prefs.excludedFolders ?? "");
+    const chips = (parent) => {
+      for (const folder of folders) {
+        const chip = el2(parent, "span", "pv-folder-chip");
+        const unavailable = excluded.includes(folder) || isFolderExcluded(folder, excluded) || !this.app.vault.getFolderByPath(folder);
+        chip.classList.toggle("is-unavailable", unavailable);
+        const label = el2(chip, "span", "pv-folder-name", folder);
+        if (unavailable) {
+          label.title = "Folder is missing or excluded. The saved filter is retained.";
+          label.setAttribute("aria-label", `${folder}: missing or excluded`);
+        }
+        const remove = this.button(chip, "\xD7", `Remove folder ${folder}`, () => this.setFolders(folders.filter((path) => path !== folder)));
+        remove.dataset.pvFocus = `folder:${folder}`;
+      }
+    };
+    this.folderBar.hidden = !folders.length;
+    this.folderBar.replaceChildren();
+    if (folders.length) {
+      chips(this.folderBar);
+      this.button(this.folderBar, "Clear", "Clear folder filter", () => this.setFolders([]));
+    }
+    if (this.folderRow) {
+      this.folderRow.replaceChildren();
+      el2(this.folderRow, "span", "pv-hint", "Folders");
+      chips(this.folderRow);
+      this.button(this.folderRow, "+ Add folder", "Add folder filter", () => this.addFolder());
+    }
+    if (focusParent) {
+      const buttons = Array.from(focusParent.querySelectorAll("button"));
+      (buttons.find((button) => button.getAttribute("aria-label") === focusLabel) ?? buttons[0] ?? this.scopeButton).focus({ preventScroll: true });
+    }
+  }
   filterPaths() {
-    if (!this.filter) return null;
-    return this.sourceIndex().properties.get(this.filter.property)?.values.get(this.filter.value)?.paths ?? /* @__PURE__ */ new Set();
+    const values = this.filter ? this.sourceIndex().properties.get(this.filter.property)?.values.get(this.filter.value)?.paths ?? /* @__PURE__ */ new Set() : null;
+    return intersectPaths(this.selectedFolderPaths(), values);
   }
   sourceIndex() {
     return this.inlineView ? this.plugin.inline.index : this.plugin.index;
@@ -3309,7 +3415,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   }
   activeIndex(paths = this.filterPaths()) {
     const source = this.sourceIndex();
-    return this.filter ? source.scoped(paths ?? /* @__PURE__ */ new Set(), this.filter.property) : source;
+    return paths ? source.scoped(paths, this.filter?.property) : source;
   }
   render() {
     if (!this.body) return;
@@ -3321,9 +3427,10 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       this.noteAnchor = void 0;
       this.plugin.prefs.scope = null;
       this.plugin.prefs.activeProfile = null;
+      this.plugin.prefs.folders = [];
       void this.plugin.save();
     }
-    const expansionContext = JSON.stringify([this.inlineView, this.query, this.searchScope, this.viewPrefs.scope, this.viewPrefs.activeProfile, this.filter]);
+    const expansionContext = JSON.stringify([this.inlineView, this.query, this.searchScope, this.viewPrefs.scope, this.viewPrefs.activeProfile, this.viewPrefs.folders, this.filter]);
     if (expansionContext !== this.expansionContext) {
       this.expansionContext = expansionContext;
       this.searchExpanded = true;
@@ -3336,6 +3443,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     const valuePaths = this.filterPaths();
     const index = this.activeIndex(valuePaths);
     this.syncProfiles(index);
+    this.renderFolders();
     this.disposeNoteMenus();
     this.syncNoteSelection(index);
     this.renderedNotes.clear();
@@ -3363,7 +3471,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
           for (const path of value.paths) matchingPaths.add(path);
         }
       }
-      if (this.filter && this.query) for (const path of matchingPaths) searchPaths.add(path);
+      if ((this.filter || this.folders.length) && this.query) for (const path of matchingPaths) searchPaths.add(path);
       this.visibleKeys.push(property.id);
       const group = el2(this.body, "div", "pv-group");
       const row = el2(group, "div", "pv-row pv-property-row");
@@ -3413,7 +3521,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.expandToggle.setAttribute("aria-pressed", String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
     (0, import_obsidian12.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
-    const displayedPaths = this.filter && this.query ? searchPaths : valuePaths;
+    const displayedPaths = (this.filter || this.folders.length) && this.query ? searchPaths : valuePaths;
     const n = displayedPaths?.size ?? 0;
     const noteCount = `${n} ${n === 1 ? "note" : "notes"}`;
     this.filterBar.hidden = !this.filter;
@@ -3422,14 +3530,14 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       this.filterLabel.textContent = text;
       this.filterLabel.title = this.filterBar.title = text;
     }
-    this.filterNoteList.update(displayedPaths, !!this.query && !!valuePaths?.size);
-    this.summary.textContent = `${visible} properties \xB7 ${this.filter ? `Filtered (${noteCount})` : scope === null ? "Entire vault" : "Custom selection"}`;
+    this.filterNoteList.update(this.filter ? displayedPaths : null, !!this.query && !!valuePaths?.size);
+    this.summary.textContent = `${visible} properties \xB7 ${this.filter || this.folders.length ? `Filtered (${noteCount})` : scope === null ? "Entire vault" : "Custom selection"}`;
     if (this.inlineView) {
       const pending = this.plugin.inline.pending, failures = this.plugin.inline.failures.size;
       this.summary.textContent += ` \xB7 Inline properties${pending ? ` \xB7 Indexing ${pending} ${pending === 1 ? "note" : "notes"}\u2026` : ""}${failures ? ` \xB7 ${failures} ${failures === 1 ? "note" : "notes"} could not be read` : ""}`;
     }
     if (!visible) {
-      const message2 = this.inlineView && !this.filter && this.plugin.inline.pending ? "Reading inline properties\u2026" : this.inlineView && !this.filter && !this.query && !index.properties.size ? "No inline properties found in included notes." : this.filter && !valuePaths?.size ? "No notes match this filter." : !this.filter && !this.query && scope?.length === 0 ? "Choose properties above to start exploring." : "No matching properties. Adjust your search or selection.";
+      const message2 = this.folders.length && !this.selectedFolderPaths()?.size ? "No notes in the selected folders." : this.inlineView && !this.filter && this.plugin.inline.pending ? "Reading inline properties\u2026" : this.inlineView && !this.filter && !this.query && !index.properties.size ? "No inline properties found in included notes." : this.filter && !valuePaths?.size ? "No notes match this filter." : !this.filter && !this.query && scope?.length === 0 ? "Choose properties above to start exploring." : "No matching properties. Adjust your search or selection.";
       el2(this.body, "div", "pv-empty", message2);
     }
     applyTooltips(this.contentEl, this.plugin.prefs.showTooltips !== false);
@@ -3572,7 +3680,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.noteMenuDisposers = [];
   }
   noteSelectionContext() {
-    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders, this.filter, this.inlineView]);
+    return JSON.stringify([this.query, this.searchScope, this.plugin.prefs.scope, this.plugin.prefs.hidden, this.plugin.prefs.excludedFolders, this.filter, this.inlineView, this.viewPrefs.folders]);
   }
   syncNoteSelection(index) {
     if (this.noteAnchor?.context !== this.noteSelectionContext()) this.noteAnchor = void 0;
@@ -3696,7 +3804,7 @@ ${property.label}`;
       }));
     }
     if (this.inlineView) menu.addItem((item) => item.setTitle("Convert to YAML property\u2026").setIcon("arrow-right-left").onClick(() => {
-      const paths = [...node.paths].filter((path) => !this.query || this.searchScope !== "note" || this.matches(path, "note"));
+      const paths = [...node.paths];
       this.plugin.convertInline(property, paths.sort(natural));
     }));
     if (this.inlineView) menu.addItem((item) => item.setTitle(node === property ? "Replace selected values\u2026" : "Rename value\u2026").setIcon("pencil").onClick(() => this.plugin.editInline(property, "replace-values", node === property ? void 0 : node)));

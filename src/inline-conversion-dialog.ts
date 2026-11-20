@@ -12,7 +12,7 @@ export class InlineConversionModal extends Modal {
     this.containerEl.classList.add('pv-note-modal-container'); this.modalEl.classList.add('pv-note-value-modal');
     this.contentEl.classList.add('pv-edit-modal', 'pv-note-edit'); this.dispose = fitModalViewport(this.containerEl);
     const scroll = this.contentEl.createDiv({cls: 'pv-note-edit-scroll'});
-    scroll.createEl('p', {text: `Convert all occurrences of ${this.options.property} in the selected notes. Value filters, note/path search, and excluded folders limit this list.`});
+    scroll.createEl('p', {text: `Convert all occurrences of ${this.options.property} in the selected notes. Value filters, folder filters, and excluded folders limit this list. Tree search does not limit conversion.`});
     scroll.createEl('p', {text: 'Repeated fields become a list. Preview before confirming. Undo last property edit restores this batch until reload or another property edit. YAML formatting may change.'});
     const options: ConversionOptions = {property: this.options.property, move: true, detect: false, conflict: 'skip'};
     const inputs: Array<HTMLInputElement | HTMLSelectElement> = [];

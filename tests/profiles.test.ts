@@ -22,3 +22,11 @@ it('loads inline view state with safe defaults and normalized keys', () => {
   expect(loadViewState({profiles:[{id:'a',name:'Reading',keys:['Author']}],scope:['Author','author',2],activeProfile:'a'})).toEqual({profiles:[{id:'a',name:'Reading',keys:['author']}],scope:['author'],activeProfile:'a'});
   expect(loadViewState({profiles:[],scope:[],activeProfile:'missing'})).toEqual({profiles:[],scope:[],activeProfile:null});
 });
+
+it('normalizes optional folders for profiles and source selections without changing old shapes',()=>{
+ const old={id:'old',name:'Old',keys:['status']};expect(loadProfiles([old])).toEqual([old]);
+ expect(loadProfiles([{...old,folders:['/Books/','Books/Sub','Other','Books',4]}])[0].folders).toEqual(['Books','Other']);
+ expect(loadProfiles([{...old,folders:'Books'}])[0].folders).toEqual([]);
+ expect(loadViewState({folders:['Other','Books/Sub','Books']})).toMatchObject({folders:['Books','Other'],scope:null});
+ expect(loadViewState({folders:null}).folders).toEqual([]);
+});

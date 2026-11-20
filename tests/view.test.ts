@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('obsidian', () => ({
   Modal: class {},
+  FuzzySuggestModal: class { static last:any; constructor(){(this.constructor as any).last=this;} setPlaceholder(){} open(){(globalThis as any).folderSuggester=this;} },
   ItemView: class { contentEl = document.createElement('div'); app: unknown; constructor(leaf: any) { this.app = leaf.app; } },
   Menu: class {
     static items: any[] = [];
@@ -41,7 +42,7 @@ beforeEach(async () => {
     refresh: vi.fn(), rebuild: vi.fn(), save: vi.fn()
   };
   openFile = vi.fn().mockResolvedValue(undefined);
-  const app = { vault: { getAbstractFileByPath: () => new TFile() }, workspace: { getLeaf: () => ({ openFile }) } };
+  const app = { vault: { getAbstractFileByPath: () => new TFile(), getFolderByPath: (path:string) => ['Projects','Books','Books/Sub','Other'].includes(path)?{path}:null, getAllFolders: () => ['/', 'Projects', 'Books', 'Books/Sub', 'Other', 'Templates', 'Templates/Sub'].map(path=>({path})) }, workspace: { getLeaf: () => ({ openFile }) } };
   view = new PropertiesView({ app } as any, plugin);
   document.body.appendChild(view.contentEl);
   await view.onOpen();
@@ -176,6 +177,10 @@ it('renders the layout fixture when requested', async () => {
   plugin.index.update('Projects/Research.md', { status: 'In progress', due: '2026-11-18', topics: ['Research'], effort: 3, published: true });
   plugin.prefs.expanded = ['status', 'topics']; view.render();
   click('Show notes with status: In progress (2)');
+  if (process.env.PV_FOLDERS) {
+    setFolders(['Projects', 'A long unavailable folder/With nested sections']);
+    click('Choose properties to show'); nameProfile('Project notes');
+  }
   // Standalone host fixture for CSS QA; actual Obsidian supplies Lucide SVG icons.
   for (const icon of document.querySelectorAll<HTMLElement>('[data-icon]')) {
     icon.textContent = ({ 'chevron-down': '⌄', 'chevron-right': '›', 'calendar': '▦', 'calendar-clock': '◷', 'list': '☷', 'tags': '⌗', 'search': '⌕', 'text': 'T', 'hash': '#', 'check-square': '☑', 'file-text': '▤', 'refresh-cw': '↻', 'list-tree': '☷', 'fold-vertical': '↥' } as Record<string, string>)[icon.dataset.icon!] ?? '◇';
@@ -1135,7 +1140,7 @@ it('routes inline edits and search to inline handlers and keeps pins/hiding sepa
   expect(document.querySelector('[aria-label="Toggle author (1)"]')).toBeNull();
 });
 
-it('scopes inline conversion to the value filter and active note/path search', () => {
+it('scopes inline conversion to Value and folder filters while tree search stays display-only', () => {
   enableInlineView();plugin.convertInline=vi.fn();
   plugin.inline.index.update('Books/A.md',{author:['AJ'],status:['active']});
   plugin.inline.index.update('Books/B.md',{author:['AJ'],status:['closed']});
@@ -1144,9 +1149,69 @@ it('scopes inline conversion to the value filter and active note/path search', (
   // Inline text IDs use the same typed identity as the index.
   const status=plugin.inline.index.properties.get('status')!;
   (view as any).filter.value=[...status.values.values()].find((v:any)=>v.label==='active')!.id;
-  (view as any).searchScope='note';(view as any).query='books/';view.render();
-  const property=plugin.inline.index.scoped((view as any).filterPaths(),'status').properties.get('author');
+  (view as any).setFolders(['Books']);
+  (view as any).searchScope='note';(view as any).query='unmatched';view.render();
+  const property=(view as any).activeIndex().properties.get('author');
   (view as any).showMenu(new MouseEvent('contextmenu'),property,property);
   (Menu as any).items.find((item:any)=>item.title==='Convert to YAML property…').run();
   expect(plugin.convertInline).toHaveBeenCalledWith(property,['Books/A.md']);
+});
+
+function setFolders(folders:string[]) { (view as any).setFolders(folders); }
+it('filters the tree and counts and provides removable folder chips and Clear',()=>{
+ setFolders(['Projects']);expect(document.querySelector('[aria-label="Toggle status (1)"]')).not.toBeNull();
+ expect(document.querySelector('.pv-summary')!.textContent).toBe('2 properties · Filtered (1 note)');
+ click('Expand status');expect(document.querySelector('.pv-tree')!.textContent).not.toContain('Pending');
+ click('Choose properties to show');expect(document.querySelector('.pv-folder-row')!.textContent).toContain('Projects');
+ nameProfile('Keep this name');click('Clear folder filter');expect(plugin.prefs.folders).toEqual([]);expect(document.querySelector<HTMLInputElement>('[aria-label="Profile name"]')!.value).toBe('Keep this name');
+ expect(document.querySelector('[aria-label="Toggle status (2)"]')).not.toBeNull();expect((document.querySelector('.pv-folder-bar') as HTMLElement).hidden).toBe(true);
+});
+it('uses the fuzzy folder chooser, absorbs descendants and preserves the view-name input',()=>{
+ plugin.prefs.excludedFolders='Templates';click('Choose properties to show');nameProfile('Books');click('Add folder filter');
+ let modal=(globalThis as any).folderSuggester;expect(modal.getItems()).toEqual(['Books','Books/Sub','Other','Projects']);modal.onChooseItem('Books/Sub');
+ click('Add folder filter');modal=(globalThis as any).folderSuggester;expect(modal.getItems()).toContain('Books');expect(modal.getItems()).not.toContain('Books/Sub');modal.onChooseItem('Books');expect(plugin.prefs.folders).toEqual(['Books']);
+ expect(document.querySelector<HTMLInputElement>('[aria-label="Profile name"]')!.value).toBe('Books');
+});
+it('allows all-properties folder views and compares saved folders without using scoped keys',()=>{
+ plugin.index.update('Other/A.md',{onlyOutside:'value'});setFolders(['Projects']);click('Choose properties to show');nameProfile('Project notes');click('Save selection as new profile');
+ const profile=plugin.prefs.profiles[0];expect(profile.folders).toEqual(['Projects']);expect(profile.keys).toContain('onlyoutside');expect(document.querySelector('.pv-profile-select')!.textContent).not.toContain('modified');
+ setFolders(['Projects','Other']);expect(document.querySelector('.pv-profile-select')!.textContent).toContain('modified');click('Update active profile selection');expect(profile.folders).toEqual(['Other','Projects']);
+ setFolders(['Projects','Other']);expect(document.querySelector('.pv-profile-select')!.textContent).not.toContain('modified');
+ chooseView('all');expect(plugin.prefs.folders).toEqual([]);chooseView(`profile:${profile.id}`);expect(plugin.prefs.folders).toEqual(['Other','Projects']);
+});
+it('clears folders when applying legacy or built-in views and retains them when deleting a saved view',()=>{
+ plugin.prefs.profiles=[{id:'old',name:'Old',keys:['status']}];setFolders(['Projects']);chooseView('profile:old');expect(plugin.prefs.folders).toEqual([]);
+ setFolders(['Projects']);click('Choose properties to show');click('Delete active profile');expect(plugin.prefs.folders).toEqual(['Projects']);expect(plugin.prefs.activeProfile).toBeNull();
+ chooseView('all');expect(plugin.prefs.folders).toEqual([]);
+});
+it('intersects folder and Value filters, with independent clear actions',()=>{
+ plugin.index.update('Other/Done.md',{status:'Done',tags:'other'});setFolders(['Projects']);click('Expand status');filterValue('Show notes with status: Done (1)');
+ expect((view as any).filterPaths()).toEqual(new Set(['Projects/One.md']));expect(document.querySelector('.pv-summary')!.textContent).toContain('Filtered (1 note)');
+ click('Clear folder filter');expect((view as any).filterPaths()).toEqual(new Set(['Projects/One.md','Other/Done.md']));
+ setFolders(['Projects']);click('Clear property filter');expect(plugin.prefs.folders).toEqual(['Projects']);expect((view as any).activeIndex().properties.has('status')).toBe(true);
+});
+it('keeps stale or excluded folder chips and shows the empty-scope message',()=>{
+ setFolders(['Missing']);expect(document.querySelector('.pv-folder-chip.is-unavailable')!.textContent).toContain('Missing');expect(document.querySelector('.pv-empty')!.textContent).toBe('No notes in the selected folders.');
+ setFolders(['Projects']);plugin.prefs.excludedFolders='Projects';view.render();expect(plugin.prefs.folders).toEqual(['Projects']);expect(document.querySelector('.pv-folder-chip.is-unavailable')).not.toBeNull();expect(document.querySelector('.pv-empty')!.textContent).toBe('No notes in the selected folders.');
+});
+it('keeps YAML and Inline folder selections and saved views independent',()=>{
+ setFolders(['Projects']);enableInlineView();plugin.inline.index.update('Books/A.md',{author:'AJ'});setFolders(['Books']);click('Choose properties to show');nameProfile('Books');click('Save selection as new profile');
+ const profile=plugin.prefs.inlineViews.profiles[0];expect(profile.folders).toEqual(['Books']);expect(plugin.prefs.folders).toEqual(['Projects']);
+ chooseView('all');expect(plugin.prefs.folders).toEqual([]);expect(plugin.prefs.inlineViews.folders).toEqual(['Books']);
+ chooseView(`inline:profile:${profile.id}`);expect((view as any).filterPaths()).toEqual(new Set(['Books/A.md']));chooseView('inline');expect(plugin.prefs.inlineViews.folders).toEqual([]);
+});
+it('passes folder-scoped nodes to copy and edit menus while leaving native Search vault-wide',async()=>{
+ setFolders(['Projects']);plugin.renameProperty=vi.fn();plugin.deleteProperty=vi.fn();plugin.editValue=vi.fn();const copy=vi.spyOn(view as any,'copy').mockResolvedValue(undefined);
+ const property=(view as any).activeIndex().properties.get('status');(view as any).showMenu(new MouseEvent('contextmenu'),property,property);
+ (Menu as any).items.find((i:any)=>i.title==='Copy matching note links').run();expect(copy).toHaveBeenCalledWith('[[Projects/One]]');
+ (Menu as any).items.find((i:any)=>i.title==='Rename property…').run();expect([...plugin.renameProperty.mock.calls[0][0].paths]).toEqual(['Projects/One.md']);
+ (Menu as any).items.find((i:any)=>i.title==='Delete property…').run();expect([...plugin.deleteProperty.mock.calls[0][0].paths]).toEqual(['Projects/One.md']);
+ const value=[...property.values.values()][0];(view as any).showMenu(new MouseEvent('contextmenu'),property,value);(Menu as any).items.find((i:any)=>i.title==='Rename value…').run();expect([...plugin.editValue.mock.calls[0][1].paths]).toEqual(['Projects/One.md']);
+ expect((view as any).queryFor(property,value)).not.toContain('Projects');
+ (view as any).query='unmatched';(view as any).searchScope='note';view.render();expect([...((view as any).activeIndex().properties.get('status').paths)]).toEqual(['Projects/One.md']);
+});
+
+it('keeps pins local to an all-properties folder selection and resets folder scope on inline fallback',()=>{
+ setFolders(['Projects']);const property=(view as any).activeIndex().properties.get('status');(view as any).showMenu(new MouseEvent('contextmenu'),property,property);(Menu as any).items.find((i:any)=>i.title==='Pin property').run();expect(plugin.prefs.pinned).toEqual([]);expect(plugin.prefs.customPinOverrides).toEqual({status:true});
+ enableInlineView();plugin.prefs.showInlineProperties=false;view.render();expect(plugin.prefs.folders).toEqual([]);
 });

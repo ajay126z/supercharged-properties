@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 vi.mock('obsidian', () => ({
+  FuzzySuggestModal: class {},
   Modal: class {},
   Plugin: class {
     app: any; cleanups: Array<() => void> = [];
@@ -230,4 +231,20 @@ it('loads and saves independent view pin overrides without changing legacy globa
   const saveData=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saveData;await plugin.save();
   const restored=await setup(saveData.mock.calls[0][0]);expect(restored.plugin.prefs.profiles).toEqual(plugin.prefs.profiles);
   expect(restored.plugin.prefs.customPinOverrides).toEqual({rating:true});
+});
+
+it('persists normalized folder selections through saveQueue for YAML and Inline sources',async()=>{
+ const {plugin}=await setup({folders:['/Books/','Books/Sub','Other'],profiles:[{id:'books',name:'Books',keys:['status'],folders:['Books/Sub','Books']}],inlineViews:{folders:['Inline/Sub','Inline'],profiles:[{id:'inline',name:'Inline',keys:['author'],folders:['Inline']}],scope:['author'],activeProfile:'inline'}});
+ expect(plugin.prefs.folders).toEqual(['Books','Other']);expect(plugin.prefs.profiles[0].folders).toEqual(['Books']);expect(plugin.prefs.inlineViews.folders).toEqual(['Inline']);
+ const saved:any[]=[];(plugin as any).saveData=vi.fn(async data=>{saved.push(data);});
+ const first=plugin.save();plugin.prefs.folders=['Changed'];const second=plugin.save();await Promise.all([first,second]);
+ expect(saved[0].folders).toEqual(['Books','Other']);expect(saved[1].folders).toEqual(['Changed']);expect(saved[1].inlineViews.folders).toEqual(['Inline']);
+});
+it('retains stale include paths on folder rename/delete and lets exclusions win at index time',async()=>{
+ const {plugin,vault,cache,files,metadata}=await setup({folders:['Books'],excludedFolders:'Books/Templates',profiles:[{id:'books',name:'Books',keys:['status'],folders:['Books']}],inlineViews:{folders:['Books']}});
+ const note=Object.assign(new TFile(),{path:'Books/A.md',extension:'md'}),excluded=Object.assign(new TFile(),{path:'Books/Templates/T.md',extension:'md'});files.push(note,excluded);metadata.set(note.path,{frontmatter:{status:'active'}});metadata.set(excluded.path,{frontmatter:{status:'active'}});plugin.rebuild();
+ expect(plugin.index.paths()).toEqual(new Set(['Books/A.md']));cache.emit('changed',excluded,'',{frontmatter:{status:'active'}});expect(plugin.index.paths()).toEqual(new Set(['Books/A.md']));
+ note.path='Library/A.md';metadata.set(note.path,{frontmatter:{status:'active'}});vault.emit('rename',{path:'Library'},'Books');await vi.advanceTimersByTimeAsync(151);
+ expect(plugin.index.paths()).toEqual(new Set(['Library/A.md']));expect(plugin.prefs.folders).toEqual(['Books']);expect(plugin.prefs.profiles[0].folders).toEqual(['Books']);expect(plugin.prefs.inlineViews.folders).toEqual(['Books']);expect(plugin.prefs.excludedFolders).toBe('Books/Templates');
+ files.splice(0,files.length);vault.emit('delete',{path:'Library'});await vi.advanceTimersByTimeAsync(151);expect(plugin.index.paths().size).toBe(0);expect(plugin.prefs.folders).toEqual(['Books']);
 });

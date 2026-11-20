@@ -2,6 +2,7 @@
 import { expect, it, vi } from 'vitest';
 const dialogs = vi.hoisted(() => ({ value: undefined as any, rename: undefined as any, remove: undefined as any }));
 vi.mock('obsidian', () => ({
+  FuzzySuggestModal: class {},
   Plugin: class {}, ItemView: class { contentEl = document.createElement('div'); app: any; constructor(leaf: any) { this.app = leaf.app; } },
   PluginSettingTab: class {}, Modal: class {}, Notice: class {}, TFile: class {}, setIcon() {},
   Menu: class { static items: any[] = []; constructor() { (this.constructor as any).items = []; } addItem(cb: any) { const i: any = { setTitle(t: string) { this.title = t; return this; }, setIcon() { return this; }, onClick(f: any) { this.run = f; return this; } }; cb(i); (this.constructor as any).items.push(i); return this; } showAtMouseEvent() {} }

@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Folder filters
+
+- Add per-view folder include lists to YAML and Inline views, with fuzzy folder selection, removable chips, a Clear action, and saved-view persistence.
+- Intersect folder and Value filters for the tree, distinct-note counts, copied links, bulk edits, and inline-to-YAML conversion; global excluded folders always win.
+- Allow all-properties views with folders, compare normalized folders for modified state, and clear folders when selecting built-in or legacy views.
+- Retain missing/excluded folder chips and show an empty-folder message. Folder renames do not rewrite saved paths.
+- Keep native Search vault-wide and tree search display-only; conversion now uses the explicit folder filter rather than note/path search to limit folders.
+
+
 ### Conversion to YAML
 
 - Add **Convert to YAML property…** to inline property/value menus, including mobile long-press.

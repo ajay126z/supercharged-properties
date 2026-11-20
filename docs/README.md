@@ -57,4 +57,4 @@ These guides describe **1.4.2** plus the unreleased Inline Properties view, with
 - [1.0.1](releases/1.0.1.md)
 - [1.0.0](releases/1.0.0.md)
 
-- [Upcoming release: inline to YAML conversion](releases/UNRELEASED.md)
+- [Upcoming release: inline conversion and folder filters](releases/UNRELEASED.md)
