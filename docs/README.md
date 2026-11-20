@@ -2,7 +2,7 @@
 
 ## For users
 
-These guides describe **1.4.2** plus the unreleased Inline Properties view, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
+These guides describe **1.5.0**, including Inline Properties and saved folder filters, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
@@ -57,4 +57,16 @@ These guides describe **1.4.2** plus the unreleased Inline Properties view, with
 - [1.0.1](releases/1.0.1.md)
 - [1.0.0](releases/1.0.0.md)
 
-- [Upcoming release: inline conversion and folder filters](releases/UNRELEASED.md)
+- [1.5.0: inline properties, conversion, and folder filters](releases/1.5.0.md)
+
+## Feature demos
+
+- [Browse properties and search notes](media/01-browse-and-search.gif)
+- [Save views with property selections and folder filters](media/02-saved-views.gif)
+- [Merge values with preview and undo](media/03-merge-and-undo.gif)
+- [Rename a property](media/04-rename-property.gif)
+- [Exclude template folders globally](media/05-exclude-templates.gif)
+- [Edit values on selected notes](media/06-edit-selected-values.gif)
+- [Filter by a value and browse matching notes](media/07-value-filter-notes.gif)
+- [Inline properties: browse and edit values](media/08-inline-properties.gif)
+- [Folder filters: select folders and save a view](media/09-folder-filters.gif)

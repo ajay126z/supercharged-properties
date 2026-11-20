@@ -1,3 +1,7 @@
+---
+created: 2026-11-20
+updated: 2026-11-20
+---
 # Supercharged Properties
 
 **Find notes by their properties and keep your vault's metadata consistent.**
@@ -29,13 +33,17 @@ author:: AJ
 (rating:: 4)
 ```
 
-All properties and existing saved views continue to show YAML frontmatter. To save an inline view, choose **Inline Properties**, open **Choose properties to show**, select fields, enter a name, and choose **Save new**. The view picker opens downward with a scrollable list that fits the screen. Inline views appear as **Inline: Name** and have their own Update, Rename, and Delete controls. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. Right-click or long-press inline rows to rename or delete a property, rename a value, or select several values to replace with one new text value. Edits require Preview changes and Confirm changes, with **Undo last inline property edit** available until reload. Inline pins and hidden properties are separate from YAML. Open in Search and Copy search query use text queries that may also match code examples. Excluded folders apply, and code, frontmatter, and comments are ignored. Fields in nested lists and indented list continuations are supported, including link values. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. This feature is unreleased, following 1.4.2.
+All properties and existing saved views continue to show YAML frontmatter. To save an inline view, choose **Inline Properties**, open **Choose properties to show**, select fields, enter a name, and choose **Save new**. The view picker opens downward with a scrollable list that fits the screen. Inline views appear as **Inline: Name** and have their own Update, Rename, and Delete controls. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. Right-click or long-press inline rows to rename or delete a property, rename a value, or select several values to replace with one new text value. Edits require Preview changes and Confirm changes, with **Undo last inline property edit** available until reload. Inline pins and hidden properties are separate from YAML. Open in Search and Copy search query use text queries that may also match code examples. Excluded folders apply, and code, frontmatter, and comments are ignored. Fields in nested lists and indented list continuations are supported, including link values. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. Available in 1.5.0.
 
-**Unreleased: inline → YAML conversion.** Move or copy inline fields into Obsidian properties from the inline property/value menu. Choose notes, handle existing values with Skip/Merge/Overwrite, and preview before confirming. Repeated fields become lists; conversion includes one-step session undo. [Conversion guide](docs/BULK-EDITING.md#convert-inline-properties-to-yaml).
+![Enable inline properties, browse note-body fields, and preview a value edit](docs/media/08-inline-properties.gif)
+
+**Convert inline fields to YAML.** Move or copy inline fields into Obsidian properties from the inline property/value menu. Choose notes, handle existing values with Skip/Merge/Overwrite, and preview before confirming. Repeated fields become lists; conversion includes one-step session undo. [Conversion guide](docs/BULK-EDITING.md#convert-inline-properties-to-yaml).
 
 ## Focus a view on folders
 
 Open **Choose properties to show → + Add folder** to show notes from chosen folders and their subfolders. Remove folder chips or choose **Clear** to broaden the view. Folder filters narrow counts, copied links, and edits, and combine with **Filter by Value**. Save them with YAML or Inline views—even when all properties are selected. Global **Excluded folders** always wins. [Folder filter guide](docs/USER-GUIDE.md#folder-filters).
+
+![Choose a folder filter, save a view, and restore its folder scope](docs/media/09-folder-filters.gif)
 
 ## Explore notes sharing a value
 
@@ -57,11 +65,12 @@ One filter is active per tab; choosing another replaces it. Notes entering or le
 ## Keep your view focused
 
 - **Choose properties.** Show only the fields relevant to your current work.
-- **Save views.** Create selections such as Writing, Projects, or Reading and switch between them.
+- **Save views.** Save property selections and folder filters as views such as Writing, Projects, or Reading, and switch between them.
+- **Filter by folders.** Limit a view to selected folders and their subfolders. Counts, copied links, and edits follow that scope.
 - **Pin and hide.** Keep frequently used properties at the top and hide fields you do not need to see.
 - **Exclude folders.** Leave templates, drafts, or other folders out of the property list and counts. Exclusions include subfolders and also apply to new bulk edits.
 
-![Create and switch saved property views](docs/media/02-saved-views.gif)
+![Choose properties and folders, save a view, and restore both selections](docs/media/02-saved-views.gif)
 
 ![Exclude Templates folders from the property tree](docs/media/05-exclude-templates.gif)
 

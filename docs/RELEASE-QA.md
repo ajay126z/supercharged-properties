@@ -260,7 +260,7 @@ Run this checklist against a build candidate before publishing. Automated checks
 - Repeat with an existing Search pane restored in a collapsed sidebar, then with Search already loaded.
 - Disable core Search and repeat: show the enable-Search notice and remove only a newly created unusable pane, preserving existing panes.
 
-## Inline properties (unreleased)
+## Inline properties (1.5.0)
 
 - Enable Show inline properties and choose Inline Properties. Check all three field forms, repeated values, empty fields, wikilinks, comments and code exclusions.
 - Confirm YAML values with the same names remain separate, with inline edit menus routed to the inline editor and no note selection controls.
@@ -306,3 +306,14 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] Change a note after preview and after apply; verify apply/undo skip the changed note.
 - [ ] Test separate Undo last inline property edit, local inline pin inheritance and Hidden inline properties settings.
 - [ ] Confirm action buttons remain reachable above the keyboard on mobile while reviewing long previews.
+
+## Folder filters and inline conversion (1.5.0)
+
+- Choose folders in YAML and Inline views; confirm child folders match but similarly prefixed folders do not.
+- Save an all-properties folder view, switch to a built-in view, and restore the saved view. Verify folder chips and property selections restore independently for each source.
+- Combine folder and Value filters; clear each independently. Check counts, copied links, and edit previews against the expected notes.
+- Exclude or delete a selected folder. Verify its chip stays muted and an empty scope reports no notes in selected folders.
+- On mobile, check chip wrapping, the fuzzy folder chooser, and Save/Update reachability while the keyboard is open.
+- Convert repeated inline fields with Move and Keep; preview Skip/Merge/Overwrite conflicts. Confirm code/comments and notes outside the filter are untouched.
+- Undo a conversion and verify both YAML and body fields. Edit a note after preview or apply and verify conflict protection and the reported result.
+- Verify inline rename/delete uses **Undo last inline property edit**, while conversion uses **Undo last property edit**. Both undo slots reset on reload.

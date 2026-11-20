@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. YAML edits write frontmatter; inline edits write note-body fields. Both require preview and confirmation.
 
-This guide describes **1.4.2**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. It also documents unreleased inline editing, inline-to-YAML conversion, and saved folder filters after 1.4.2. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
+This guide describes **1.5.0**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. It includes inline editing, inline-to-YAML conversion, and saved folder filters. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
 
 ## Contents
 
@@ -118,7 +118,7 @@ Search operates within your current property selection and excludes hidden prope
 
 ## Inline properties
 
-This feature is unreleased, following 1.4.2. Turn on **Settings → Supercharged Properties → Show inline properties**, then select **Inline Properties** in the view dropdown. It is a built-in view separate from **All properties** and your saved YAML views.
+Available in 1.5.0. Turn on **Settings → Supercharged Properties → Show inline properties**, then select **Inline Properties** in the view dropdown. It is a built-in view separate from **All properties** and your saved YAML views.
 
 Supported forms:
 

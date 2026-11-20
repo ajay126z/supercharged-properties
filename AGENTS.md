@@ -108,7 +108,7 @@ License metadata must stay synchronized across `package.json`, `package-lock.jso
 
 ## Inline-to-YAML conversion
 
-`inline-conversion.ts` and `inline-conversion-dialog.ts` provide explicitly selected-note conversion. Menus pass Value-filter-scoped paths, intersected with folder include paths; tree search remains display-only. Conversion previews use fresh note reads; repeated fields become lists and unsafe/folded collisions are skipped. Frontmatter writes use processFrontMatter; Move removes validated spans in one vault.process call. Check for drift between stages and preserve concurrent body edits. Conversion shares ValueEditor's busy guard and undo slot; ordinary InlineEditor writes also use that guard but retain their separate undo slot. Preview rendering caps note counts/excerpts without truncating the actual batch. Keep release notes for this unreleased feature in docs/releases/UNRELEASED.md until a version is requested.
+`inline-conversion.ts` and `inline-conversion-dialog.ts` provide explicitly selected-note conversion. Menus pass Value-filter-scoped paths, intersected with folder include paths; tree search remains display-only. Conversion previews use fresh note reads; repeated fields become lists and unsafe/folded collisions are skipped. Frontmatter writes use processFrontMatter; Move removes validated spans in one vault.process call. Check for drift between stages and preserve concurrent body edits. Conversion shares ValueEditor's busy guard and undo slot; ordinary InlineEditor writes also use that guard but retain their separate undo slot. Preview rendering caps note counts/excerpts without truncating the actual batch. Release notes for these features are in docs/releases/1.5.0.md.
 
 ## Folder filters
 

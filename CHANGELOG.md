@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-20
+
 ### Folder filters
 
 - Add per-view folder include lists to YAML and Inline views, with fuzzy folder selection, removable chips, a Clear action, and saved-view persistence.
@@ -19,7 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Add **Convert to YAML property…** to inline property/value menus, including mobile long-press.
 - Support selected notes, Move/Keep, literal text or optional detection, repeated-field lists, and Skip/Merge/Overwrite conflicts.
-- Honor Value filters, excluded folders, and note/path search; preview changes and removed source fragments before confirmation.
+- Honor Value filters, folder filters, and excluded folders; preview changes and removed source fragments before confirmation.
 - Share the YAML editor busy guard and undo slot for conversion, protect changed notes, and retain recovery snapshots for partial writes.
 
 
@@ -49,7 +51,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Saved inline property views with source-specific selections, Save/Update/Rename/Delete controls, persistent settings, and search and Value filter support. Built-in Inline Properties remains protected and saved inline views stay separate from YAML views.
 
-- Optional Show inline properties setting and separate read-only Inline Properties view. Browse literal Dataview-style fields as property → value → notes, with local search, sorting, distinct-note counts, copied links, and Value filters. Excluded folders apply; YAML views and editing remain separate. Background reads are bounded and discard outdated results.
+- Optional Show inline properties setting and separate Inline Properties view with read-only browsing and explicit edit actions. Browse literal Dataview-style fields as property → value → notes, with local search, sorting, distinct-note counts, copied links, and Value filters. Excluded folders apply; YAML views and editing remain separate. Background reads are bounded and discard outdated results.
 
 ## [1.4.2] - 2026-11-18
 
