@@ -1,7 +1,3 @@
----
-created: 2026-11-20
-updated: 2026-11-20
----
 # Supercharged Properties
 
 **Find notes by their properties and keep your vault's metadata consistent.**
@@ -185,6 +181,10 @@ Your notes stay in your vault. The plugin does not send vault data to external s
 - [Documentation index](docs/README.md) — all user and contributor guides.
 - [Report an issue](https://github.com/ajay126z/supercharged-properties/issues).
 
+
+> If Supercharged Properties adds value to your workflow, feel free to [buy me a coffee ☕](buymeacoffee.com/ajayzapadiya).
+
+
 ## Contributing and license
 
 For source builds and development instructions, see [Contributing](CONTRIBUTING.md). Release maintainers can refer to the [release runbook](docs/RELEASING.md), [Publishing](docs/PUBLISHING.md), and [Release QA](docs/RELEASE-QA.md).
@@ -192,3 +192,5 @@ For source builds and development instructions, see [Contributing](CONTRIBUTING.
 Copyright (c) 2026 Ajay Zapadiya. Released under the [MIT License](LICENSE). See [NOTICE.md](NOTICE.md) for third-party notices.
 
 Supercharged Properties is an independent community plugin and is not affiliated with or endorsed by Obsidian. Obsidian is a trademark of Dynalist Inc.
+
+
