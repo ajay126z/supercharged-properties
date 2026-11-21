@@ -325,7 +325,7 @@ Click **Sort properties** to choose:
 - **Frequency (high to low)**
 - **Frequency (low to high)**
 
-The selected ordering applies to property and value rows. Frequency means distinct-note count; ties use alphabetical order. The same preference is available in Settings.
+The selected ordering applies to property and value rows. A–Z and Z–A sort wikilink values by the target note’s filename, ignoring its folder, alias, and heading/block reference. Resolved links use the actual note basename; unresolved links use the last target segment without `.md`. Expanded notes use filename ordering too, with full paths breaking ties. Numeric ordering puts `2026-W9` before `2026-W21`. Original labels and edit values stay unchanged. Frequency means distinct-note count; ties use alphabetical order. The same preference is available in Settings.
 
 Right-click a **property row** and choose **Pin property** to keep it above unpinned properties. Choose **Unpin property** to restore normal ordering. Pinning does not override the property selection, search, or hiding.
 

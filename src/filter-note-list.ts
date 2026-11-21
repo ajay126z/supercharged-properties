@@ -7,11 +7,11 @@ interface NoteRow { path: string; name: string; folder: string }
 let nextListId = 0;
 const batchSize = 200;
 
-export function noteRows(paths: ReadonlySet<string>): NoteRow[] {
+export function noteRows(paths: ReadonlySet<string>, descending = false): NoteRow[] {
   return [...paths].map(path => {
     const slash = path.lastIndexOf('/');
     return { path, name: path.slice(slash + 1).replace(/\.md$/i, ''), folder: slash < 0 ? '' : path.slice(0, slash) };
-  }).sort((a, b) => natural(a.name, b.name) || a.path.localeCompare(b.path));
+  }).sort((a, b) => (descending ? -1 : 1) * (natural(a.name, b.name) || a.path.localeCompare(b.path)));
 }
 
 /** Read-only disclosure for the current filter. It never participates in tree selection. */

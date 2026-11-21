@@ -18,3 +18,16 @@ it('keeps frequency ties alphabetical and supports old saved modes', () => {
   expect(sortOrder('name-desc')).toBe('name-desc'); expect(sortOrder('count-asc')).toBe('count-asc');
   expect(sortOrder('constructor')).toBe('name');
 });
+
+import { linkedValueSortKey } from '../src/sorting';
+it('uses resolved basenames and strips unresolved wikilink folders, aliases, headings, blocks and extensions', () => {
+ const node = (label: string) => ({id: label, label, paths:new Set(['Z/source.md','A/source.md'])});
+ const resolve=(target:string,source:string)=>target==='shortcut'&&source==='A/source.md'?{basename:'2026-W2'}:null;
+ for(const [label,key] of [['[[2026-W09]]','2026-W09'],['[[Journal/2026-W21|This week]]','2026-W21'],['[[2026-W22#Review]]','2026-W22'],['[[Journal/2026-W23.md#^block|alias]]','2026-W23'],['[[shortcut]]','2026-W2'],['ordinary text','ordinary text'],['prefix [[note]]','prefix [[note]]']]) expect(linkedValueSortKey(node(label),resolve)).toBe(key);
+ const values=['[[Journal/2026-W21|First]]','[[2026-W9]]','[[shortcut]]'].map(node);
+ const key=(value:typeof values[number])=>linkedValueSortKey(value,resolve);
+ expect(sortNodes(values,'name',key).map(key)).toEqual(['2026-W2','2026-W9','2026-W21']);
+ expect(sortNodes(values,'name-desc',key).map(key)).toEqual(['2026-W21','2026-W9','2026-W2']);
+ expect(values[0].label).toBe('[[Journal/2026-W21|First]]');
+ expect(sortNodes(values,'count',key)).toEqual(sortNodes(values,'count'));
+});

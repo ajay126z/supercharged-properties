@@ -1224,3 +1224,20 @@ it.each([false,true])('keeps folder paths inside the closed picker for inline=%s
  click('Choose properties to show');expect(document.querySelector('.pv-folder-row')!.textContent).toContain('Projects');expect(document.querySelector('[aria-label="Clear folder filter"]')).not.toBeNull();
  click('Choose properties to show');expect((document.querySelector('.pv-scope-panel') as HTMLElement).hidden).toBe(true);expect((view as any).filterPaths().size).toBeGreaterThan(0);
 });
+
+it('sorts linked values by resolved basename and expanded notes by filename in both directions',()=>{
+ plugin.index=new PropertyIndex();
+ plugin.index.update('Z/2026-W9.md',{weekly:'[[Journal/2026-W21|This week]]'});
+ plugin.index.update('A/2026-W21.md',{weekly:'[[Journal/2026-W21|This week]]'});
+ plugin.index.update('B/2026-W9.md',{weekly:'[[Journal/2026-W21|This week]]'});
+ plugin.index.update('Other.md',{weekly:'[[shortcut]]'});
+ (view.app as any).metadataCache={getFirstLinkpathDest:(target:string)=>target==='shortcut'?{basename:'2026-W2'}:null};
+ plugin.prefs.expanded=['weekly'];
+ for(const value of plugin.index.properties.get('weekly').values.values()) (view as any).expandedValues.add(JSON.stringify(['weekly',value.id]));
+ view.render();
+ expect([...view.contentEl.querySelectorAll('.pv-value-group .pv-label')].map(el=>el.textContent)).toEqual(['[[shortcut]]','[[Journal/2026-W21|This week]]']);
+ const paths=()=>[...view.contentEl.querySelectorAll<HTMLElement>('.pv-file')].map(el=>el.dataset.notePath);
+ expect(paths()).toEqual(['Other.md','B/2026-W9.md','Z/2026-W9.md','A/2026-W21.md']);
+ plugin.prefs.sort='name-desc';view.render();
+ expect(paths()).toEqual(['A/2026-W21.md','Z/2026-W9.md','B/2026-W9.md','Other.md']);
+});

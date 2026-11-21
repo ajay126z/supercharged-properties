@@ -1212,14 +1212,26 @@ var sortOptions = {
 function sortOrder(value) {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(sortOptions, value) ? value : "name";
 }
-function sortNodes(nodes, order) {
-  return Array.from(nodes).sort((a, b) => {
-    const alphabetical = natural(a.label, b.label) || a.id.localeCompare(b.id);
+function sortNodes(nodes, order, name = (node) => node.label) {
+  const keys = /* @__PURE__ */ new Map();
+  const list = Array.from(nodes);
+  for (const node of list) keys.set(node, order === "name" || order === "name-desc" ? name(node) : node.label);
+  return list.sort((a, b) => {
+    const alphabetical = natural(keys.get(a), keys.get(b)) || a.id.localeCompare(b.id);
     if (order === "name-desc") return -alphabetical;
     if (order === "count") return b.paths.size - a.paths.size || alphabetical;
     if (order === "count-asc") return a.paths.size - b.paths.size || alphabetical;
     return alphabetical;
   });
+}
+function linkedValueSortKey(node, resolve) {
+  const match = /^\[\[([^\]\n[]+)\]\]$/.exec(node.label.trim());
+  if (!match) return node.label;
+  const target = match[1].split("|", 1)[0].split(/[#^]/, 1)[0].trim();
+  const source = [...node.paths].sort()[0] ?? "";
+  const file = resolve(target, source);
+  if (file) return file.basename;
+  return target.slice(target.lastIndexOf("/") + 1).replace(/\.md$/i, "");
 }
 
 // src/search.ts
@@ -2327,11 +2339,11 @@ var ViewPicker = class {
 var import_obsidian11 = require("obsidian");
 var nextListId = 0;
 var batchSize = 200;
-function noteRows(paths) {
+function noteRows(paths, descending = false) {
   return [...paths].map((path) => {
     const slash = path.lastIndexOf("/");
     return { path, name: path.slice(slash + 1).replace(/\.md$/i, ""), folder: slash < 0 ? "" : path.slice(0, slash) };
-  }).sort((a, b) => natural(a.name, b.name) || a.path.localeCompare(b.path));
+  }).sort((a, b) => (descending ? -1 : 1) * (natural(a.name, b.name) || a.path.localeCompare(b.path)));
 }
 var FilterNoteList = class {
   constructor(app, bar, panel, clear, hoverParent, source, showTooltips = () => true) {
@@ -3455,7 +3467,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     for (const property of properties) {
       const keyMatches = !this.query || this.matches(property.label, "key");
       const noteMatches = (node) => [...node.paths].some((path) => this.matches(path, "note"));
-      const values = this.sorted(property.values.values()).filter((v) => keyMatches || this.matches(v.label, "value") || noteMatches(v));
+      const values = sortNodes(property.values.values(), this.plugin.prefs.sort, (node) => linkedValueSortKey(node, (target, source) => this.app.metadataCache.getFirstLinkpathDest(target, source))).filter((v) => keyMatches || this.matches(v.label, "value") || noteMatches(v));
       if (!keyMatches && !values.length && !noteMatches(property)) continue;
       visible++;
       const matchingPaths = keyMatches ? property.paths : new Set([...property.paths].filter((path) => this.matches(path, "note")));
@@ -3563,7 +3575,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   }
   renderNotes(parent, property, node, id, ancestorMatches) {
     const notes = el2(parent, "div", "pv-notes");
-    const paths = [...node.paths].sort(natural).filter((path) => !this.query || ancestorMatches || this.matches(path, "note"));
+    const paths = noteRows(node.paths, this.plugin.prefs.sort === "name-desc").map((note) => note.path).filter((path) => !this.query || ancestorMatches || this.matches(path, "note"));
     const limitKey = `notes:${id}`;
     const limit = this.limits.get(limitKey) ?? 100;
     for (const path of paths.slice(0, limit)) {

@@ -10,7 +10,7 @@ import { fold, natural, PropertyIndex, PropertyNode, ValueNode } from './index';
 
 import { fitVisibleViewport, usesTouchLayout } from './mobile-layout';
 import { excludedFolders, isFolderExcluded } from './folder-exclusions';
-import { SortOrder, sortOptions, sortOrder, sortNodes } from './sorting';
+import { SortOrder, sortOptions, sortOrder, sortNodes, linkedValueSortKey } from './sorting';
 import { propertyQuery } from './search';
 import { loadProfiles, loadPinOverrides, loadViewState, sameKeys, PropertyProfile, PropertyViewState } from './profiles';
 import { PropertyTypeResolver, supportsTextSplit, noteEditType } from './property-types';
@@ -22,7 +22,7 @@ import { ValueEditModal } from './value-dialog';
 import { NoteValueModal } from './note-value-dialog';
 import { InlineIndex } from './inline-index';
 import { ViewPicker, type ViewChoice } from './view-picker';
-import { FilterNoteList } from './filter-note-list';
+import { FilterNoteList, noteRows } from './filter-note-list';
 import { attachNoteMenu } from './note-menu';
 import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-operations';
 import type { PropertyValueKind } from './frontmatter-values';
@@ -809,7 +809,7 @@ export class PropertiesView extends ItemView {
     for (const property of properties) {
       const keyMatches = !this.query || this.matches(property.label, 'key');
       const noteMatches = (node: ValueNode) => [...node.paths].some(path => this.matches(path, 'note'));
-      const values = this.sorted(property.values.values()).filter(v => keyMatches || this.matches(v.label, 'value') || noteMatches(v));
+      const values = sortNodes(property.values.values(), this.plugin.prefs.sort, node => linkedValueSortKey(node, (target, source) => this.app.metadataCache.getFirstLinkpathDest(target, source))).filter(v => keyMatches || this.matches(v.label, 'value') || noteMatches(v));
       if (!keyMatches && !values.length && !noteMatches(property)) continue;
       visible++;
       // Count distinct matching notes, independently of expansion and pagination.
@@ -910,7 +910,7 @@ export class PropertiesView extends ItemView {
   }
   private renderNotes(parent: HTMLElement, property: PropertyNode, node: ValueNode, id: string, ancestorMatches: boolean): void {
     const notes = el(parent, 'div', 'pv-notes');
-    const paths = [...node.paths].sort(natural).filter(path => !this.query || ancestorMatches || this.matches(path, 'note'));
+    const paths = noteRows(node.paths, this.plugin.prefs.sort === 'name-desc').map(note => note.path).filter(path => !this.query || ancestorMatches || this.matches(path, 'note'));
     const limitKey = `notes:${id}`; const limit = this.limits.get(limitKey) ?? 100;
     for (const path of paths.slice(0, limit)) {
       const rowId = JSON.stringify(['note', property.id, id, path]);
