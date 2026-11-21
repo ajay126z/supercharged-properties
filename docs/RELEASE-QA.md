@@ -317,3 +317,5 @@ Run this checklist against a build candidate before publishing. Automated checks
 - Convert repeated inline fields with Move and Keep; preview Skip/Merge/Overwrite conflicts. Confirm code/comments and notes outside the filter are untouched.
 - Undo a conversion and verify both YAML and body fields. Edit a note after preview or apply and verify conflict protection and the reported result.
 - Verify inline rename/delete uses **Undo last inline property edit**, while conversion uses **Undo last property edit**. Both undo slots reset on reload.
+
+- Folder-filter UI follow-up: verify folder paths and Clear appear only inside Choose properties to show in YAML and Inline views; closing the panel keeps filtering, saved-view state, and summary counts active.

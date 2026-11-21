@@ -41,7 +41,7 @@ All properties and existing saved views continue to show YAML frontmatter. To sa
 
 ## Focus a view on folders
 
-Open **Choose properties to show → + Add folder** to show notes from chosen folders and their subfolders. Remove folder chips or choose **Clear** to broaden the view. Folder filters narrow counts, copied links, and edits, and combine with **Filter by Value**. Save them with YAML or Inline views—even when all properties are selected. Global **Excluded folders** always wins. [Folder filter guide](docs/USER-GUIDE.md#folder-filters).
+Open **Choose properties to show → + Add folder** to show notes from chosen folders and their subfolders. Manage folder chips or choose **Clear** inside that panel to broaden the view. Folder paths stay hidden while the panel is closed. Folder filters narrow counts, copied links, and edits, and combine with **Filter by Value**. Save them with YAML or Inline views—even when all properties are selected. Global **Excluded folders** always wins. [Folder filter guide](docs/USER-GUIDE.md#folder-filters).
 
 ![Choose a folder filter, save a view, and restore its folder scope](docs/media/09-folder-filters.gif)
 

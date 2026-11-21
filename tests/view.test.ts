@@ -1164,7 +1164,7 @@ it('filters the tree and counts and provides removable folder chips and Clear',(
  click('Expand status');expect(document.querySelector('.pv-tree')!.textContent).not.toContain('Pending');
  click('Choose properties to show');expect(document.querySelector('.pv-folder-row')!.textContent).toContain('Projects');
  nameProfile('Keep this name');click('Clear folder filter');expect(plugin.prefs.folders).toEqual([]);expect(document.querySelector<HTMLInputElement>('[aria-label="Profile name"]')!.value).toBe('Keep this name');
- expect(document.querySelector('[aria-label="Toggle status (2)"]')).not.toBeNull();expect((document.querySelector('.pv-folder-bar') as HTMLElement).hidden).toBe(true);
+ expect(document.querySelector('[aria-label="Toggle status (2)"]')).not.toBeNull();expect(document.querySelector('.pv-folder-bar')).toBeNull();
 });
 it('uses the fuzzy folder chooser, absorbs descendants and preserves the view-name input',()=>{
  plugin.prefs.excludedFolders='Templates';click('Choose properties to show');nameProfile('Books');click('Add folder filter');
@@ -1187,11 +1187,11 @@ it('clears folders when applying legacy or built-in views and retains them when 
 it('intersects folder and Value filters, with independent clear actions',()=>{
  plugin.index.update('Other/Done.md',{status:'Done',tags:'other'});setFolders(['Projects']);click('Expand status');filterValue('Show notes with status: Done (1)');
  expect((view as any).filterPaths()).toEqual(new Set(['Projects/One.md']));expect(document.querySelector('.pv-summary')!.textContent).toContain('Filtered (1 note)');
- click('Clear folder filter');expect((view as any).filterPaths()).toEqual(new Set(['Projects/One.md','Other/Done.md']));
+ click('Choose properties to show');click('Clear folder filter');expect((view as any).filterPaths()).toEqual(new Set(['Projects/One.md','Other/Done.md']));
  setFolders(['Projects']);click('Clear property filter');expect(plugin.prefs.folders).toEqual(['Projects']);expect((view as any).activeIndex().properties.has('status')).toBe(true);
 });
 it('keeps stale or excluded folder chips and shows the empty-scope message',()=>{
- setFolders(['Missing']);expect(document.querySelector('.pv-folder-chip.is-unavailable')!.textContent).toContain('Missing');expect(document.querySelector('.pv-empty')!.textContent).toBe('No notes in the selected folders.');
+ setFolders(['Missing']);click('Choose properties to show');expect(document.querySelector('.pv-folder-chip.is-unavailable')!.textContent).toContain('Missing');expect(document.querySelector('.pv-empty')!.textContent).toBe('No notes in the selected folders.');
  setFolders(['Projects']);plugin.prefs.excludedFolders='Projects';view.render();expect(plugin.prefs.folders).toEqual(['Projects']);expect(document.querySelector('.pv-folder-chip.is-unavailable')).not.toBeNull();expect(document.querySelector('.pv-empty')!.textContent).toBe('No notes in the selected folders.');
 });
 it('keeps YAML and Inline folder selections and saved views independent',()=>{
@@ -1214,4 +1214,13 @@ it('passes folder-scoped nodes to copy and edit menus while leaving native Searc
 it('keeps pins local to an all-properties folder selection and resets folder scope on inline fallback',()=>{
  setFolders(['Projects']);const property=(view as any).activeIndex().properties.get('status');(view as any).showMenu(new MouseEvent('contextmenu'),property,property);(Menu as any).items.find((i:any)=>i.title==='Pin property').run();expect(plugin.prefs.pinned).toEqual([]);expect(plugin.prefs.customPinOverrides).toEqual({status:true});
  enableInlineView();plugin.prefs.showInlineProperties=false;view.render();expect(plugin.prefs.folders).toEqual([]);
+});
+
+
+it.each([false,true])('keeps folder paths inside the closed picker for inline=%s',inline=>{
+ if(inline){enableInlineView();plugin.inline.index.update('Projects/Inline.md',{status:'active'});}
+ setFolders(['Projects']);expect(document.querySelector('.pv-folder-bar')).toBeNull();expect(document.querySelector('.pv-folder-chip')).toBeNull();
+ expect(document.querySelector('.pv-summary')!.textContent).toContain('Filtered');
+ click('Choose properties to show');expect(document.querySelector('.pv-folder-row')!.textContent).toContain('Projects');expect(document.querySelector('[aria-label="Clear folder filter"]')).not.toBeNull();
+ click('Choose properties to show');expect((document.querySelector('.pv-scope-panel') as HTMLElement).hidden).toBe(true);expect((view as any).filterPaths().size).toBeGreaterThan(0);
 });

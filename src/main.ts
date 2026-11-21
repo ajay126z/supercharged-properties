@@ -365,7 +365,6 @@ export class PropertiesView extends ItemView {
   private scopePanel!: HTMLElement;
   private scopeChoices!: HTMLElement;
   private folderRow?: HTMLElement;
-  private folderBar!: HTMLElement;
   private profilePicker!: ViewPicker;
   private profileName!: HTMLInputElement;
   private profileUpdate!: HTMLButtonElement;
@@ -459,8 +458,6 @@ export class PropertiesView extends ItemView {
     this.searchToggle = this.iconButton(actions, 'Toggle search', 'search', () => this.toggleSearch(this.searchHeader.hidden));
     this.searchToggle.setAttribute('aria-expanded', 'false');
     this.scopePanel = el(toolbar, 'div', 'pv-scope-panel'); this.scopePanel.hidden = true;
-    this.folderBar = el(this.contentEl, 'div', 'pv-folder-bar');
-    this.folderBar.setAttribute('aria-label', 'Folder filter');
     this.filterBar = el(this.contentEl, 'div', 'pv-filter-bar');
     this.filterBar.hidden = true;
     this.filterLabel = el(this.filterBar, 'span', 'pv-filter-label');
@@ -731,9 +728,9 @@ export class PropertiesView extends ItemView {
     const modal = new FolderSuggest(this.app); modal.setPlaceholder('Find a folder…'); modal.open();
   }
   private renderFolders(): void {
-    if (!this.folderBar) return;
+    if (!this.folderRow) return;
     const focused = this.contentEl.ownerDocument.activeElement;
-    const focusParent = focused && this.folderBar.contains(focused) ? this.folderBar : focused && this.folderRow?.contains(focused) ? this.folderRow : undefined;
+    const focusParent = focused && this.folderRow.contains(focused) ? this.folderRow : undefined;
     const focusLabel = focusParent ? focused?.getAttribute('aria-label') : null;
     const folders = this.folders, excluded = excludedFolders(this.plugin.prefs.excludedFolders ?? '');
     const chips = (parent: HTMLElement) => {
@@ -747,11 +744,10 @@ export class PropertiesView extends ItemView {
         remove.dataset.pvFocus = `folder:${folder}`;
       }
     };
-    this.folderBar.hidden = !folders.length; this.folderBar.replaceChildren();
-    if (folders.length) { chips(this.folderBar); this.button(this.folderBar, 'Clear', 'Clear folder filter', () => this.setFolders([])); }
     if (this.folderRow) {
       this.folderRow.replaceChildren(); el(this.folderRow, 'span', 'pv-hint', 'Folders'); chips(this.folderRow);
       this.button(this.folderRow, '+ Add folder', 'Add folder filter', () => this.addFolder());
+      if (folders.length) this.button(this.folderRow, 'Clear', 'Clear folder filter', () => this.setFolders([]));
     }
     if (focusParent) {
       const buttons = Array.from(focusParent.querySelectorAll<HTMLButtonElement>('button'));

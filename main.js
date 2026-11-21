@@ -3013,8 +3013,6 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.searchToggle.setAttribute("aria-expanded", "false");
     this.scopePanel = el2(toolbar, "div", "pv-scope-panel");
     this.scopePanel.hidden = true;
-    this.folderBar = el2(this.contentEl, "div", "pv-folder-bar");
-    this.folderBar.setAttribute("aria-label", "Folder filter");
     this.filterBar = el2(this.contentEl, "div", "pv-filter-bar");
     this.filterBar.hidden = true;
     this.filterLabel = el2(this.filterBar, "span", "pv-filter-label");
@@ -3367,9 +3365,9 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     modal.open();
   }
   renderFolders() {
-    if (!this.folderBar) return;
+    if (!this.folderRow) return;
     const focused = this.contentEl.ownerDocument.activeElement;
-    const focusParent = focused && this.folderBar.contains(focused) ? this.folderBar : focused && this.folderRow?.contains(focused) ? this.folderRow : void 0;
+    const focusParent = focused && this.folderRow.contains(focused) ? this.folderRow : void 0;
     const focusLabel = focusParent ? focused?.getAttribute("aria-label") : null;
     const folders = this.folders, excluded = excludedFolders(this.plugin.prefs.excludedFolders ?? "");
     const chips = (parent) => {
@@ -3386,17 +3384,12 @@ var PropertiesView = class extends import_obsidian12.ItemView {
         remove.dataset.pvFocus = `folder:${folder}`;
       }
     };
-    this.folderBar.hidden = !folders.length;
-    this.folderBar.replaceChildren();
-    if (folders.length) {
-      chips(this.folderBar);
-      this.button(this.folderBar, "Clear", "Clear folder filter", () => this.setFolders([]));
-    }
     if (this.folderRow) {
       this.folderRow.replaceChildren();
       el2(this.folderRow, "span", "pv-hint", "Folders");
       chips(this.folderRow);
       this.button(this.folderRow, "+ Add folder", "Add folder filter", () => this.addFolder());
+      if (folders.length) this.button(this.folderRow, "Clear", "Clear folder filter", () => this.setFolders([]));
     }
     if (focusParent) {
       const buttons = Array.from(focusParent.querySelectorAll("button"));

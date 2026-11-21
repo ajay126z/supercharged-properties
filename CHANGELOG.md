@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- Keep folder chips and Clear inside Choose properties to show, removing the persistent folder-path bar from YAML and Inline views while retaining filtering and summary counts.
+
 ## [1.5.0] - 2026-11-20
 
 ### Folder filters
