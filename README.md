@@ -182,7 +182,7 @@ Your notes stay in your vault. The plugin does not send vault data to external s
 - [Report an issue](https://github.com/ajay126z/supercharged-properties/issues).
 
 > Thanks for using Supercharged Properties! If you find it helpful, you can support its ongoing development by buying me a coffee.
->   
+>
 > <a href="https://www.buymeacoffee.com/ajayzapadiya" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 ## Contributing and license
