@@ -181,18 +181,19 @@ Your notes stay in your vault. The plugin does not send vault data to external s
 - [Documentation index](docs/README.md) — all user and contributor guides.
 - [Report an issue](https://github.com/ajay126z/supercharged-properties/issues).
 
-> [!TIP] 
-> If this saved you a bit of time or made your vault feel a little tidier, feel free to buy me a coffee ☕ to help fuel future updates.
-> 
+> Thanks for using Supercharged Properties! If you find it helpful, you can support its ongoing development by buying me a coffee.
+>
 > <a href="https://www.buymeacoffee.com/ajayzapadiya" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
-
 
 ## Contributing and license
 
 For source builds and development instructions, see [Contributing](CONTRIBUTING.md). Release maintainers can refer to the [release runbook](docs/RELEASING.md), [Publishing](docs/PUBLISHING.md), and [Release QA](docs/RELEASE-QA.md).
 
+
 Copyright (c) 2026 Ajay Zapadiya. Released under the [MIT License](LICENSE). See [NOTICE.md](NOTICE.md) for third-party notices.
 
 Supercharged Properties is an independent community plugin and is not affiliated with or endorsed by Obsidian. Obsidian is a trademark of Dynalist Inc.
+
+
 
 
