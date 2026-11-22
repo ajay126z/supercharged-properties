@@ -2,6 +2,7 @@
 import { expect, it, vi } from 'vitest';
 const dialogs = vi.hoisted(() => ({ value: undefined as any, rename: undefined as any, remove: undefined as any }));
 vi.mock('obsidian', () => ({
+  AbstractInputSuggest: class {close(){}}, TFolder: class {},
   FuzzySuggestModal: class {},
   Plugin: class {}, ItemView: class { contentEl = document.createElement('div'); app: any; constructor(leaf: any) { this.app = leaf.app; } },
   PluginSettingTab: class {}, Modal: class {}, Notice: class {}, TFile: class {}, setIcon() {},

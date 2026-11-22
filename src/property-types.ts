@@ -54,6 +54,8 @@ export class PropertyTypeResolver {
     this.types = types;
   }
 
+  configuredTypeFor(key: string): string | undefined { return this.types.get(fold(key)) ?? BUILTIN_TYPES.get(fold(key)); }
+
   typeFor(property: Pick<PropertyNode, 'id'>): string {
     const id = fold(property.id);
     return this.types.get(id) ?? BUILTIN_TYPES.get(id) ?? 'text';

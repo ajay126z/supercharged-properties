@@ -184,3 +184,31 @@
 .pv-folder-row > button { font-size:var(--font-ui-smaller, 11px); }
 .is-mobile .pv-folder-chip button, .is-mobile .pv-folder-row > button { min-height:36px; min-width:36px; }
 @media (max-width:500px) { .pv-folder-chip button, .pv-folder-row > button { min-height:36px; min-width:36px; } }
+
+/* Bulk Add/Remove uses one keyboard-safe modal for all steps. */
+.pv-bulk-editor .pv-bulk-row { display:grid; grid-template-columns:34px minmax(0,1fr) minmax(0,1.2fr) 30px; gap:6px; align-items:center; margin:12px 0 8px; }
+.pv-bulk-editor .pv-bulk-row input, .pv-bulk-editor .pv-bulk-row select, .pv-bulk-editor .pv-bulk-row button { width:100%; min-width:0; height:34px; padding-inline:6px; }
+.pv-bulk-info { margin:-4px 0 8px 40px; font-size:var(--font-ui-smaller,12px); color:var(--text-muted); display:flex; gap:4px; flex-wrap:wrap; }
+.pv-bulk-info[hidden] { display:none; }
+.pv-bulk-info svg { width:14px; height:14px; }
+.pv-bulk-info .pv-warn { color:var(--text-warning); }
+.pv-bulk-error { margin:0 0 8px 40px; font-size:var(--font-ui-small,13px); color:var(--text-error); }
+.pv-bulk-scope { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 0; overflow-wrap:anywhere; }
+.pv-bulk-add-buttons { display:flex; gap:8px; margin:16px 0; }
+.pv-bulk-add-buttons button { flex:1; height:auto; white-space:normal; }
+.pv-bulk-choice-list { max-height:360px; overflow:auto; overscroll-behavior:contain; margin:8px 0; }
+.pv-bulk-choice { display:flex; align-items:center; gap:8px; padding:8px 4px; }
+.pv-bulk-choice strong { flex:1; overflow-wrap:anywhere; }
+.pv-bulk-choice small { color:var(--text-muted); }
+.pv-bulk-diff-add, .pv-bulk-diff-remove { font-family:var(--font-monospace); font-size:12px; border-radius:4px; padding:2px 6px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.pv-bulk-diff-add { background:var(--background-modifier-success); }
+.pv-bulk-diff-remove { background:var(--background-modifier-error); }
+.pv-bulk-editor .pv-edit-change > small { display:block; color:var(--text-muted); }
+.pv-bulk-editor .pv-edit-actions > span { margin-right:auto; align-self:center; }
+.pv-bulk-suggestion { display:flex; align-items:center; gap:8px; }
+.pv-bulk-suggestion small { color:var(--text-muted); margin-left:auto; }
+.pv-bulk-suggestion[aria-disabled="true"] { opacity:.5; }
+
+.pv-bulk-conflict { display:flex; gap:4px; flex-wrap:wrap; }
+.pv-bulk-conflict button { flex:1; white-space:normal; height:auto; }
+.pv-bulk-conflict button[aria-pressed="true"] { background:var(--interactive-accent); color:var(--text-on-accent); }

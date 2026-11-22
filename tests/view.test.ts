@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 vi.mock('obsidian', () => ({
+  AbstractInputSuggest: class {close(){}}, TFolder: class {},
   Modal: class {},
   FuzzySuggestModal: class { static last:any; constructor(){(this.constructor as any).last=this;} setPlaceholder(){} open(){(globalThis as any).folderSuggester=this;} },
   ItemView: class { contentEl = document.createElement('div'); app: unknown; constructor(leaf: any) { this.app = leaf.app; } },
@@ -1240,4 +1241,12 @@ it('sorts linked values by resolved basename and expanded notes by filename in b
  expect(paths()).toEqual(['Other.md','B/2026-W9.md','Z/2026-W9.md','A/2026-W21.md']);
  plugin.prefs.sort='name-desc';view.render();
  expect(paths()).toEqual(['A/2026-W21.md','Z/2026-W9.md','B/2026-W9.md','Other.md']);
+});
+it('opens bulk dialogs with only the derived YAML node paths and omits both actions in Inline',()=>{
+ plugin.openBulkProperties=vi.fn();plugin.includesPath=()=>true;
+ const files=new Map(['Projects/One.md','Two.md'].map(path=>[path,Object.assign(new TFile(),{path,extension:'md'})]));(view.app as any).vault.getAbstractFileByPath=(path:string)=>files.get(path);
+ setFolders(['Projects']);const property=(view as any).activeIndex().properties.get('status');(view as any).showMenu(new MouseEvent('contextmenu'),property,property);
+ (Menu as any).items.find((i:any)=>i.title==='Add properties to these notes…').run();expect(plugin.openBulkProperties.mock.calls[0][1](true).paths).toEqual(['Projects/One.md']);
+ const value=[...property.values.values()][0];(view as any).showMenu(new MouseEvent('contextmenu'),property,value);(Menu as any).items.find((i:any)=>i.title==='Remove properties from these notes…').run();expect(plugin.openBulkProperties.mock.calls[1][1](true).paths).toEqual(['Projects/One.md']);
+ (view as any).inlineView=true;(view as any).showMenu(new MouseEvent('contextmenu'),property,value);expect((Menu as any).items.some((i:any)=>i.title.startsWith('Add properties')||i.title.startsWith('Remove properties'))).toBe(false);
 });

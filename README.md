@@ -6,6 +6,10 @@ Supercharged Properties brings your properties, their values, and the notes that
 
 Choose the properties you want to see, save views for different projects, and exclude template folders to keep your results focused. Bulk edits show a preview before you confirm, with one-step undo for the last batch.
 
+## Add or remove properties across notes
+
+From a folder, multi-selection, or YAML property/value row, choose **Add properties…** or **Remove properties…**. Reuse existing names and values, choose typed values, and review the per-note preview before applying. Add up to 20 properties together; remove whole keys from the notes that contain them. Exclusions, conflict checks, and shared session undo help keep changes controlled. [Add and Remove guide](docs/ADD-REMOVE-PROPERTIES.md). Available in the upcoming release.
+
 ## Explore your notes
 
 - **Browse properties → values → notes.** Expand a property to see its values, then open the notes that use them. Expand/collapse all preserves your search, active view, and Value filter. Individual branch arrows also work within search and filtered results. After Collapse all, expand properties → values → notes one level at a time. Property/value counts and the Value filter’s matching-note list update as you search.

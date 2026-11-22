@@ -319,3 +319,13 @@ Run this checklist against a build candidate before publishing. Automated checks
 - Verify inline rename/delete uses **Undo last inline property edit**, while conversion uses **Undo last property edit**. Both undo slots reset on reload.
 
 - Folder-filter UI follow-up: verify folder paths and Clear appear only inside Choose properties to show in YAML and Inline views; closing the panel keeps filtering, saved-view state, and summary counts active.
+
+## Add and Remove properties (upcoming)
+
+- Right-click a folder and a multi-selection containing overlapping folders/files. Confirm scope counts, excluded/non-Markdown counts, and the subfolder toggle.
+- Launch from a YAML property and value with Folder and Value filters active; verify only derived notes are in the preview. Confirm no new Inline menu entries.
+- On desktop and a physical mobile device, test native suggestions with 50 names and 20 values; scroll, select, dismiss with Escape, and replace a token in the middle of a list.
+- Choose existing keys with different configured types. Confirm casing, type, in-scope counts, disabled reserved keys, and focus in the value field. Test type-menu reset and Back preserving form inputs.
+- At 360 px with the keyboard open, verify row controls and fixed-footer actions remain reachable. Test Ctrl/Cmd+Enter and Enter-to-add-row without accepting a suggestion twice.
+- Preview more than 200 notes, reveal additional pages, apply with progress, then undo. Edit one targeted key between preview/apply and between apply/undo; verify skips and a successful retry after resolving the undo conflict.
+- Keep a note outside the scope open and confirm its bytes remain untouched. Confirm ordinary selected-note edits and inline-to-YAML conversion still share the correct undo behavior.

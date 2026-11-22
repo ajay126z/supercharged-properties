@@ -440,3 +440,7 @@ The interface provides labelled controls, visible focus, expand/collapse state, 
 | An edit is skipped, fails, or cannot be undone | See [edit troubleshooting and limits](BULK-EDITING.md#troubleshooting-and-limits). |
 
 For development and release information, see the [documentation index](README.md).
+
+## Add or remove properties across notes
+
+In the upcoming release, explorer folder and multi-selection menus offer separate Add and Remove actions. YAML property/value rows offer the same actions for the notes behind that row, respecting active Folder and Value filters. Add typed properties with existing-name/value suggestions, or select whole properties to remove. Preview every batch, review skipped keys, and undo through the shared command or completion screen. See the [Add and Remove guide](ADD-REMOVE-PROPERTIES.md).

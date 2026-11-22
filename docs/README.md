@@ -2,16 +2,19 @@
 
 ## For users
 
-These guides describe **1.5.0**, including Inline Properties and saved folder filters, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
+These guides describe **1.5.1** and explicitly marked upcoming features, including Inline Properties and saved folder filters, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
+| [Add or remove properties](ADD-REMOVE-PROPERTIES.md) | Folder, multi-selection, and YAML row batches; typed values, existing-property picker, conflict modes, previews, and retryable shared undo. |
 | [User guide](USER-GUIDE.md) | Installation, browsing, types and counts, local search, property selection, folder exclusions, saved views, sorting, pinning, hiding, Search integration, copying, settings, commands, privacy, and troubleshooting. |
 | [Change selected notes](NOTE-VALUE-EDITING.md) | Single-note and multi-note typed scalar edits, list add/remove, whole-property removal, existing/new/empty values, selection checkboxes, desktop shortcuts, mobile long-press, previews, conflicts, and undo. |
 | [Bulk value editing](BULK-EDITING.md) | Rename, delete, merge, wikilink conversion, text-only splitting, eligibility, preview, confirmation, conflicts, and one-step undo. |
 | [Property-name renaming](PROPERTY-RENAMING.md) | Key renaming and deletion, case corrections, collision handling, preserved values, preference updates, and shared undo. |
 
 ### Common tasks
+
+- [Add or remove several properties across folders or notes](ADD-REMOVE-PROPERTIES.md)
 
 - [Browse and edit inline properties](USER-GUIDE.md#inline-properties)
 
@@ -44,6 +47,9 @@ These guides describe **1.5.0**, including Inline Properties and saved folder fi
 - [Changelog](../CHANGELOG.md)
 
 ## Release notes
+
+- [Upcoming: Add and Remove properties](releases/UNRELEASED.md)
+- [1.5.1: filename sorting](releases/1.5.1.md)
 
 - [1.4.2](releases/1.4.2.md)
 - [1.4.1](releases/1.4.1.md)

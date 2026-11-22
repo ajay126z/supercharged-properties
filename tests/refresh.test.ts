@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 vi.mock('obsidian', () => ({
+  AbstractInputSuggest: class {close(){}}, TFolder: class {},
   FuzzySuggestModal: class {},
   Modal: class {},
   Plugin: class {
@@ -44,7 +45,7 @@ async function setup(saved: unknown = null, types?: string) {
       },
       getMarkdownFiles: () => files
     },
-    workspace: { onLayoutReady: (run: () => void) => run(), getLeavesOfType: () => [] }
+    workspace: { ...emitter(), onLayoutReady: (run: () => void) => run(), getLeavesOfType: () => [] }
   };
   (plugin as any).loadData = async () => saved;
   await plugin.onload(); vi.runAllTimers();
@@ -247,4 +248,8 @@ it('retains stale include paths on folder rename/delete and lets exclusions win 
  note.path='Library/A.md';metadata.set(note.path,{frontmatter:{status:'active'}});vault.emit('rename',{path:'Library'},'Books');await vi.advanceTimersByTimeAsync(151);
  expect(plugin.index.paths()).toEqual(new Set(['Library/A.md']));expect(plugin.prefs.folders).toEqual(['Books']);expect(plugin.prefs.profiles[0].folders).toEqual(['Books']);expect(plugin.prefs.inlineViews.folders).toEqual(['Books']);expect(plugin.prefs.excludedFolders).toBe('Books/Templates');
  files.splice(0,files.length);vault.emit('delete',{path:'Library'});await vi.advanceTimersByTimeAsync(151);expect(plugin.index.paths().size).toBe(0);expect(plugin.prefs.folders).toEqual(['Books']);
+});
+it('normalizes and persists bulk settings through the existing save queue',async()=>{
+ const {plugin}=await setup({bulkIncludeSubfolders:'false',bulkExistsMode:'invalid',bulkListDelimiter:'ab'});expect(plugin.prefs).toMatchObject({bulkIncludeSubfolders:true,bulkExistsMode:'skip',bulkListDelimiter:','});
+ const saveData=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saveData;plugin.prefs.bulkIncludeSubfolders=false;plugin.prefs.bulkExistsMode='merge';plugin.prefs.bulkListDelimiter=';';await plugin.save();const restored=await setup(saveData.mock.calls[0][0]);expect(restored.plugin.prefs).toMatchObject({bulkIncludeSubfolders:false,bulkExistsMode:'merge',bulkListDelimiter:';'});
 });

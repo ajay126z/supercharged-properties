@@ -36,7 +36,8 @@ export class ValueEditor {
     try { return await action(); } finally { this.busy = false; }
   }
 
-  rememberUndo(action: () => Promise<ValueUndoResult>): void { this.last = undefined; this.externalUndo = action; }
+  private retryExternalUndo = false;
+  rememberUndo(action: () => Promise<ValueUndoResult>, retryConflicts = false): void { this.last = undefined; this.externalUndo = action; this.retryExternalUndo = retryConflicts; }
 
   constructor(private readonly app: App, private readonly includesPath: (path: string) => boolean = () => true, private readonly noteEditType: (property: string) => NoteEditType | undefined = () => 'text') {}
 
@@ -167,7 +168,7 @@ export class ValueEditor {
     if (this.busy) throw new Error('Another value edit is running.');
     if (this.externalUndo) {
       const undo = this.externalUndo;
-      return this.runExclusive(async () => { const result = await undo(); this.externalUndo = undefined; return result; });
+      return this.runExclusive(async () => { const result = await undo(); if (!this.retryExternalUndo || (!result.skipped && !result.failures.length)) this.externalUndo = undefined; return result; });
     }
     const last = this.last;
     if (!last) return { restored: 0, skipped: 0, failures: [] };

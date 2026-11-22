@@ -26,38 +26,6 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
-// src/folder-exclusions.ts
-function excludedFolders(text) {
-  return [...new Set(text.split("\n").map((line) => line.trim().replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/")).filter((path) => path && !path.split("/").includes("..")))];
-}
-function isFolderExcluded(path, folders) {
-  return folders.some((folder) => path.startsWith(`${folder}/`));
-}
-
-// src/folder-filter.ts
-function normalizeFolders(raw) {
-  if (!Array.isArray(raw)) return [];
-  const paths = excludedFolders(raw.filter((value) => typeof value === "string").join("\n")).sort();
-  return paths.filter((path) => !isFolderExcluded(path, paths));
-}
-function sameFolders(a, b) {
-  const left = normalizeFolders(a), right = normalizeFolders(b);
-  return left.length === right.length && left.every((path, index) => path === right[index]);
-}
-function folderPaths(paths, folders, excluded = []) {
-  return new Set([...paths].filter((path) => isFolderExcluded(path, folders) && !isFolderExcluded(path, excluded)));
-}
-function folderChoices(paths, selected, excluded) {
-  return [...new Set(paths)].filter((path) => path && path !== "/" && !selected.includes(path) && !isFolderExcluded(path, selected) && !excluded.includes(path) && !isFolderExcluded(path, excluded)).sort();
-}
-function intersectPaths(left, right) {
-  if (!left) return right ? new Set(right) : null;
-  return new Set([...left].filter((path) => !right || right.has(path)));
-}
-
-// src/inline-conversion.ts
-var import_obsidian = require("obsidian");
-
 // src/frontmatter-values.ts
 var EMPTY = Object.freeze({ kind: "empty", text: "" });
 var TRUE = Object.freeze({ kind: "boolean", text: "true" });
@@ -203,6 +171,1226 @@ var PropertyIndex = class _PropertyIndex {
     return result;
   }
 };
+
+// src/property-rename.ts
+function propertyNameError(name) {
+  if (!name.trim()) return "Enter a property name.";
+  if (/[\r\n]/.test(name) || name.includes(String.fromCharCode(0))) return "Property names cannot contain line breaks or null characters.";
+  if (fold(name) === "position") return "The name position is reserved for metadata.";
+  return void 0;
+}
+function matchingKeys(frontmatter, name) {
+  return Object.keys(frontmatter).filter((key) => key !== "position" && fold(key) === fold(name));
+}
+function canRename(frontmatter, source, target) {
+  const keys = matchingKeys(frontmatter, source);
+  return !propertyNameError(target) && source !== target && keys.length === 1 && keys[0] === source && matchingKeys(frontmatter, target).every((key) => key === source);
+}
+function setOwnValue(frontmatter, key, value) {
+  Object.defineProperty(frontmatter, key, { value, enumerable: true, writable: true, configurable: true });
+}
+function includeRenamedProperty(prefs, source, target) {
+  const from = fold(source), to = fold(target);
+  if (from === to) return;
+  const include = (keys) => keys.some((key) => fold(key) === from) && !keys.some((key) => fold(key) === to) ? [...keys, to] : keys;
+  if (prefs.scope) prefs.scope = include(prefs.scope);
+  prefs.pinned = include(prefs.pinned);
+  prefs.expanded = include(prefs.expanded);
+  prefs.hidden = include(prefs.hidden.split("\n")).join("\n");
+  const carryPins = (overrides) => {
+    if (overrides && Object.prototype.hasOwnProperty.call(overrides, from) && !Object.prototype.hasOwnProperty.call(overrides, to)) Object.defineProperty(overrides, to, { value: overrides[from], enumerable: true, configurable: true, writable: true });
+  };
+  carryPins(prefs.customPinOverrides);
+  for (const profile of prefs.profiles) {
+    profile.keys = include(profile.keys);
+    carryPins(profile.pinOverrides);
+  }
+}
+
+// src/note-value-operations.ts
+function textOnlyList(property) {
+  return ["aliases", "cssclasses"].includes(fold(property));
+}
+function parseNoteNumber(text) {
+  const value = text.trim();
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) return void 0;
+  const number = Number(value);
+  if (!Number.isFinite(number) || Number.isInteger(number) && !Number.isSafeInteger(number)) return void 0;
+  return number === 0 ? 0 : number;
+}
+function validNoteDate(text, withTime = false) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?$/.exec(text);
+  if (!match || withTime !== (match[4] !== void 0)) return false;
+  const [, yearText, monthText, dayText, hours, minutes, seconds] = match;
+  const year = Number(yearText), month = Number(monthText), day = Number(dayText);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1] && (!withTime || Number(hours) < 24 && Number(minutes) < 60 && Number(seconds ?? 0) < 60);
+}
+function noteEditError(edit, property) {
+  if (edit.mode === "delete") return;
+  if (edit.type === "list") {
+    if (!["add", "remove"].includes(edit.mode) || !edit.values.length) return "Choose at least one list value.";
+    if (edit.values.some((value) => typeof value === "string" ? !value.trim() || value.includes("\0") : typeof value !== "number" || !Number.isFinite(value))) return "Use nonblank text or finite numbers for list values.";
+    if (textOnlyList(property) && edit.values.some((value) => typeof value !== "string")) return "Aliases and CSS classes require text list values.";
+    return;
+  }
+  if (edit.mode !== "set") return "Choose a supported property operation.";
+  if (edit.value === null) return;
+  switch (edit.type) {
+    case "text":
+      return typeof edit.value === "string" && !!edit.value.trim() && !edit.value.includes("\0") ? void 0 : "Enter text or choose Set empty.";
+    case "checkbox":
+      return typeof edit.value === "boolean" ? void 0 : "Choose true, false, or Set empty.";
+    case "number":
+      return typeof edit.value === "number" && Number.isFinite(edit.value) && (!Number.isInteger(edit.value) || Number.isSafeInteger(edit.value)) ? void 0 : "Enter a finite number within the supported precision.";
+    case "date":
+      return typeof edit.value === "string" && validNoteDate(edit.value) ? void 0 : "Choose a valid date (YYYY-MM-DD).";
+    case "datetime":
+      return typeof edit.value === "string" && validNoteDate(edit.value, true) ? void 0 : "Choose a valid local date and time.";
+  }
+}
+function transformNoteValue(original, edit, property) {
+  const error = noteEditError(edit, property);
+  if (error) return { error };
+  if (edit.mode === "delete") return { remove: true };
+  if (edit.type === "list") {
+    const empty2 = original === null || original === "";
+    if (!empty2 && (!Array.isArray(original) || !original.every((item) => typeof item === "string" || typeof item === "number" && Number.isFinite(item)))) return { error: "Only flat text/number lists or empty values are supported." };
+    const items = empty2 ? [] : original;
+    if (textOnlyList(property) && items.some((item) => typeof item !== "string")) return { error: "This property requires a text list." };
+    if (edit.mode === "remove") return { value: empty2 ? original : items.filter((item) => !edit.values.includes(item)) };
+    const result = [...items];
+    for (const item of edit.values) if (!result.includes(item)) result.push(item);
+    return { value: result };
+  }
+  const empty = original === null || original === "";
+  const compatible = edit.type === "number" ? typeof original === "number" && Number.isFinite(original) : edit.type === "checkbox" ? typeof original === "boolean" : typeof original === "string";
+  if (!empty && !compatible) return { error: `Stored value does not match the ${edit.type} property type.` };
+  return { value: edit.value };
+}
+
+// src/bulk-properties.ts
+var cloneBulkValue = (value) => structuredClone(value);
+function sameBulkValue(a, b) {
+  const seen = /* @__PURE__ */ new WeakMap();
+  const equal = (left, right) => {
+    if (Object.is(left, right)) return true;
+    if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+    if (left instanceof Date || right instanceof Date) return left instanceof Date && right instanceof Date && left.getTime() === right.getTime();
+    if (Array.isArray(left) !== Array.isArray(right)) return false;
+    if (Array.isArray(left) && Array.isArray(right) && left.length !== right.length) return false;
+    if (seen.get(left)?.has(right)) return true;
+    const partners = seen.get(left) ?? /* @__PURE__ */ new WeakSet();
+    partners.add(right);
+    seen.set(left, partners);
+    const x = left, y = right;
+    const keys = Object.keys(x);
+    return keys.length === Object.keys(y).length && keys.every((key) => Object.prototype.hasOwnProperty.call(y, key) && equal(x[key], y[key]));
+  };
+  return equal(a, b);
+}
+var isReserved = (key) => ["tags", "position"].includes(fold(key));
+var isEmpty = (value) => value === void 0 || value === null || value === "" || Array.isArray(value) && value.length === 0;
+function parseValue(type, raw, delimiter) {
+  const text = raw.trim();
+  if (type === "number") {
+    const value = parseNoteNumber(text);
+    return value === void 0 ? { ok: false, error: "Enter a number" } : { ok: true, value };
+  }
+  if (type === "checkbox")
+    return ["true", "false"].includes(raw) ? { ok: true, value: raw === "true" } : { ok: false, error: "Choose checked or unchecked" };
+  if (!text)
+    return { ok: false, error: "Enter a value" };
+  if (type === "list") {
+    const values = [...new Set(raw.split(delimiter).map((item) => item.trim()).filter(Boolean))];
+    const error2 = noteEditError({ type: "list", mode: "add", values }, "");
+    return error2 ? { ok: false, error: values.length ? error2 : "Enter a value" } : { ok: true, value: values };
+  }
+  const error = noteEditError({ type, mode: "set", value: text }, "");
+  return error ? { ok: false, error } : { ok: true, value: text };
+}
+function validateRows(rows, delimiter) {
+  const errors = /* @__PURE__ */ new Map(), used = /* @__PURE__ */ new Set();
+  for (const row of rows) {
+    const parsed = parseValue(row.type, row.value, delimiter), key = fold(row.key);
+    const error = !key ? "Enter a property name" : isReserved(key) ? `${row.key} is not supported yet` : used.has(key) ? "Already listed above" : propertyNameError(row.key) ?? (textOnlyList(key) && row.type !== "list" ? "Use List for this property" : !parsed.ok ? parsed.error : void 0);
+    if (error)
+      errors.set(row.id, error);
+    used.add(key);
+  }
+  return errors;
+}
+function previewAdd(path, fm, rows, mode, delimiter) {
+  const result = { path, changes: [], skipped: [] };
+  const errors = validateRows(rows, delimiter);
+  if (errors.size || rows.length > 20 || !rows.length)
+    throw new Error([...errors.values()][0] ?? "Use 1 to 20 properties.");
+  for (const row of rows) {
+    const matches2 = matchingKeys(fm, row.key);
+    if (matches2.length > 1) {
+      result.skipped.push({ key: row.key, reason: "ambiguous-key" });
+      continue;
+    }
+    const key = matches2[0] ?? row.key.trim(), existed = !!matches2.length, before = existed ? fm[key] : void 0;
+    const parsed = parseValue(row.type, row.value, delimiter);
+    if (!parsed.ok)
+      continue;
+    let after = parsed.value;
+    let action = !existed || isEmpty(before) ? "add" : "overwrite";
+    if (existed && !isEmpty(before)) {
+      if (mode === "skip") {
+        result.skipped.push({ key, reason: "already-has" });
+        continue;
+      }
+      if (mode === "merge" && (row.type === "text" || row.type === "list")) {
+        const flat = Array.isArray(before) && before.every((v) => typeof v === "string" || typeof v === "number" && Number.isFinite(v));
+        const text = typeof before === "string" && !validNoteDate(before) && !validNoteDate(before, true);
+        if (!flat && !text || textOnlyList(key) && Array.isArray(before) && before.some((v) => typeof v !== "string")) {
+          result.skipped.push({ key, reason: "unsupported-existing" });
+          continue;
+        }
+        const items = Array.isArray(before) ? [...before] : [before];
+        for (const item of Array.isArray(after) ? after : [after])
+          if (!items.some((old) => sameBulkValue(old, item)))
+            items.push(item);
+        after = items;
+        action = "merge";
+      }
+    }
+    if (!existed || !sameBulkValue(before, after))
+      result.changes.push({ key, action, existed, before: cloneBulkValue(before), after: cloneBulkValue(after) });
+  }
+  return result;
+}
+function previewRemove(path, fm, keys) {
+  const result = { path, changes: [], skipped: [] };
+  for (const requested of new Set(keys.map(fold))) {
+    if (isReserved(requested))
+      throw new Error(`${requested} is not supported yet`);
+    const matches2 = matchingKeys(fm, requested);
+    if (matches2.length > 1)
+      result.skipped.push({ key: requested, reason: "ambiguous-key" });
+    else if (matches2.length === 1) {
+      const key = matches2[0];
+      result.changes.push({ key, action: "remove", existed: true, before: cloneBulkValue(fm[key]), after: void 0 });
+    }
+  }
+  return result;
+}
+function applyChanges(fm, changes) {
+  for (const change of changes)
+    if (change.action === "remove")
+      delete fm[change.key];
+    else
+      setOwnValue(fm, change.key, cloneBulkValue(change.after));
+}
+var validDelimiter = (value) => typeof value === "string" && Array.from(value).length === 1 && value !== "\0";
+function bulkSettings(raw) {
+  return { bulkIncludeSubfolders: typeof raw.bulkIncludeSubfolders === "boolean" ? raw.bulkIncludeSubfolders : true, bulkExistsMode: ["skip", "merge", "overwrite"].includes(String(raw.bulkExistsMode)) ? raw.bulkExistsMode : "skip", bulkListDelimiter: validDelimiter(raw.bulkListDelimiter) ? raw.bulkListDelimiter : "," };
+}
+
+// src/bulk-scope.ts
+var import_obsidian = require("obsidian");
+function resolveSelectionScope(targets, recursive, includes) {
+  const all = /* @__PURE__ */ new Map();
+  const visited = /* @__PURE__ */ new Set();
+  let folders = false;
+  const visit = (file, depth) => {
+    if (file instanceof import_obsidian.TFile) {
+      all.set(file.path, file);
+      return;
+    }
+    if (!(file instanceof import_obsidian.TFolder) || visited.has(file.path))
+      return;
+    if (depth > 0 && !recursive)
+      return;
+    visited.add(file.path);
+    folders = true;
+    for (const child of file.children)
+      visit(child, depth + 1);
+  };
+  for (const target of targets)
+    visit(target, 0);
+  let skippedExcluded = 0, skippedNonMarkdown = 0;
+  const paths = [];
+  for (const file of all.values())
+    if (file.extension.toLowerCase() !== "md")
+      skippedNonMarkdown++;
+    else if (!includes(file.path))
+      skippedExcluded++;
+    else
+      paths.push(file.path);
+  paths.sort();
+  const folder = targets.length === 1 && targets[0] instanceof import_obsidian.TFolder;
+  return { kind: folder ? "folder" : "selection", label: folder ? targets[0].path : `${paths.length} selected notes`, paths, ...folders ? { includeSubfolders: recursive } : {}, skippedExcluded, skippedNonMarkdown };
+}
+function resolveTreeScope(vault, paths, label, includes, treeProperty) {
+  const files = [...new Set(paths)].map((path) => vault.getAbstractFileByPath(path)).filter((file) => file instanceof import_obsidian.TFile);
+  return { ...resolveSelectionScope(files, false, includes), kind: "tree", label, treeProperty };
+}
+
+// src/property-catalog.ts
+var typeLabels = { text: "Text", list: "List", number: "Number", checkbox: "Checkbox", date: "Date", datetime: "Date and time" };
+var typeIcons = { text: "text", list: "list", number: "hash", checkbox: "check-square", date: "calendar", datetime: "calendar-clock" };
+function inferType(values) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const value of values.filter((v) => !isEmpty(v))) {
+    const type = Array.isArray(value) ? "list" : typeof value === "number" ? "number" : typeof value === "boolean" ? "checkbox" : typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? "date" : typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) ? "datetime" : "text";
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
+  const sorted = [...counts].sort((a, b) => b[1] - a[1]);
+  return { type: sorted.length && sorted[0][1] !== sorted[1]?.[1] ? sorted[0][0] : "text", mixed: counts.size > 1 };
+}
+function propertyCatalog(index, paths, configured, getFrontmatter) {
+  const scope = new Set(paths), scoped = index.scoped(scope);
+  return [...index.properties.values()].map((property) => {
+    const samples = [...property.paths].sort((a, b) => Number(scope.has(b)) - Number(scope.has(a)) || natural(a, b)).slice(0, 200).map((path) => {
+      const fm = getFrontmatter(path) ?? {};
+      const keys = matchingKeys(fm, property.label);
+      return keys.length === 1 ? fm[keys[0]] : void 0;
+    });
+    const inferred = inferType(samples);
+    return { key: property.label, type: configured(property.label) ?? inferred.type, mixed: inferred.mixed, inScope: scoped.properties.get(property.id)?.paths.size ?? 0, ...isReserved(property.label) ? { disabledReason: "Unavailable" } : {} };
+  }).sort((a, b) => natural(a.key, b.key));
+}
+function matchChoices(choices, query, used) {
+  const q = fold(query);
+  return choices.filter((c) => fold(c.key).includes(q) && !used.has(fold(c.key))).sort((a, b) => Number(fold(b.key).startsWith(q)) - Number(fold(a.key).startsWith(q)) || b.inScope - a.inScope || natural(a.key, b.key)).slice(0, 50);
+}
+function valueSuggestions(index, key, paths) {
+  const scope = new Set(paths);
+  return [...index.properties.get(fold(key))?.values.values() ?? []].filter((v) => JSON.parse(v.id)[0] === "string" || JSON.parse(v.id)[0] === "number").map((v) => ({ label: v.label, count: [...v.paths].filter((path) => scope.has(path)).length })).sort((a, b) => b.count - a.count || natural(a.label, b.label)).slice(0, 20).map((v) => v.label);
+}
+
+// src/bulk-properties-service.ts
+var NoChanges = class extends Error {
+};
+var BulkPropertiesService = class {
+  constructor(host, editor) {
+    this.host = host;
+    this.editor = editor;
+  }
+  preview(paths, request) {
+    const mode = "rows" in request ? "add" : "remove", keys = "rows" in request ? request.rows.map((r) => r.key) : request.keys;
+    const notes = [...new Set(paths)].map((path) => {
+      if (!this.host.eligible(path))
+        return { path, changes: [], skipped: [{ key: "", reason: "not-found or excluded" }] };
+      const fm = this.host.frontmatter(path);
+      if (!fm)
+        return { path, changes: [], skipped: [], error: "Metadata is not ready. Refresh and preview again." };
+      try {
+        return "rows" in request ? previewAdd(path, fm, request.rows, request.exists, request.delimiter) : previewRemove(path, fm, request.keys);
+      } catch (error) {
+        return { path, changes: [], skipped: [], error: String(error) };
+      }
+    });
+    return { mode, notes, keys, types: new Map(keys.map((key) => [key, this.host.configuredType(key)])) };
+  }
+  async apply(plan, progress = () => {
+  }) {
+    return this.editor.runExclusive(async () => {
+      const results = [], snapshots = [];
+      const notes = plan.notes.filter((note) => note.changes.length);
+      for (const [index, note] of notes.entries()) {
+        const result = { path: note.path, changes: [], skipped: [...note.skipped] };
+        if (!this.host.eligible(note.path))
+          result.skipped.push({ key: "", reason: "not-found or excluded" });
+        else
+          try {
+            await this.host.process(note.path, (fm) => {
+              if (!this.host.eligible(note.path)) {
+                result.skipped.push({ key: "", reason: "not-found or excluded" });
+                throw new NoChanges();
+              }
+              const changes = [];
+              for (const planned of note.changes) {
+                const matches2 = matchingKeys(fm, planned.key), current = matches2.length === 1 ? fm[matches2[0]] : void 0;
+                const requestKey = plan.keys.find((key) => matchingKeys({ [planned.key]: true }, key).length) ?? planned.key;
+                const reason = matches2.length > 1 ? "ambiguous-key" : matches2.length === 1 !== planned.existed || !sameBulkValue(current, planned.before) || this.host.configuredType(requestKey) !== plan.types.get(requestKey) ? "changed-since-preview" : void 0;
+                if (reason) {
+                  result.skipped.push({ key: planned.key, reason });
+                  continue;
+                }
+                changes.push({ ...planned, key: matches2[0] ?? planned.key, before: cloneBulkValue(current), after: cloneBulkValue(planned.after) });
+              }
+              if (!changes.length)
+                throw new NoChanges();
+              applyChanges(fm, changes);
+              result.changes = changes;
+            });
+            if (result.changes.length)
+              snapshots.push({ path: note.path, changes: result.changes });
+          } catch (error) {
+            result.changes = [];
+            if (!(error instanceof NoChanges))
+              result.error = error instanceof Error ? error.message : String(error);
+          }
+        results.push(result);
+        progress(index + 1, notes.length);
+        if ((index + 1) % 25 === 0)
+          await new Promise((resolve) => window.setTimeout(resolve, 0));
+      }
+      if (snapshots.length) {
+        let pending = snapshots;
+        this.editor.rememberUndo(async () => {
+          const remaining = [], failures = [];
+          let restored = 0, skipped = 0;
+          for (const snapshot of pending) {
+            if (!this.host.eligible(snapshot.path)) {
+              remaining.push(snapshot);
+              skipped++;
+              continue;
+            }
+            let successful = 0;
+            const conflicts = [];
+            try {
+              await this.host.process(snapshot.path, (fm) => {
+                if (!this.host.eligible(snapshot.path))
+                  throw new NoChanges();
+                for (const entry of snapshot.changes) {
+                  const keys = matchingKeys(fm, entry.key), absent = entry.action === "remove";
+                  if (keys.length > 1 || (absent ? keys.length !== 0 : keys.length !== 1 || !sameBulkValue(fm[keys[0]], entry.after))) {
+                    conflicts.push(entry);
+                    continue;
+                  }
+                  if (entry.existed)
+                    setOwnValue(fm, keys[0] ?? entry.key, cloneBulkValue(entry.before));
+                  else
+                    delete fm[keys[0]];
+                  successful++;
+                }
+                if (!successful)
+                  throw new NoChanges();
+              });
+              if (successful)
+                restored++;
+              if (conflicts.length) {
+                remaining.push({ path: snapshot.path, changes: conflicts });
+                skipped++;
+              }
+            } catch (error) {
+              remaining.push(snapshot);
+              if (error instanceof NoChanges)
+                skipped++;
+              else
+                failures.push({ path: snapshot.path, message: String(error) });
+            }
+          }
+          pending = remaining;
+          return { restored, skipped, failures };
+        }, true);
+      }
+      return [...plan.notes.filter((note) => !note.changes.length), ...results];
+    });
+  }
+};
+
+// src/bulk-properties-modal.ts
+var import_obsidian3 = require("obsidian");
+
+// src/mobile-layout.ts
+function usesTouchLayout(element) {
+  return element.ownerDocument.body.classList.contains("is-mobile") || !!element.ownerDocument.defaultView?.matchMedia?.("(pointer: coarse)").matches;
+}
+function fitVisibleViewport(element) {
+  const win = element.ownerDocument.defaultView;
+  if (!win) return () => {
+  };
+  let frame;
+  const viewport = win.visualViewport;
+  const update = () => {
+    frame = void 0;
+    if (!usesTouchLayout(element) || viewport && viewport.scale !== 1) {
+      element.style.removeProperty("--pv-visible-height");
+      return;
+    }
+    const bottom = viewport ? viewport.offsetTop + viewport.height : win.innerHeight;
+    const height = Math.max(0, Math.floor(bottom - element.getBoundingClientRect().top));
+    element.style.setProperty("--pv-visible-height", `${height}px`);
+  };
+  const schedule = () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    frame = win.requestAnimationFrame(update);
+  };
+  win.addEventListener("resize", schedule);
+  viewport?.addEventListener("resize", schedule);
+  viewport?.addEventListener("scroll", schedule);
+  element.addEventListener("focusin", schedule);
+  element.addEventListener("focusout", schedule);
+  const observer = typeof ResizeObserver === "undefined" ? void 0 : new ResizeObserver(schedule);
+  if (element.parentElement) observer?.observe(element.parentElement);
+  schedule();
+  return () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    win.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("scroll", schedule);
+    element.removeEventListener("focusin", schedule);
+    element.removeEventListener("focusout", schedule);
+    observer?.disconnect();
+    element.style.removeProperty("--pv-visible-height");
+  };
+}
+
+// src/modal-layout.ts
+function fitModalViewport(container) {
+  const win = container.ownerDocument.defaultView;
+  if (!win) return () => {
+  };
+  const viewport = win.visualViewport;
+  let frame;
+  const clear = () => {
+    container.classList.remove("pv-touch-modal");
+    container.style.removeProperty("--pv-dialog-height");
+    container.style.removeProperty("--pv-dialog-top");
+  };
+  const update = () => {
+    frame = void 0;
+    if (!usesTouchLayout(container)) {
+      clear();
+      return;
+    }
+    if (viewport && viewport.scale !== 1) return;
+    container.classList.add("pv-touch-modal");
+    container.style.setProperty("--pv-dialog-height", `${Math.max(0, Math.floor(viewport?.height ?? win.innerHeight))}px`);
+    container.style.setProperty("--pv-dialog-top", `${Math.max(0, Math.floor(viewport?.offsetTop ?? 0))}px`);
+  };
+  const schedule = () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    frame = win.requestAnimationFrame(update);
+  };
+  win.addEventListener("resize", schedule);
+  viewport?.addEventListener("resize", schedule);
+  viewport?.addEventListener("scroll", schedule);
+  update();
+  return () => {
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    win.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("resize", schedule);
+    viewport?.removeEventListener("scroll", schedule);
+    clear();
+  };
+}
+
+// src/bulk-property-suggest.ts
+var import_obsidian2 = require("obsidian");
+var BulkNameSuggest = class extends import_obsidian2.AbstractInputSuggest {
+  constructor(app, input, choices, used, select) {
+    super(app, input);
+    this.choices = choices;
+    this.used = used;
+    this.select = select;
+    this.limit = 50;
+  }
+  getSuggestions(query) {
+    return matchChoices(this.choices(), query, this.used());
+  }
+  renderSuggestion(choice, el3) {
+    el3.classList.add("pv-bulk-suggestion");
+    (0, import_obsidian2.setIcon)(el3.createSpan(), typeIcons[choice.type]);
+    el3.createEl("strong", { text: choice.key });
+    el3.createEl("small", { text: choice.disabledReason ?? (choice.inScope ? `${typeLabels[choice.type]} \xB7 ${choice.inScope} ${choice.inScope === 1 ? "note" : "notes"}` : "Not in these notes") });
+    el3.setAttribute("aria-disabled", String(!!choice.disabledReason));
+  }
+  selectSuggestion(choice, event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+    if (choice.disabledReason)
+      return;
+    this.close();
+    this.select(choice);
+  }
+};
+function replaceListToken(raw, start, end, value, delimiter) {
+  const previous = start === 0 ? -1 : raw.lastIndexOf(delimiter, start - 1);
+  const tokenStart = previous < 0 ? 0 : previous + delimiter.length;
+  const next = raw.indexOf(delimiter, end), right = next < 0 ? raw.length : next;
+  const prefix = raw.slice(0, tokenStart) + (tokenStart ? " " : "");
+  const text = prefix + value + raw.slice(right);
+  return { text, cursor: prefix.length + value.length };
+}
+var BulkValueSuggest = class extends import_obsidian2.AbstractInputSuggest {
+  constructor(app, input, values, delimiter, changed) {
+    super(app, input);
+    this.input = input;
+    this.values = values;
+    this.delimiter = delimiter;
+    this.changed = changed;
+    this.opened = false;
+    this.limit = 20;
+  }
+  open() {
+    super.open();
+    this.opened = true;
+  }
+  close() {
+    super.close();
+    this.opened = false;
+  }
+  getSuggestions(query) {
+    const delimiter = this.delimiter();
+    const position = this.input.selectionStart ?? query.length;
+    const previous = delimiter && position > 0 ? query.lastIndexOf(delimiter, position - 1) : -1;
+    const token = delimiter ? query.slice(previous < 0 ? 0 : previous + delimiter.length, query.indexOf(delimiter, position) < 0 ? void 0 : query.indexOf(delimiter, position)) : query;
+    return this.values().filter((value) => fold(value).includes(fold(token))).slice(0, 20);
+  }
+  renderSuggestion(value, el3) {
+    el3.textContent = value;
+  }
+  selectSuggestion(value, event) {
+    event?.preventDefault();
+    event?.stopPropagation();
+    const delimiter = this.delimiter();
+    if (delimiter) {
+      const result = replaceListToken(this.input.value, this.input.selectionStart ?? this.input.value.length, this.input.selectionEnd ?? this.input.value.length, value, delimiter);
+      this.input.value = result.text;
+      this.input.setSelectionRange(result.cursor, result.cursor);
+    } else
+      this.input.value = value;
+    this.changed();
+    this.close();
+  }
+};
+
+// src/bulk-properties-modal.ts
+function displayValue(value) {
+  try {
+    return JSON.stringify(value) ?? "(unset)";
+  } catch {
+    return "(recursive YAML value)";
+  }
+}
+var rowId = 0;
+var blank = () => ({ id: `bulk-${++rowId}`, key: "", type: "text", value: "" });
+var BulkPropertiesModal = class extends import_obsidian3.Modal {
+  constructor(app, options) {
+    super(app);
+    this.options = options;
+    this.rows = [blank()];
+    this.selected = /* @__PURE__ */ new Set();
+    this.picked = /* @__PURE__ */ new Set();
+    this.filter = "";
+    this.pickFilter = "";
+    this.choices = [];
+    this.suggesters = [];
+    this.busy = false;
+    this.closed = false;
+    this.origin = null;
+    this.results = [];
+    this.screen = options.mode;
+    this.recursive = options.settings.bulkIncludeSubfolders;
+    this.exists = options.settings.bulkExistsMode;
+  }
+  onOpen() {
+    this.origin = this.contentEl.ownerDocument.activeElement;
+    this.contentEl.classList.add("pv-note-edit", "pv-edit-modal", "pv-bulk-editor");
+    this.modalEl.classList.add("pv-note-value-modal");
+    this.containerEl.classList.add("pv-note-modal-container");
+    this.body = this.contentEl.createDiv({ cls: "pv-note-edit-scroll" });
+    this.footer = this.contentEl.createDiv({ cls: "pv-edit-actions" });
+    const stop = fitModalViewport(this.containerEl), win = this.contentEl.ownerDocument.defaultView;
+    let frame;
+    const reveal = () => {
+      if (frame !== void 0)
+        win.cancelAnimationFrame(frame);
+      frame = win.requestAnimationFrame(() => {
+        const active = this.contentEl.ownerDocument.activeElement;
+        if (!active || !this.body.contains(active))
+          return;
+        const field = active.getBoundingClientRect(), area = this.body.getBoundingClientRect();
+        if (field.bottom > area.bottom)
+          this.body.scrollTop += field.bottom - area.bottom;
+        else if (field.top < area.top)
+          this.body.scrollTop -= area.top - field.top;
+      });
+    };
+    this.body.addEventListener("focusin", reveal);
+    win.visualViewport?.addEventListener("resize", reveal);
+    win.visualViewport?.addEventListener("scroll", reveal);
+    this.dispose = () => {
+      stop();
+      if (frame !== void 0)
+        win.cancelAnimationFrame(frame);
+      this.body.removeEventListener("focusin", reveal);
+      win.visualViewport?.removeEventListener("resize", reveal);
+      win.visualViewport?.removeEventListener("scroll", reveal);
+    };
+    this.contentEl.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        this.primary?.click();
+      }
+    });
+    this.refreshScope();
+    this.render();
+  }
+  refreshScope() {
+    this.bulkScope = this.options.scope(this.recursive);
+    this.choices = this.options.catalog(this.bulkScope.paths);
+  }
+  button(parent, text, run, primary = false) {
+    const button = parent.createEl("button", { text, attr: { type: "button" } });
+    if (primary) {
+      button.classList.add("mod-cta");
+      this.primary = button;
+    }
+    button.addEventListener("click", () => {
+      if (!this.busy)
+        run();
+    });
+    return button;
+  }
+  render() {
+    if (this.closed)
+      return;
+    this.suggesters.forEach((s) => s.close());
+    this.suggesters = [];
+    this.body.replaceChildren();
+    this.footer.replaceChildren();
+    this.primary = void 0;
+    this.titleEl.textContent = this.screen === "pick" ? "Choose from existing properties" : this.screen === "preview" ? "Review changes" : this.screen === "done" ? "Changes complete" : this.screen === "add" ? "Add properties" : "Remove properties";
+    if (this.screen === "add" || this.screen === "remove")
+      this.header();
+    if (this.screen === "add")
+      this.addView();
+    else if (this.screen === "pick")
+      this.pickView();
+    else if (this.screen === "remove")
+      this.removeView();
+    else if (this.screen === "preview")
+      this.previewView();
+    else
+      this.doneView();
+    this.body.scrollTop = 0;
+    this.body.querySelector("input:not([type=checkbox])")?.focus();
+  }
+  header() {
+    const scope = this.body.createDiv({ cls: "pv-bulk-scope" });
+    (0, import_obsidian3.setIcon)(scope.createSpan(), this.bulkScope.kind === "tree" ? "filter" : "folder");
+    scope.createSpan({ text: this.bulkScope.label });
+    scope.createEl("strong", { text: `${this.bulkScope.paths.length} ${this.bulkScope.paths.length === 1 ? "note" : "notes"}` });
+    if (this.bulkScope.includeSubfolders !== void 0) {
+      const label = this.body.createEl("label", { cls: "pv-scope-choice" }), toggle = label.createEl("input");
+      toggle.type = "checkbox";
+      toggle.checked = this.recursive;
+      toggle.setAttribute("aria-label", "Include subfolders");
+      label.createSpan({ text: "Include subfolders" });
+      toggle.addEventListener("change", () => {
+        this.recursive = toggle.checked;
+        this.refreshScope();
+        const present = new Set(this.choices.filter((c) => c.inScope).map((c) => fold(c.key)));
+        this.selected = new Set([...this.selected].filter((key) => present.has(key)));
+        this.render();
+      });
+    }
+    if (this.bulkScope.kind === "tree")
+      this.body.createEl("p", { cls: "pv-edit-hint", text: `The notes behind this ${this.bulkScope.treeProperty ? "property" : "value"}, with active filters applied.` });
+    if (this.bulkScope.skippedExcluded)
+      this.body.createEl("p", { cls: "pv-edit-hint", text: `${this.bulkScope.skippedExcluded} notes in excluded folders are skipped.` });
+    if (this.bulkScope.skippedNonMarkdown)
+      this.body.createEl("p", { cls: "pv-edit-hint", text: `${this.bulkScope.skippedNonMarkdown} non-Markdown files are skipped.` });
+    if (!this.bulkScope.paths.length)
+      this.body.createEl("p", { text: "No notes to change." });
+  }
+  choice(key) {
+    return this.choices.find((c) => fold(c.key) === fold(key));
+  }
+  addView() {
+    const rowsEl = this.body.createDiv();
+    const addButtons = [];
+    const updateCap = () => addButtons.forEach((button) => {
+      button.disabled = this.rows.length >= 20;
+      button.title = button.disabled ? "You can add up to 20 properties at once." : "";
+    });
+    const rowViews = /* @__PURE__ */ new Map();
+    const append = (row) => {
+      const wrapper = rowsEl.createDiv(), grid = wrapper.createDiv({ cls: "pv-bulk-row" }), info = wrapper.createDiv({ cls: "pv-bulk-info" }), error = wrapper.createDiv({ cls: "pv-bulk-error" });
+      error.id = `${row.id}-error`;
+      error.setAttribute("role", "alert");
+      const type = this.button(grid, "", () => {
+        const menu = new import_obsidian3.Menu();
+        for (const [key, label] of Object.entries(typeLabels))
+          menu.addItem((item) => item.setTitle(label).setIcon(typeIcons[key]).setChecked(row.type === key).onClick(() => {
+            row.type = key;
+            row.value = row.type === "checkbox" ? "true" : "";
+            renderValue();
+            updateInfo();
+            value.focus();
+          }));
+        const rect = type.getBoundingClientRect();
+        menu.showAtPosition({ x: rect.left, y: rect.bottom });
+      });
+      const name = grid.createEl("input");
+      name.value = row.key;
+      name.placeholder = "Property name";
+      name.setAttribute("aria-label", "Property name");
+      name.setAttribute("aria-describedby", error.id);
+      const valueCell = grid.createDiv();
+      let value;
+      let valueSuggester;
+      const remove = this.button(grid, "\xD7", () => {
+        this.rows = this.rows.filter((item) => item !== row);
+        if (!this.rows.length)
+          this.rows = [blank()];
+        this.render();
+      });
+      remove.setAttribute("aria-label", "Remove property row");
+      const updateInfo = () => {
+        const choice = this.choice(row.key);
+        info.replaceChildren();
+        info.hidden = !row.key.trim();
+        if (!row.key.trim())
+          return;
+        if (!choice) {
+          (0, import_obsidian3.setIcon)(info.createSpan(), "plus");
+          info.createSpan({ text: "New property" });
+        } else {
+          info.createSpan({ text: `Already on ${choice.inScope} of ${this.bulkScope.paths.length} notes` });
+          if (choice.type !== row.type)
+            info.createSpan({ cls: "pv-warn", text: ` \xB7 Used as ${typeLabels[choice.type]} in ${choice.inScope} notes` });
+          if (choice.mixed)
+            info.createSpan({ text: " \xB7 Mixed types" });
+        }
+      };
+      const renderValue = () => {
+        valueSuggester?.close();
+        valueCell.replaceChildren();
+        (0, import_obsidian3.setIcon)(type, typeIcons[row.type]);
+        type.setAttribute("aria-label", `Property type: ${typeLabels[row.type]}`);
+        type.setAttribute("aria-haspopup", "menu");
+        type.title = typeLabels[row.type];
+        if (row.type === "checkbox") {
+          const select = valueCell.createEl("select");
+          for (const [key, label] of [["true", "Checked"], ["false", "Unchecked"]])
+            select.createEl("option", { text: label }).value = key;
+          value = select;
+        } else {
+          const input = valueCell.createEl("input");
+          input.type = row.type === "list" ? "text" : row.type === "datetime" ? "datetime-local" : row.type;
+          if (row.type === "number")
+            input.step = "any";
+          if (row.type === "datetime")
+            input.step = "0.001";
+          if (row.type === "date" || row.type === "datetime")
+            input.min = row.type === "date" ? "0001-01-01" : "0001-01-01T00:00";
+          input.placeholder = row.type === "list" ? `a${this.options.settings.bulkListDelimiter} b${this.options.settings.bulkListDelimiter} c` : "Value";
+          value = input;
+        }
+        value.value = row.value;
+        value.setAttribute("aria-label", "Value");
+        value.setAttribute("aria-describedby", error.id);
+        const changed = () => {
+          row.value = value.value;
+          error.textContent = "";
+        };
+        value.addEventListener("input", changed);
+        value.addEventListener("change", changed);
+        if (row.type === "text" || row.type === "list") {
+          valueSuggester = new BulkValueSuggest(this.app, value, () => this.choice(row.key) ? this.options.values(row.key, this.bulkScope.paths) : [], () => row.type === "list" ? this.options.settings.bulkListDelimiter : void 0, changed);
+          this.suggesters.push(valueSuggester);
+        }
+        value.addEventListener("keydown", (rawEvent) => {
+          const event = rawEvent;
+          if (event.defaultPrevented || valueSuggester?.opened)
+            return;
+          if (event.key === "Enter" && !event.ctrlKey && !event.metaKey && this.rows.at(-1) === row && !validateRows([row], this.options.settings.bulkListDelimiter).size && this.rows.length < 20) {
+            event.preventDefault();
+            const next = blank();
+            this.rows.push(next);
+            append(next);
+            updateCap();
+            rowViews.get(next.id)?.name.focus();
+          }
+        });
+        rowViews.set(row.id, { name, value, error });
+      };
+      name.addEventListener("input", () => {
+        row.key = name.value;
+        error.textContent = "";
+        updateInfo();
+      });
+      name.addEventListener("change", () => {
+        const choice = this.choice(name.value);
+        if (choice) {
+          row.key = choice.key;
+          name.value = choice.key;
+        }
+        updateInfo();
+      });
+      const suggester = new BulkNameSuggest(this.app, name, () => this.choices, () => new Set(this.rows.filter((r) => r !== row).map((r) => fold(r.key))), (choice) => {
+        row.key = choice.key;
+        row.type = choice.type;
+        row.value = row.type === "checkbox" ? "true" : "";
+        name.value = row.key;
+        renderValue();
+        updateInfo();
+        value.focus();
+      });
+      this.suggesters.push(suggester);
+      renderValue();
+      updateInfo();
+    };
+    for (const row of this.rows)
+      append(row);
+    const buttons = this.body.createDiv({ cls: "pv-bulk-add-buttons" });
+    addButtons.push(this.button(buttons, "Add property", () => {
+      const row = blank();
+      this.rows.push(row);
+      append(row);
+      updateCap();
+      rowViews.get(row.id)?.name.focus();
+    }));
+    addButtons.push(this.button(buttons, "Choose from existing", () => {
+      this.picked.clear();
+      this.screen = "pick";
+      this.render();
+    }));
+    updateCap();
+    this.body.createEl("p", { text: "If a note already has the property" });
+    const conflict = this.body.createDiv({ cls: "pv-bulk-conflict", attr: { role: "group", "aria-label": "If a note already has the property" } });
+    for (const [key, text] of [["skip", "Skip"], ["merge", "Merge into list"], ["overwrite", "Overwrite"]]) {
+      const button = this.button(conflict, text, () => {
+        this.exists = key;
+        for (const item of Array.from(conflict.querySelectorAll("button")))
+          item.setAttribute("aria-pressed", String(item === button));
+      });
+      button.setAttribute("aria-pressed", String(this.exists === key));
+    }
+    this.body.createEl("p", { cls: "pv-edit-hint", text: "Merge into list combines text and list values into one list. Other types are overwritten." });
+    this.button(this.footer, "Cancel", () => this.close());
+    const primary = this.button(this.footer, "Preview changes", () => {
+      const errors = validateRows(this.rows, this.options.settings.bulkListDelimiter);
+      for (const row of this.rows) {
+        const view = rowViews.get(row.id);
+        view.error.textContent = errors.get(row.id) ?? "";
+        view.name.removeAttribute("aria-invalid");
+        view.value.removeAttribute("aria-invalid");
+      }
+      if (errors.size) {
+        const row = this.rows.find((r) => errors.has(r.id)), view = rowViews.get(row.id);
+        const parsed = parseValue(row.type, row.value, this.options.settings.bulkListDelimiter);
+        const field = !row.key.trim() || errors.get(row.id) === "Already listed above" || errors.get(row.id)?.includes("not supported") || parsed.ok ? view.name : view.value;
+        field.setAttribute("aria-invalid", "true");
+        field.focus();
+        return;
+      }
+      const rows = this.rows.map((row) => ({ ...row, key: this.choice(row.key)?.key ?? row.key.trim() }));
+      this.plan = this.options.preview(this.bulkScope.paths, { rows, exists: this.exists, delimiter: this.options.settings.bulkListDelimiter });
+      this.screen = "preview";
+      this.render();
+    }, true);
+    primary.disabled = !this.bulkScope.paths.length;
+  }
+  filterInput(value, changed) {
+    const input = this.body.createEl("input", { cls: "pv-bulk-filter" });
+    input.type = "search";
+    input.placeholder = "Filter properties";
+    input.setAttribute("aria-label", "Filter properties");
+    input.value = value;
+    input.addEventListener("input", () => changed(input.value));
+    return input;
+  }
+  pickView() {
+    this.filterInput(this.pickFilter, (value) => {
+      this.pickFilter = value;
+      renderList();
+    });
+    this.body.createEl("p", { text: this.bulkScope.kind === "tree" ? "Properties used in this view" : "Properties used in this vault" });
+    const list = this.body.createDiv({ cls: "pv-bulk-choice-list" }), message2 = this.body.createDiv({ cls: "pv-bulk-error" });
+    const count = this.footer.createSpan();
+    this.button(this.footer, "Cancel", () => {
+      this.screen = "add";
+      this.render();
+    });
+    const confirm = this.button(this.footer, "Add 0 properties", () => {
+      this.rows = this.rows.filter((row) => row.key.trim() || row.value.trim());
+      const added = this.choices.filter((c) => this.picked.has(fold(c.key)));
+      for (const choice of added)
+        this.rows.push({ ...blank(), key: choice.key, type: choice.type, value: choice.type === "checkbox" ? "true" : "" });
+      this.screen = "add";
+      this.render();
+      const position = this.rows.length - added.length;
+      this.body.querySelectorAll('[aria-label="Value"]')[position]?.focus();
+    }, true);
+    const update = () => {
+      count.textContent = `${this.picked.size} selected`;
+      confirm.textContent = `Add ${this.picked.size} ${this.picked.size === 1 ? "property" : "properties"}`;
+      confirm.disabled = !this.picked.size;
+    };
+    const renderList = () => {
+      list.replaceChildren();
+      const used = new Set(this.rows.map((r) => fold(r.key))), occupied = this.rows.filter((row) => row.key.trim() || row.value.trim()).length;
+      for (const choice of this.choices.filter((c) => fold(c.key).includes(fold(this.pickFilter)))) {
+        const key = fold(choice.key), added = used.has(key), label = list.createEl("label", { cls: "pv-bulk-choice" }), check = label.createEl("input");
+        check.type = "checkbox";
+        check.checked = added || this.picked.has(key);
+        check.disabled = added || !!choice.disabledReason;
+        check.setAttribute("aria-label", `Choose ${choice.key}`);
+        label.createEl("strong", { text: choice.key });
+        (0, import_obsidian3.setIcon)(label.createSpan(), typeIcons[choice.type]);
+        label.createEl("small", { text: choice.disabledReason ?? (added ? "Added" : `${choice.inScope} of ${this.bulkScope.paths.length}`) });
+        check.addEventListener("change", () => {
+          if (check.checked && occupied + this.picked.size >= 20) {
+            check.checked = false;
+            message2.textContent = "You can add up to 20 properties at once.";
+            return;
+          }
+          if (check.checked)
+            this.picked.add(key);
+          else
+            this.picked.delete(key);
+          message2.textContent = "";
+          update();
+        });
+      }
+      update();
+    };
+    renderList();
+  }
+  removeView() {
+    this.filterInput(this.filter, (value) => {
+      this.filter = value;
+      renderList();
+    });
+    const selectAll = this.button(this.body, "Select all", () => {
+      for (const c of visible())
+        if (!c.disabledReason)
+          this.selected.add(fold(c.key));
+      renderList();
+    });
+    this.body.createEl("p", { text: "Properties found in these notes" });
+    const list = this.body.createDiv({ cls: "pv-bulk-choice-list" }), error = this.body.createDiv({ cls: "pv-bulk-error" });
+    const count = this.footer.createSpan();
+    this.button(this.footer, "Cancel", () => this.close());
+    const primary = this.button(this.footer, "Preview changes", () => {
+      if (!this.selected.size) {
+        error.textContent = "Select at least one property";
+        list.querySelector("input:not(:disabled)")?.focus();
+        return;
+      }
+      this.plan = this.options.preview(this.bulkScope.paths, { keys: this.choices.filter((c) => this.selected.has(fold(c.key))).map((c) => c.key) });
+      this.screen = "preview";
+      this.render();
+    }, true);
+    primary.disabled = !this.bulkScope.paths.length;
+    const visible = () => this.choices.filter((c) => c.inScope && fold(c.key).includes(fold(this.filter))).sort((a, b) => b.inScope - a.inScope || natural(a.key, b.key));
+    const renderList = () => {
+      list.replaceChildren();
+      selectAll.textContent = this.filter ? "Select shown" : "Select all";
+      for (const c of visible()) {
+        const label = list.createEl("label", { cls: "pv-bulk-choice" }), check = label.createEl("input");
+        check.type = "checkbox";
+        check.checked = this.selected.has(fold(c.key));
+        check.disabled = !!c.disabledReason;
+        check.setAttribute("aria-label", `Remove ${c.key}`);
+        label.createEl("strong", { text: c.key });
+        (0, import_obsidian3.setIcon)(label.createSpan(), typeIcons[c.type]);
+        label.createEl("small", { text: c.disabledReason ?? `${c.inScope} of ${this.bulkScope.paths.length}` });
+        check.addEventListener("change", () => {
+          if (check.checked)
+            this.selected.add(fold(c.key));
+          else
+            this.selected.delete(fold(c.key));
+          count.textContent = `${this.selected.size} selected`;
+          error.textContent = "";
+        });
+      }
+      if (!visible().length)
+        list.createEl("p", { text: "No properties match" });
+      count.textContent = `${this.selected.size} selected`;
+    };
+    renderList();
+  }
+  previewView() {
+    const plan = this.plan, changed = plan.notes.filter((n) => n.changes.length);
+    const summary = this.body.createDiv({ cls: "pv-bulk-summary" });
+    for (const key of plan.keys) {
+      const changes = plan.notes.flatMap((n) => n.changes).filter((c) => fold(c.key) === fold(key));
+      const skipped = plan.notes.flatMap((n) => n.skipped).filter((s) => fold(s.key) === fold(key));
+      const count = (action) => changes.filter((c) => c.action === action).length;
+      let text = plan.mode === "remove" ? changes.length ? `Remove ${key} from ${changes.length} notes` : `No notes have ${key}, nothing to remove` : `Add ${key} to ${count("add")} notes`;
+      if (count("merge"))
+        text += `, merge into ${count("merge")} that already have it`;
+      if (count("overwrite"))
+        text += `, overwrite ${count("overwrite")} that already have it`;
+      const converted = changes.filter((c) => c.action === "merge" && typeof c.before === "string").length;
+      if (converted)
+        text += `, ${converted} become lists`;
+      const already = skipped.filter((s) => s.reason === "already-has").length, ambiguous = skipped.filter((s) => s.reason === "ambiguous-key").length;
+      if (already)
+        text += `, skip ${already} that already have it`;
+      if (ambiguous)
+        text += `, skip ${ambiguous} with duplicate keys`;
+      summary.createEl("p", { text });
+    }
+    if (changed.length > 200)
+      this.body.createEl("p", { text: `This changes ${changed.length} notes. You can undo the last batch until the plugin reloads.` });
+    const list = this.body.createDiv();
+    let shown = 0;
+    const remaining = this.body.createEl("p", { cls: "pv-edit-hint" });
+    const more = this.button(this.body, "Show more", () => show());
+    const show = () => {
+      for (const note of changed.slice(shown, shown + 20)) {
+        const entry = list.createDiv({ cls: "pv-edit-change" }), slash = note.path.lastIndexOf("/");
+        entry.createEl("strong", { text: note.path.slice(slash + 1).replace(/\.md$/i, "") });
+        entry.createEl("small", { text: slash < 0 ? "" : note.path.slice(0, slash) });
+        for (const c of note.changes) {
+          if (c.existed)
+            entry.createDiv({ cls: "pv-bulk-diff-remove", text: c.action === "remove" ? `\u2212 ${c.key}` : `\u2212 ${c.key}: ${displayValue(c.before)}` });
+          if (c.action !== "remove")
+            entry.createDiv({ cls: "pv-bulk-diff-add", text: `+ ${c.key}: ${displayValue(c.after)}` });
+        }
+      }
+      shown = Math.min(shown + 20, changed.length);
+      more.hidden = shown >= changed.length;
+      remaining.textContent = shown < changed.length ? `and ${changed.length - shown} more notes` : "";
+    };
+    show();
+    const issues = plan.notes.filter((n) => n.error || n.skipped.some((s) => s.reason !== "already-has"));
+    if (issues.length) {
+      const details = this.body.createEl("details");
+      details.createEl("summary", { text: `${issues.length} notes with issues` });
+      for (const n of issues.slice(0, 100))
+        details.createEl("p", { text: `${n.path}: ${n.error ?? n.skipped.map((s) => `${s.key}: ${s.reason}`).join("; ")}` });
+      if (issues.length > 100)
+        details.createEl("p", { text: "Showing the first 100 notes with issues." });
+    }
+    this.button(this.footer, "Back", () => {
+      this.screen = this.options.mode;
+      this.render();
+    });
+    this.button(this.footer, changed.length ? `${plan.mode === "add" ? "Add to" : "Remove from"} ${changed.length} ${changed.length === 1 ? "note" : "notes"}` : "Nothing to change", () => {
+      void this.apply();
+    }, true).disabled = !changed.length;
+  }
+  async apply() {
+    this.busy = true;
+    this.suggesters.forEach((s) => s.close());
+    this.footer.querySelectorAll("button").forEach((b) => {
+      b.disabled = true;
+    });
+    try {
+      this.results = await this.options.apply(this.plan, (done, total) => {
+        if (total > 50 && this.primary)
+          this.primary.textContent = `Updating ${done} of ${total}\u2026`;
+      });
+      this.screen = "done";
+    } catch (error) {
+      new import_obsidian3.Notice(error instanceof Error ? error.message : String(error));
+    } finally {
+      this.busy = false;
+      this.render();
+    }
+  }
+  doneView() {
+    const updated = this.results.filter((n) => n.changes.length).length;
+    this.body.createEl("p", { cls: "pv-bulk-success", text: `Updated ${updated} notes` });
+    this.body.createEl("p", { cls: "pv-edit-hint", text: this.options.canUndo() ? "One undo step is available until the plugin reloads. YAML comments and quoting may change." : "No changes were written by this batch." });
+    const issues = this.results.filter((n) => n.error || n.skipped.length);
+    if (issues.length) {
+      const details = this.body.createEl("details");
+      details.createEl("summary", { text: `Skipped or failed: ${issues.length} notes` });
+      const list = details.createDiv();
+      let shown = 0;
+      const more = this.button(details, "Show more", () => show());
+      const show = () => {
+        for (const n of issues.slice(shown, shown + 10))
+          list.createEl("p", { text: `${n.path}: ${n.error ?? n.skipped.map((s) => `${s.key}: ${s.reason}`).join("; ")}` });
+        shown += 10;
+        more.hidden = shown >= issues.length;
+      };
+      show();
+    }
+    const message2 = this.body.createEl("p", { attr: { "aria-live": "polite" } });
+    const undo = this.button(this.footer, "Undo", () => {
+      this.busy = true;
+      undo.disabled = true;
+      void this.options.undo().then((result) => {
+        message2.textContent = `Restored ${result.restored} notes; skipped ${result.skipped}; ${result.failures.length} failed.`;
+      }).catch((error) => {
+        message2.textContent = String(error);
+      }).finally(() => {
+        this.busy = false;
+        undo.disabled = !this.options.canUndo();
+      });
+    });
+    undo.disabled = !this.options.canUndo();
+    this.button(this.footer, "Close", () => this.close(), true);
+  }
+  onClose() {
+    this.closed = true;
+    this.dispose?.();
+    this.suggesters.forEach((s) => s.close());
+    this.contentEl.replaceChildren();
+    if (this.origin?.isConnected)
+      this.origin.focus();
+  }
+};
+
+// src/explorer-menu.ts
+var import_obsidian4 = require("obsidian");
+function registerBulkMenus(plugin, open) {
+  const seen = /* @__PURE__ */ new WeakMap();
+  const title = (mode, folder) => `${mode === "add" ? "Add properties to" : "Remove properties from"} ${folder ? "folder's notes" : "selected notes"}\u2026`;
+  const add = (menu, targets, folder) => {
+    const existing = seen.get(menu);
+    if (existing) {
+      if (!folder) {
+        existing.targets = targets;
+        existing.items.forEach((item, i) => item.setTitle(title(i === 0 ? "add" : "remove", false)));
+      }
+      return;
+    }
+    const entry = { targets, items: [] };
+    seen.set(menu, entry);
+    for (const mode of ["add", "remove"])
+      menu.addItem((item) => {
+        entry.items.push(item);
+        return item.setTitle(title(mode, folder)).setIcon(mode === "add" ? "list-plus" : "list-minus").onClick(() => open(mode, entry.targets));
+      });
+  };
+  plugin.registerEvent(plugin.app.workspace.on("file-menu", (menu, file) => {
+    if (file instanceof import_obsidian4.TFolder)
+      add(menu, [file], true);
+  }));
+  plugin.registerEvent(plugin.app.workspace.on("files-menu", (menu, files) => {
+    if (files.length > 1)
+      add(menu, files, false);
+  }));
+}
+
+// src/folder-exclusions.ts
+function excludedFolders(text) {
+  return [...new Set(text.split("\n").map((line) => line.trim().replace(/\\/g, "/").split("/").filter((part) => part && part !== ".").join("/")).filter((path) => path && !path.split("/").includes("..")))];
+}
+function isFolderExcluded(path, folders) {
+  return folders.some((folder) => path.startsWith(`${folder}/`));
+}
+
+// src/folder-filter.ts
+function normalizeFolders(raw) {
+  if (!Array.isArray(raw)) return [];
+  const paths = excludedFolders(raw.filter((value) => typeof value === "string").join("\n")).sort();
+  return paths.filter((path) => !isFolderExcluded(path, paths));
+}
+function sameFolders(a, b) {
+  const left = normalizeFolders(a), right = normalizeFolders(b);
+  return left.length === right.length && left.every((path, index) => path === right[index]);
+}
+function folderPaths(paths, folders, excluded = []) {
+  return new Set([...paths].filter((path) => isFolderExcluded(path, folders) && !isFolderExcluded(path, excluded)));
+}
+function folderChoices(paths, selected, excluded) {
+  return [...new Set(paths)].filter((path) => path && path !== "/" && !selected.includes(path) && !isFolderExcluded(path, selected) && !excluded.includes(path) && !isFolderExcluded(path, excluded)).sort();
+}
+function intersectPaths(left, right) {
+  if (!left) return right ? new Set(right) : null;
+  return new Set([...left].filter((path) => !right || right.has(path)));
+}
+
+// src/inline-conversion.ts
+var import_obsidian5 = require("obsidian");
 
 // src/inline-properties.ts
 function parseInlineProperties(source) {
@@ -388,104 +1576,6 @@ function inlineRemovalFragments(source, property) {
   return fields(source, property).map((field) => source.slice(field.start, field.end));
 }
 
-// src/property-rename.ts
-function propertyNameError(name) {
-  if (!name.trim()) return "Enter a property name.";
-  if (/[\r\n]/.test(name) || name.includes(String.fromCharCode(0))) return "Property names cannot contain line breaks or null characters.";
-  if (fold(name) === "position") return "The name position is reserved for metadata.";
-  return void 0;
-}
-function matchingKeys(frontmatter, name) {
-  return Object.keys(frontmatter).filter((key) => key !== "position" && fold(key) === fold(name));
-}
-function canRename(frontmatter, source, target) {
-  const keys = matchingKeys(frontmatter, source);
-  return !propertyNameError(target) && source !== target && keys.length === 1 && keys[0] === source && matchingKeys(frontmatter, target).every((key) => key === source);
-}
-function setOwnValue(frontmatter, key, value) {
-  Object.defineProperty(frontmatter, key, { value, enumerable: true, writable: true, configurable: true });
-}
-function includeRenamedProperty(prefs, source, target) {
-  const from = fold(source), to = fold(target);
-  if (from === to) return;
-  const include = (keys) => keys.some((key) => fold(key) === from) && !keys.some((key) => fold(key) === to) ? [...keys, to] : keys;
-  if (prefs.scope) prefs.scope = include(prefs.scope);
-  prefs.pinned = include(prefs.pinned);
-  prefs.expanded = include(prefs.expanded);
-  prefs.hidden = include(prefs.hidden.split("\n")).join("\n");
-  const carryPins = (overrides) => {
-    if (overrides && Object.prototype.hasOwnProperty.call(overrides, from) && !Object.prototype.hasOwnProperty.call(overrides, to)) Object.defineProperty(overrides, to, { value: overrides[from], enumerable: true, configurable: true, writable: true });
-  };
-  carryPins(prefs.customPinOverrides);
-  for (const profile of prefs.profiles) {
-    profile.keys = include(profile.keys);
-    carryPins(profile.pinOverrides);
-  }
-}
-
-// src/note-value-operations.ts
-function textOnlyList(property) {
-  return ["aliases", "cssclasses"].includes(fold(property));
-}
-function parseNoteNumber(text) {
-  const value = text.trim();
-  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(value)) return void 0;
-  const number = Number(value);
-  if (!Number.isFinite(number) || Number.isInteger(number) && !Number.isSafeInteger(number)) return void 0;
-  return number === 0 ? 0 : number;
-}
-function validNoteDate(text, withTime = false) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?$/.exec(text);
-  if (!match || withTime !== (match[4] !== void 0)) return false;
-  const [, yearText, monthText, dayText, hours, minutes, seconds] = match;
-  const year = Number(yearText), month = Number(monthText), day = Number(dayText);
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1] && (!withTime || Number(hours) < 24 && Number(minutes) < 60 && Number(seconds ?? 0) < 60);
-}
-function noteEditError(edit, property) {
-  if (edit.mode === "delete") return;
-  if (edit.type === "list") {
-    if (!["add", "remove"].includes(edit.mode) || !edit.values.length) return "Choose at least one list value.";
-    if (edit.values.some((value) => typeof value === "string" ? !value.trim() || value.includes("\0") : typeof value !== "number" || !Number.isFinite(value))) return "Use nonblank text or finite numbers for list values.";
-    if (textOnlyList(property) && edit.values.some((value) => typeof value !== "string")) return "Aliases and CSS classes require text list values.";
-    return;
-  }
-  if (edit.mode !== "set") return "Choose a supported property operation.";
-  if (edit.value === null) return;
-  switch (edit.type) {
-    case "text":
-      return typeof edit.value === "string" && !!edit.value.trim() && !edit.value.includes("\0") ? void 0 : "Enter text or choose Set empty.";
-    case "checkbox":
-      return typeof edit.value === "boolean" ? void 0 : "Choose true, false, or Set empty.";
-    case "number":
-      return typeof edit.value === "number" && Number.isFinite(edit.value) && (!Number.isInteger(edit.value) || Number.isSafeInteger(edit.value)) ? void 0 : "Enter a finite number within the supported precision.";
-    case "date":
-      return typeof edit.value === "string" && validNoteDate(edit.value) ? void 0 : "Choose a valid date (YYYY-MM-DD).";
-    case "datetime":
-      return typeof edit.value === "string" && validNoteDate(edit.value, true) ? void 0 : "Choose a valid local date and time.";
-  }
-}
-function transformNoteValue(original, edit, property) {
-  const error = noteEditError(edit, property);
-  if (error) return { error };
-  if (edit.mode === "delete") return { remove: true };
-  if (edit.type === "list") {
-    const empty2 = original === null || original === "";
-    if (!empty2 && (!Array.isArray(original) || !original.every((item) => typeof item === "string" || typeof item === "number" && Number.isFinite(item)))) return { error: "Only flat text/number lists or empty values are supported." };
-    const items = empty2 ? [] : original;
-    if (textOnlyList(property) && items.some((item) => typeof item !== "string")) return { error: "This property requires a text list." };
-    if (edit.mode === "remove") return { value: empty2 ? original : items.filter((item) => !edit.values.includes(item)) };
-    const result = [...items];
-    for (const item of edit.values) if (!result.includes(item)) result.push(item);
-    return { value: result };
-  }
-  const empty = original === null || original === "";
-  const compatible = edit.type === "number" ? typeof original === "number" && Number.isFinite(original) : edit.type === "checkbox" ? typeof original === "boolean" : typeof original === "string";
-  if (!empty && !compatible) return { error: `Stored value does not match the ${edit.type} property type.` };
-  return { value: edit.value };
-}
-
 // src/value-operations.ts
 function propertyKey(frontmatter, property) {
   const target = fold(property);
@@ -605,8 +1695,8 @@ function coerce(kind, replacement) {
 
 // src/inline-conversion.ts
 function parts(source) {
-  const info = (0, import_obsidian.getFrontMatterInfo)(source);
-  const raw = info.exists ? (0, import_obsidian.parseYaml)(info.frontmatter) : {};
+  const info = (0, import_obsidian5.getFrontMatterInfo)(source);
+  const raw = info.exists ? (0, import_obsidian5.parseYaml)(info.frontmatter) : {};
   if (raw !== null && (typeof raw !== "object" || Array.isArray(raw))) throw new Error("Frontmatter must be a property mapping.");
   if (!info.exists && /^\uFEFF?---\s*(?:\r?\n|$)/.test(source)) throw new Error("Unclosed frontmatter.");
   return { body: source.slice(info.exists ? info.contentStart : 0), prefix: source.slice(0, info.exists ? info.contentStart : 0), frontmatter: raw ?? {} };
@@ -766,94 +1856,8 @@ var InlineConverter = class {
 };
 
 // src/inline-conversion-dialog.ts
-var import_obsidian2 = require("obsidian");
-
-// src/mobile-layout.ts
-function usesTouchLayout(element) {
-  return element.ownerDocument.body.classList.contains("is-mobile") || !!element.ownerDocument.defaultView?.matchMedia?.("(pointer: coarse)").matches;
-}
-function fitVisibleViewport(element) {
-  const win = element.ownerDocument.defaultView;
-  if (!win) return () => {
-  };
-  let frame;
-  const viewport = win.visualViewport;
-  const update = () => {
-    frame = void 0;
-    if (!usesTouchLayout(element) || viewport && viewport.scale !== 1) {
-      element.style.removeProperty("--pv-visible-height");
-      return;
-    }
-    const bottom = viewport ? viewport.offsetTop + viewport.height : win.innerHeight;
-    const height = Math.max(0, Math.floor(bottom - element.getBoundingClientRect().top));
-    element.style.setProperty("--pv-visible-height", `${height}px`);
-  };
-  const schedule = () => {
-    if (frame !== void 0) win.cancelAnimationFrame(frame);
-    frame = win.requestAnimationFrame(update);
-  };
-  win.addEventListener("resize", schedule);
-  viewport?.addEventListener("resize", schedule);
-  viewport?.addEventListener("scroll", schedule);
-  element.addEventListener("focusin", schedule);
-  element.addEventListener("focusout", schedule);
-  const observer = typeof ResizeObserver === "undefined" ? void 0 : new ResizeObserver(schedule);
-  if (element.parentElement) observer?.observe(element.parentElement);
-  schedule();
-  return () => {
-    if (frame !== void 0) win.cancelAnimationFrame(frame);
-    win.removeEventListener("resize", schedule);
-    viewport?.removeEventListener("resize", schedule);
-    viewport?.removeEventListener("scroll", schedule);
-    element.removeEventListener("focusin", schedule);
-    element.removeEventListener("focusout", schedule);
-    observer?.disconnect();
-    element.style.removeProperty("--pv-visible-height");
-  };
-}
-
-// src/modal-layout.ts
-function fitModalViewport(container) {
-  const win = container.ownerDocument.defaultView;
-  if (!win) return () => {
-  };
-  const viewport = win.visualViewport;
-  let frame;
-  const clear = () => {
-    container.classList.remove("pv-touch-modal");
-    container.style.removeProperty("--pv-dialog-height");
-    container.style.removeProperty("--pv-dialog-top");
-  };
-  const update = () => {
-    frame = void 0;
-    if (!usesTouchLayout(container)) {
-      clear();
-      return;
-    }
-    if (viewport && viewport.scale !== 1) return;
-    container.classList.add("pv-touch-modal");
-    container.style.setProperty("--pv-dialog-height", `${Math.max(0, Math.floor(viewport?.height ?? win.innerHeight))}px`);
-    container.style.setProperty("--pv-dialog-top", `${Math.max(0, Math.floor(viewport?.offsetTop ?? 0))}px`);
-  };
-  const schedule = () => {
-    if (frame !== void 0) win.cancelAnimationFrame(frame);
-    frame = win.requestAnimationFrame(update);
-  };
-  win.addEventListener("resize", schedule);
-  viewport?.addEventListener("resize", schedule);
-  viewport?.addEventListener("scroll", schedule);
-  update();
-  return () => {
-    if (frame !== void 0) win.cancelAnimationFrame(frame);
-    win.removeEventListener("resize", schedule);
-    viewport?.removeEventListener("resize", schedule);
-    viewport?.removeEventListener("scroll", schedule);
-    clear();
-  };
-}
-
-// src/inline-conversion-dialog.ts
-var InlineConversionModal = class extends import_obsidian2.Modal {
+var import_obsidian6 = require("obsidian");
+var InlineConversionModal = class extends import_obsidian6.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -975,7 +1979,7 @@ ${change.afterBody.slice(0, 4e3)}` : "Inline fields kept." });
         input.disabled = true;
       });
       void this.options.apply(plan).then(() => this.close()).catch((error) => {
-        new import_obsidian2.Notice(error instanceof Error ? error.message : "Conversion failed.");
+        new import_obsidian6.Notice(error instanceof Error ? error.message : "Conversion failed.");
         invalidate();
         inspect.disabled = false;
         cancel.disabled = false;
@@ -1065,8 +2069,8 @@ var InlineEditor = class {
 };
 
 // src/inline-dialog.ts
-var import_obsidian3 = require("obsidian");
-var InlineEditModal = class extends import_obsidian3.Modal {
+var import_obsidian7 = require("obsidian");
+var InlineEditModal = class extends import_obsidian7.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -1161,7 +2165,7 @@ ${change.after}` });
       cancel.disabled = true;
       for (const input of inputs) input.disabled = true;
       void this.options.apply(plan).then(() => this.close()).catch((error) => {
-        new import_obsidian3.Notice(error instanceof Error ? error.message : "Could not edit inline properties.");
+        new import_obsidian7.Notice(error instanceof Error ? error.message : "Could not edit inline properties.");
         invalidate();
         inspect.disabled = false;
         cancel.disabled = false;
@@ -1200,7 +2204,7 @@ function applyTooltips(root, enabled) {
 }
 
 // src/main.ts
-var import_obsidian12 = require("obsidian");
+var import_obsidian16 = require("obsidian");
 
 // src/sorting.ts
 var sortOptions = {
@@ -1280,7 +2284,7 @@ function loadPinOverrides(raw) {
 }
 
 // src/property-types.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 var TYPE_ICONS = /* @__PURE__ */ new Map([
   ["text", "text"],
   ["multitext", "list"],
@@ -1305,7 +2309,7 @@ var PropertyTypeResolver = class {
   async load() {
     let raw;
     try {
-      const path = (0, import_obsidian4.normalizePath)(`${this.app.vault.configDir}/types.json`);
+      const path = (0, import_obsidian8.normalizePath)(`${this.app.vault.configDir}/types.json`);
       if (!await this.app.vault.adapter.exists(path)) {
         this.types.clear();
         return;
@@ -1324,6 +2328,9 @@ var PropertyTypeResolver = class {
       if (normalizedKey && normalizedType) types.set(normalizedKey, normalizedType);
     }
     this.types = types;
+  }
+  configuredTypeFor(key) {
+    return this.types.get(fold(key)) ?? BUILTIN_TYPES.get(fold(key));
   }
   typeFor(property) {
     const id = fold(property.id);
@@ -1345,13 +2352,14 @@ function supportsTextSplit(property, resolver) {
 }
 
 // src/value-editor.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 var ValueEditor = class {
   constructor(app, includesPath = () => true, noteEditType2 = () => "text") {
     this.app = app;
     this.includesPath = includesPath;
     this.noteEditType = noteEditType2;
     this.busy = false;
+    this.retryExternalUndo = false;
   }
   async runExclusive(action) {
     if (this.busy) throw new Error("Another property edit is running.");
@@ -1362,9 +2370,10 @@ var ValueEditor = class {
       this.busy = false;
     }
   }
-  rememberUndo(action) {
+  rememberUndo(action, retryConflicts = false) {
     this.last = void 0;
     this.externalUndo = action;
+    this.retryExternalUndo = retryConflicts;
   }
   canUndo() {
     return (!!this.last || !!this.externalUndo) && !this.busy;
@@ -1539,7 +2548,7 @@ var ValueEditor = class {
       const undo = this.externalUndo;
       return this.runExclusive(async () => {
         const result = await undo();
-        this.externalUndo = void 0;
+        if (!this.retryExternalUndo || !result.skipped && !result.failures.length) this.externalUndo = void 0;
         return result;
       });
     }
@@ -1593,7 +2602,7 @@ var ValueEditor = class {
   }
   file(path) {
     const file = this.app.vault.getAbstractFileByPath(path);
-    return file instanceof import_obsidian5.TFile ? file : void 0;
+    return file instanceof import_obsidian9.TFile ? file : void 0;
   }
   frontmatter(file) {
     return this.app.metadataCache.getFileCache(file)?.frontmatter;
@@ -1604,8 +2613,8 @@ function message(error) {
 }
 
 // src/property-rename-dialog.ts
-var import_obsidian6 = require("obsidian");
-var PropertyRenameModal = class extends import_obsidian6.Modal {
+var import_obsidian10 = require("obsidian");
+var PropertyRenameModal = class extends import_obsidian10.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -1664,7 +2673,7 @@ var PropertyRenameModal = class extends import_obsidian6.Modal {
         input.disabled = false;
         cancel.disabled = false;
         render();
-        new import_obsidian6.Notice("Could not rename properties.");
+        new import_obsidian10.Notice("Could not rename properties.");
       });
     });
     render();
@@ -1677,8 +2686,8 @@ var PropertyRenameModal = class extends import_obsidian6.Modal {
 };
 
 // src/property-delete-dialog.ts
-var import_obsidian7 = require("obsidian");
-var PropertyDeleteModal = class extends import_obsidian7.Modal {
+var import_obsidian11 = require("obsidian");
+var PropertyDeleteModal = class extends import_obsidian11.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -1722,7 +2731,7 @@ var PropertyDeleteModal = class extends import_obsidian7.Modal {
       void this.options.apply(this.displayed).then(() => this.close()).catch(() => {
         this.busy = false;
         cancel.disabled = false;
-        new import_obsidian7.Notice("Could not delete properties.");
+        new import_obsidian11.Notice("Could not delete properties.");
         render();
       });
     });
@@ -1735,8 +2744,8 @@ var PropertyDeleteModal = class extends import_obsidian7.Modal {
 };
 
 // src/value-dialog.ts
-var import_obsidian8 = require("obsidian");
-var ValueEditModal = class extends import_obsidian8.Modal {
+var import_obsidian12 = require("obsidian");
+var ValueEditModal = class extends import_obsidian12.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -1855,7 +2864,7 @@ var ValueEditModal = class extends import_obsidian8.Modal {
       if (this.select) this.select.disabled = false;
       this.applyButton.textContent = this.applyLabel(this.displayed?.total ?? 0);
       this.updatePreview();
-      new import_obsidian8.Notice("Could not update property values.");
+      new import_obsidian12.Notice("Could not update property values.");
     }
   }
 };
@@ -1878,7 +2887,7 @@ function el(parent, tag, cls = "", text = "") {
 }
 
 // src/note-value-dialog.ts
-var import_obsidian9 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 
 // src/note-value-input.ts
 function createNoteValueInput(parent, options, changed) {
@@ -1989,7 +2998,7 @@ function createNoteValueInput(parent, options, changed) {
 }
 
 // src/note-value-dialog.ts
-var NoteValueModal = class extends import_obsidian9.Modal {
+var NoteValueModal = class extends import_obsidian13.Modal {
   constructor(app, options) {
     super(app);
     this.options = options;
@@ -2078,7 +3087,7 @@ var NoteValueModal = class extends import_obsidian9.Modal {
         editor.setDisabled(false);
         cancel.disabled = false;
         render();
-        new import_obsidian9.Notice("Could not change property values. Review the preview before retrying.");
+        new import_obsidian13.Notice("Could not change property values. Review the preview before retrying.");
       });
     });
     render();
@@ -2189,7 +3198,7 @@ var InlineIndex = class {
 };
 
 // src/view-picker.ts
-var import_obsidian10 = require("obsidian");
+var import_obsidian14 = require("obsidian");
 var ViewPicker = class {
   constructor(parent, change, showTooltips = () => true) {
     this.change = change;
@@ -2240,7 +3249,7 @@ var ViewPicker = class {
     };
     this.button = parent.createEl("button", { cls: "pv-profile-select", attr: { type: "button", "aria-label": "Property view", "aria-haspopup": "listbox", "aria-expanded": "false" } });
     this.label = this.button.createSpan({ cls: "pv-profile-label" });
-    (0, import_obsidian10.setIcon)(this.button.createSpan({ cls: "pv-profile-chevron" }), "chevron-down");
+    (0, import_obsidian14.setIcon)(this.button.createSpan({ cls: "pv-profile-chevron" }), "chevron-down");
     this.button.addEventListener("click", () => this.popup ? this.close() : this.open());
     this.button.addEventListener("keydown", (event) => {
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -2336,7 +3345,7 @@ var ViewPicker = class {
 };
 
 // src/filter-note-list.ts
-var import_obsidian11 = require("obsidian");
+var import_obsidian15 = require("obsidian");
 var nextListId = 0;
 var batchSize = 200;
 function noteRows(paths, descending = false) {
@@ -2405,7 +3414,7 @@ var FilterNoteList = class {
   openNote(path, event) {
     const file = this.app.vault.getFileByPath(path);
     if (!file) return;
-    void this.app.workspace.getLeaf(import_obsidian11.Keymap.isModEvent(event)).openFile(file).catch(() => new import_obsidian11.Notice("Could not open this note. It may have been moved or deleted."));
+    void this.app.workspace.getLeaf(import_obsidian15.Keymap.isModEvent(event)).openFile(file).catch(() => new import_obsidian15.Notice("Could not open this note. It may have been moved or deleted."));
   }
   render() {
     const active = this.panel.ownerDocument.activeElement;
@@ -2421,7 +3430,7 @@ var FilterNoteList = class {
     this.toggle.setAttribute("aria-expanded", String(this.open && n > 0));
     this.toggle.setAttribute("aria-label", `${this.open ? "Hide" : "Show"} ${n} filtered ${n === 1 ? "note" : "notes"}`);
     this.toggle.title = this.open ? "Hide matching notes" : "Show matching notes";
-    (0, import_obsidian11.setIcon)(this.icon, this.open ? "chevron-up" : "chevron-down");
+    (0, import_obsidian15.setIcon)(this.icon, this.open ? "chevron-up" : "chevron-down");
     applyTooltips(this.toggle, this.showTooltips());
     this.panel.hidden = !this.open || !n;
     this.panel.parentElement?.classList.toggle("pv-filter-notes-open", !this.panel.hidden);
@@ -2442,7 +3451,7 @@ var FilterNoteList = class {
       button.setAttribute("aria-label", `Open ${row.name}${row.folder ? ` in ${row.folder}` : ""}`);
       const icon = button.createSpan({ cls: "pv-icon" });
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian11.setIcon)(icon, "file-text");
+      (0, import_obsidian15.setIcon)(icon, "file-text");
       button.createSpan({ cls: "pv-filter-note-name", text: row.name });
       if (row.folder) button.createSpan({ cls: "pv-filter-note-folder", text: row.folder });
       button.addEventListener("click", (event) => this.openNote(row.path, event));
@@ -2592,8 +3601,8 @@ function attachNoteMenu(element, open) {
 
 // src/main.ts
 var VIEW = "supercharged-properties";
-var defaults = { showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
-var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
+var defaults = { ...bulkSettings({}), showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+var SuperchargedPropertiesPlugin = class extends import_obsidian16.Plugin {
   constructor() {
     super(...arguments);
     this.index = new PropertyIndex();
@@ -2605,6 +3614,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
     const saved = loaded && typeof loaded === "object" && !Array.isArray(loaded) ? loaded : {};
     const profiles = loadProfiles(saved?.profiles);
     this.prefs = {
+      ...bulkSettings(saved),
       showInlineProperties: saved.showInlineProperties === true,
       showTooltips: saved.showTooltips !== false,
       inlineViews: loadViewState(saved.inlineViews),
@@ -2651,11 +3661,12 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
     this.addCommand({ id: "undo-inline-edit", name: "Undo last inline property edit", checkCallback: (checking) => {
       if (!this.inlineEditor.canUndo()) return false;
       if (!checking) void this.inlineEditor.undo().then((result) => {
-        new import_obsidian12.Notice(`Restored ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed.`);
+        new import_obsidian16.Notice(`Restored ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed.`);
         this.rebuild(true);
       });
       return true;
     } });
+    registerBulkMenus(this, (mode, targets) => this.openBulkProperties(mode, (recursive) => resolveSelectionScope(targets, recursive, (path) => this.includesPath(path))));
     this.addSettingTab(new PreferencesTab(this));
     this.registerEvent(this.app.metadataCache.on("changed", (file, _data, cache) => {
       this.updateIndexedNote(file.path, cache.frontmatter);
@@ -2664,7 +3675,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
     }));
     this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRebuild()));
     this.registerEvent(this.app.vault.on("create", (file) => {
-      if (file instanceof import_obsidian12.TFile && file.extension === "md" && this.includesPath(file.path)) {
+      if (file instanceof import_obsidian16.TFile && file.extension === "md" && this.includesPath(file.path)) {
         this.inline.update(file);
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache) {
@@ -2674,17 +3685,17 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       }
     }));
     this.registerEvent(this.app.vault.on("modify", (file) => {
-      if (file instanceof import_obsidian12.TFile) this.inline.update(file);
+      if (file instanceof import_obsidian16.TFile) this.inline.update(file);
     }));
     this.registerEvent(this.app.vault.on("delete", (file) => {
-      if (file instanceof import_obsidian12.TFile) {
+      if (file instanceof import_obsidian16.TFile) {
         this.index.remove(file.path);
         this.inline.remove(file.path);
         this.refresh();
       } else this.scheduleRebuild();
     }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-      if (file instanceof import_obsidian12.TFile) {
+      if (file instanceof import_obsidian16.TFile) {
         this.index.remove(oldPath);
         this.inline.remove(oldPath);
         this.inline.update(file);
@@ -2745,22 +3756,51 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
   save() {
     const snapshot = JSON.parse(JSON.stringify(this.prefs));
     this.saveQueue = this.saveQueue.then(() => this.saveData(snapshot)).catch(() => {
-      new import_obsidian12.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
+      new import_obsidian16.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
     });
     this.refresh();
     return this.saveQueue;
   }
   async applyValueEdit(preview, verb = "Updated") {
     const result = await this.valueEditor.apply(preview);
-    new import_obsidian12.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
-    for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian16.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
+    for (const failure of result.failures) new import_obsidian16.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
   }
   async undoValueEdit() {
     const result = await this.valueEditor.undo();
-    new import_obsidian12.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
-    for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian16.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
+    for (const failure of result.failures) new import_obsidian16.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
+  }
+  openBulkProperties(mode, scope) {
+    const fileAt = (path) => {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      return file instanceof import_obsidian16.TFile && file.extension.toLowerCase() === "md" ? file : void 0;
+    };
+    const frontmatter = (path) => {
+      const file = fileAt(path);
+      if (!file) return void 0;
+      const cache = this.app.metadataCache.getFileCache(file);
+      return cache ? cache.frontmatter ?? {} : void 0;
+    };
+    const configuredType = (key) => this.typeResolver.configuredTypeFor(key);
+    const service = new BulkPropertiesService({ eligible: (path) => !!fileAt(path) && this.includesPath(path), frontmatter, configuredType, process: async (path, update) => {
+      const file = fileAt(path);
+      if (!file) throw new Error("Note not found.");
+      await this.app.fileManager.processFrontMatter(file, update);
+    } }, this.valueEditor);
+    new BulkPropertiesModal(this.app, {
+      mode,
+      settings: this.prefs,
+      scope,
+      catalog: (paths) => propertyCatalog(this.index, paths, (key) => configuredType(key) ? noteEditType({ id: fold(key) }, this.typeResolver) : void 0, frontmatter),
+      values: (key, paths) => valueSuggestions(this.index, key, paths),
+      preview: (paths, request) => service.preview(paths, request),
+      apply: (plan, progress) => service.apply(plan, progress),
+      undo: () => this.valueEditor.undo(),
+      canUndo: () => this.valueEditor.canUndo()
+    }).open();
   }
   convertInline(property, paths) {
     new InlineConversionModal(this.app, {
@@ -2769,7 +3809,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       preview: (options, selected) => this.inlineConverter.preview(options, selected),
       apply: async (plan) => {
         const result = await this.inlineConverter.apply(plan);
-        new import_obsidian12.Notice(`Converted ${result.updated} notes; skipped ${result.skipped}; ${result.failures.length} failed.${result.failures.length ? " " + result.failures.join("\n") : ""}`);
+        new import_obsidian16.Notice(`Converted ${result.updated} notes; skipped ${result.skipped}; ${result.failures.length} failed.${result.failures.length ? " " + result.failures.join("\n") : ""}`);
         this.rebuild(true);
       }
     }).open();
@@ -2789,7 +3829,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
           Object.assign(state, { scope: prefs.scope, pinned: prefs.pinned, hidden: prefs.hidden });
           await this.save();
         }
-        new import_obsidian12.Notice(`Updated ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed. Use Undo last inline property edit to restore the last batch.`, 1e4);
+        new import_obsidian16.Notice(`Updated ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed. Use Undo last inline property edit to restore the last batch.`, 1e4);
         this.rebuild(true);
       }
     }).open();
@@ -2804,8 +3844,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
           includeRenamedProperty(this.prefs, preview.source, preview.target);
           await this.save();
         }
-        new import_obsidian12.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian16.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian16.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
       }
     }).open();
@@ -2816,8 +3856,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       preview: () => this.valueEditor.previewPropertyDelete(property.id, property.paths),
       apply: async (preview) => {
         const result = await this.valueEditor.apply(preview);
-        new import_obsidian12.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian16.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian16.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
       }
     }).open();
@@ -2846,8 +3886,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
         await this.typeResolver.load();
         const result = await this.valueEditor.apply(preview);
         const action = preview.changes.some((change) => change.remove) ? "Removed property from" : "Updated";
-        new import_obsidian12.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
-        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian16.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
+        for (const failure of result.failures) new import_obsidian16.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
         complete();
       }
@@ -2864,7 +3904,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       preview: (edit) => edit.mode === "split" && !supportsTextSplit(property, this.typeResolver) ? { total: 0, changes: [] } : this.valueEditor.preview(edit, node.paths),
       apply: (preview) => {
         if (mode === "split" && !supportsTextSplit(property, this.typeResolver)) {
-          new import_obsidian12.Notice("Split into list is only available for text properties.");
+          new import_obsidian16.Notice("Split into list is only available for text properties.");
           return Promise.resolve();
         }
         return this.applyValueEdit(preview, mode === "delete" ? "Deleted from" : "Updated");
@@ -2888,7 +3928,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
 function el2(parent, tag, cls = "", text = "") {
   return parent.createEl(tag, { cls, text });
 }
-var PropertiesView = class extends import_obsidian12.ItemView {
+var PropertiesView = class extends import_obsidian16.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -2937,7 +3977,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.searchHeader = el2(toolbar, "div", "pv-search-header");
     this.searchHeader.hidden = true;
     const search = el2(this.searchHeader, "div", "pv-search");
-    (0, import_obsidian12.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian16.setIcon)(el2(search, "span", "pv-icon"), "search");
     this.input = el2(search, "input", "pv-filter");
     this.input.type = "search";
     this.input.placeholder = "Find properties, values, notes\u2026";
@@ -3063,7 +4103,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     }
   }
   openSearchScopeMenu() {
-    const menu = new import_obsidian12.Menu();
+    const menu = new import_obsidian16.Menu();
     for (const [value, label] of [["any", "Search everything"], ["key", "Property names"], ["value", "Values"], ["note", "Note names / paths"]]) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.searchScope === value).onClick(() => {
         this.searchScope = value;
@@ -3088,11 +4128,11 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   iconButton(parent, title, icon, run) {
     const button = this.button(parent, "", title, run);
     button.className = "pv-icon-button";
-    (0, import_obsidian12.setIcon)(button, icon);
+    (0, import_obsidian16.setIcon)(button, icon);
     return button;
   }
   openSortMenu() {
-    const menu = new import_obsidian12.Menu();
+    const menu = new import_obsidian16.Menu();
     for (const [value, label] of Object.entries(sortOptions)) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.plugin.prefs.sort === value).onClick(() => {
         this.plugin.prefs.sort = sortOrder(value);
@@ -3179,7 +4219,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.folderRow = el2(this.scopePanel, "div", "pv-folder-row");
     this.renderFolders();
     const search = el2(this.scopePanel, "div", "pv-search pv-picker-search");
-    (0, import_obsidian12.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian16.setIcon)(el2(search, "span", "pv-icon"), "search");
     const input = el2(search, "input", "pv-filter");
     input.type = "search";
     input.placeholder = "Find a property\u2026";
@@ -3250,30 +4290,30 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     const folders = normalizeFolders(prefs.folders);
     if (action === "new" || action === "update") {
       if (!keys.length && !(prefs.scope === null && folders.length)) {
-        new import_obsidian12.Notice("Please select at least one property.");
+        new import_obsidian16.Notice("Please select at least one property.");
         return;
       }
       if (!folders.length && (prefs.scope === null || sameKeys(keys, [...this.sourceIndex().properties.keys()]))) {
-        new import_obsidian12.Notice(this.inlineView ? "Inline Properties View already exists." : "All properties View already exists.");
+        new import_obsidian16.Notice(this.inlineView ? "Inline Properties View already exists." : "All properties View already exists.");
         return;
       }
     }
     if (action === "new" || action === "rename") {
       if (!name) {
-        new import_obsidian12.Notice("Enter a name for this view.");
+        new import_obsidian16.Notice("Enter a name for this view.");
         this.profileName.focus();
         return;
       }
       if (fold(name) === "all properties") {
-        new import_obsidian12.Notice("All properties View already exists.");
+        new import_obsidian16.Notice("All properties View already exists.");
         return;
       }
       if (fold(name) === "inline properties") {
-        new import_obsidian12.Notice("Inline Properties is a built-in view. Choose another name.");
+        new import_obsidian16.Notice("Inline Properties is a built-in view. Choose another name.");
         return;
       }
       if (prefs.profiles.some((profile) => fold(profile.name) === fold(name) && (action === "new" || profile !== active))) {
-        new import_obsidian12.Notice("A view with that name already exists.");
+        new import_obsidian16.Notice("A view with that name already exists.");
         return;
       }
     }
@@ -3361,7 +4401,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   addFolder() {
     const items = () => folderChoices(this.app.vault.getAllFolders().map((folder) => folder.path), this.folders, excludedFolders(this.plugin.prefs.excludedFolders ?? ""));
     const choose = (path) => this.setFolders([...this.folders, path]);
-    class FolderSuggest extends import_obsidian12.FuzzySuggestModal {
+    class FolderSuggest extends import_obsidian16.FuzzySuggestModal {
       getItems() {
         return items();
       }
@@ -3525,7 +4565,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.expandToggle.setAttribute("aria-label", toggleLabel);
     this.expandToggle.setAttribute("aria-pressed", String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
-    (0, import_obsidian12.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
+    (0, import_obsidian16.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
     const displayedPaths = (this.filter || this.folders.length) && this.query ? searchPaths : valuePaths;
     const n = displayedPaths?.size ?? 0;
     const noteCount = `${n} ${n === 1 ? "note" : "notes"}`;
@@ -3562,10 +4602,10 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       const icon = el2(button, "span", "pv-icon pv-type-icon");
       icon.title = `Type: ${type}`;
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian12.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
+      (0, import_obsidian16.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
     }
     el2(button, "span", "pv-label", node.label);
-    if (isKey && this.effectivePins().has(property.id)) (0, import_obsidian12.setIcon)(el2(button, "span", "pv-pin"), "pin");
+    if (isKey && this.effectivePins().has(property.id)) (0, import_obsidian16.setIcon)(el2(button, "span", "pv-pin"), "pin");
     if (!isKey) {
       const kind = JSON.parse(node.id)[0];
       if (kind !== "string") el2(button, "span", "pv-kind", kind);
@@ -3579,9 +4619,9 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     const limitKey = `notes:${id}`;
     const limit = this.limits.get(limitKey) ?? 100;
     for (const path of paths.slice(0, limit)) {
-      const rowId = JSON.stringify(["note", property.id, id, path]);
+      const rowId2 = JSON.stringify(["note", property.id, id, path]);
       const rendered = this.renderedNotes.get(property.id) ?? [];
-      rendered.push({ row: rowId, path });
+      rendered.push({ row: rowId2, path });
       this.renderedNotes.set(property.id, rendered);
       const row = el2(notes, "div", "pv-note-row");
       if (this.selectedNotes?.property === property.id) {
@@ -3593,11 +4633,11 @@ var PropertiesView = class extends import_obsidian12.ItemView {
         checkbox.addEventListener("click", (event) => {
           if (event.shiftKey) {
             event.preventDefault();
-            this.selectNoteRange(property, rowId, path);
+            this.selectNoteRange(property, rowId2, path);
           }
         });
         checkbox.addEventListener("change", () => {
-          this.noteAnchor = { property: property.id, row: rowId, context: this.noteSelectionContext() };
+          this.noteAnchor = { property: property.id, row: rowId2, context: this.noteSelectionContext() };
           if (!this.selectedNotes) return;
           if (checkbox.checked) this.selectedNotes.paths.add(path);
           else this.selectedNotes.paths.delete(path);
@@ -3607,17 +4647,17 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       const button = this.button(row, "", path, () => {
       });
       button.className = "pv-file";
-      button.dataset.pvFocus = rowId;
+      button.dataset.pvFocus = rowId2;
       button.dataset.notePath = path;
       button.classList.toggle("is-selected", this.selectedNotes?.property === property.id && this.selectedNotes.paths.has(path));
       if (this.canEditNotes(property)) {
         button.setAttribute("aria-haspopup", "menu");
-        this.noteMenuDisposers.push(attachNoteMenu(button, (point) => this.showNoteMenu(point, property, path, rowId)));
+        this.noteMenuDisposers.push(attachNoteMenu(button, (point) => this.showNoteMenu(point, property, path, rowId2)));
         button.addEventListener("keydown", (event) => {
           if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
           event.preventDefault();
           const notes2 = this.renderedNotes.get(property.id) ?? [];
-          const index = notes2.findIndex((note) => note.row === rowId);
+          const index = notes2.findIndex((note) => note.row === rowId2);
           const next = notes2[index + (event.key === "ArrowDown" ? 1 : -1)];
           if (!next) return;
           if (event.shiftKey) {
@@ -3630,7 +4670,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
           Array.from(this.body.querySelectorAll(".pv-file")).find((note) => note.dataset.pvFocus === next.row)?.focus();
         });
       }
-      (0, import_obsidian12.setIcon)(el2(button, "span", "pv-icon"), "file-text");
+      (0, import_obsidian16.setIcon)(el2(button, "span", "pv-icon"), "file-text");
       el2(button, "span", "pv-note-name", path.split("/").pop()?.replace(/\.md$/, "") ?? path);
       const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
       if (folder) el2(button, "small", "pv-note-path", folder);
@@ -3639,7 +4679,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
         if (this.canEditNotes(property)) {
           if (!modifiedOpen && event.shiftKey) {
             event.preventDefault();
-            this.selectNoteRange(property, rowId, path);
+            this.selectNoteRange(property, rowId2, path);
             return;
           }
           if (!modifiedOpen && (event.altKey || usesTouchLayout(this.contentEl) && this.selectedNotes?.property === property.id)) {
@@ -3648,18 +4688,18 @@ var PropertiesView = class extends import_obsidian12.ItemView {
             if (paths2.has(path)) paths2.delete(path);
             else {
               paths2.add(path);
-              this.noteAnchor = { property: property.id, row: rowId, context: this.noteSelectionContext() };
+              this.noteAnchor = { property: property.id, row: rowId2, context: this.noteSelectionContext() };
             }
             this.selectedNotes = { property: property.id, paths: paths2, context: this.noteSelectionContext() };
             this.render();
             return;
           }
-          this.noteAnchor = { property: property.id, row: rowId, context: this.noteSelectionContext() };
+          this.noteAnchor = { property: property.id, row: rowId2, context: this.noteSelectionContext() };
         } else this.noteAnchor = void 0;
         this.selectedNotes = void 0;
         this.render();
         const file = this.app.vault.getAbstractFileByPath(path);
-        if (file instanceof import_obsidian12.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian12.Notice("Unable to open note."));
+        if (file instanceof import_obsidian16.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian16.Notice("Unable to open note."));
       });
     }
     if (paths.length > limit) this.button(notes, "Show more notes", "Show 100 more notes", () => {
@@ -3714,7 +4754,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     });
   }
   showNoteMenu(point, property, path, row) {
-    const menu = new import_obsidian12.Menu();
+    const menu = new import_obsidian16.Menu();
     const selection = this.selectedNotes;
     const paths = selection?.property === property.id && selection.paths.has(path) ? [...selection.paths] : [path];
     menu.addItem((item) => item.setTitle(`Change ${property.label}\u2026`).setIcon("pencil").onClick(() => {
@@ -3740,9 +4780,9 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   async copy(text) {
     try {
       await this.contentEl.ownerDocument.defaultView.navigator.clipboard.writeText(text);
-      new import_obsidian12.Notice("Copied to clipboard.");
+      new import_obsidian16.Notice("Copied to clipboard.");
     } catch {
-      new import_obsidian12.Notice("Clipboard unavailable.");
+      new import_obsidian16.Notice("Clipboard unavailable.");
     }
   }
   async search(property, node) {
@@ -3761,27 +4801,27 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       if (typeof view.setQuery !== "function") {
         created?.detach();
         created = null;
-        new import_obsidian12.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian16.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
       view.setQuery(query);
       created = null;
-      if (this.inlineView) new import_obsidian12.Notice("Inline Search matches text on the same line and can include code examples or other fields.");
+      if (this.inlineView) new import_obsidian16.Notice("Inline Search matches text on the same line and can include code examples or other fields.");
       if (!this.inlineView && node !== property && JSON.parse(node.id)[0] === "empty") {
-        new import_obsidian12.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
+        new import_obsidian16.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
       }
     } catch {
       if (created) {
         created.detach();
         created = null;
-        new import_obsidian12.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian16.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
-      new import_obsidian12.Notice("Could not open Search. Your notes remain available in the property tree.");
+      new import_obsidian16.Notice("Could not open Search. Your notes remain available in the property tree.");
     }
   }
   showMenu(event, property, node) {
-    const menu = new import_obsidian12.Menu();
+    const menu = new import_obsidian16.Menu();
     menu.addItem((item) => item.setTitle("Open in Search").setIcon("search").onClick(() => {
       void this.search(property, node);
     }));
@@ -3790,6 +4830,10 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     }));
     menu.addItem((item) => item.setTitle("Copy matching note links").setIcon("link").onClick(() => {
       void this.copy([...node.paths].sort(natural).map((path) => `[[${path.replace(/\.md$/, "")}]]`).join("\n"));
+    }));
+    if (!this.inlineView) for (const mode of ["add", "remove"]) menu.addItem((item) => item.setTitle(mode === "add" ? "Add properties to these notes\u2026" : "Remove properties from these notes\u2026").setIcon(mode === "add" ? "list-plus" : "list-minus").onClick(() => {
+      const paths = [...node.paths], label = node === property ? property.label : `${property.label} = ${node.label}`;
+      this.plugin.openBulkProperties(mode, () => resolveTreeScope(this.app.vault, paths, label, (path) => this.plugin.includesPath(path), node === property));
     }));
     if (node === property) {
       menu.addItem((item) => item.setTitle("Rename property\u2026").setIcon("pencil").onClick(() => this.inlineView ? this.plugin.editInline(property, "rename-property") : this.plugin.renameProperty(property)));
@@ -3805,7 +4849,7 @@ ${property.label}`;
 ${property.label}`;
         void this.plugin.save();
         this.render();
-        new import_obsidian12.Notice("Property hidden. Restore it in Supercharged Properties settings.");
+        new import_obsidian16.Notice("Property hidden. Restore it in Supercharged Properties settings.");
       }));
     }
     if (this.inlineView) menu.addItem((item) => item.setTitle("Convert to YAML property\u2026").setIcon("arrow-right-left").onClick(() => {
@@ -3832,13 +4876,36 @@ ${property.label}`;
     menu.showAtMouseEvent(event);
   }
 };
-var PreferencesTab = class extends import_obsidian12.PluginSettingTab {
+var PreferencesTab = class extends import_obsidian16.PluginSettingTab {
   constructor(plugin) {
     super(plugin.app, plugin);
     this.plugin = plugin;
   }
   getSettingDefinitions() {
     return [
+      { name: "Include subfolders by default", desc: "Default folder scope for Add and Remove properties.", render: (setting) => {
+        setting.addToggle((toggle) => toggle.setValue(this.plugin.prefs.bulkIncludeSubfolders).onChange(async (value) => {
+          this.plugin.prefs.bulkIncludeSubfolders = value;
+          await this.plugin.save();
+        }));
+      } },
+      { name: "Default when a note already has the property", render: (setting) => {
+        setting.addDropdown((dropdown) => dropdown.addOptions({ skip: "Skip", merge: "Merge into list", overwrite: "Overwrite" }).setValue(this.plugin.prefs.bulkExistsMode).onChange(async (value) => {
+          this.plugin.prefs.bulkExistsMode = bulkSettings({ bulkExistsMode: value }).bulkExistsMode;
+          await this.plugin.save();
+        }));
+      } },
+      { name: "List delimiter", desc: "One character used to separate list items in Add properties.", render: (setting) => {
+        setting.addText((text) => text.setValue(this.plugin.prefs.bulkListDelimiter).onChange(async (value) => {
+          if (!validDelimiter(value)) {
+            text.setValue(this.plugin.prefs.bulkListDelimiter);
+            new import_obsidian16.Notice("Use exactly one character.");
+            return;
+          }
+          this.plugin.prefs.bulkListDelimiter = value;
+          await this.plugin.save();
+        }));
+      } },
       { name: "Show inline properties", desc: "Add a separate Inline Properties view for Dataview-style fields in note bodies. Reads Markdown notes in included folders; no Dataview plugin is required.", render: (setting) => {
         setting.addToggle((toggle) => toggle.setValue(this.plugin.prefs.showInlineProperties).onChange((value) => this.plugin.setShowInlineProperties(value)));
       } },
@@ -3880,7 +4947,7 @@ var PreferencesTab = class extends import_obsidian12.PluginSettingTab {
   display() {
     this.containerEl.replaceChildren();
     for (const definition of this.getSettingDefinitions()) {
-      const setting = new import_obsidian12.Setting(this.containerEl).setName(definition.name);
+      const setting = new import_obsidian16.Setting(this.containerEl).setName(definition.name);
       if (definition.desc) setting.setDesc(definition.desc);
       definition.render(setting);
     }

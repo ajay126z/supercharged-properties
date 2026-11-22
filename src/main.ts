@@ -1,3 +1,9 @@
+import {bulkSettings,validDelimiter,type BulkSettings} from './bulk-properties';
+import {resolveSelectionScope,resolveTreeScope,type BulkScope} from './bulk-scope';
+import {propertyCatalog,valueSuggestions} from './property-catalog';
+import {BulkPropertiesService} from './bulk-properties-service';
+import {BulkPropertiesModal} from './bulk-properties-modal';
+import {registerBulkMenus} from './explorer-menu';
 import { normalizeFolders, sameFolders, folderPaths, folderChoices, intersectPaths } from './folder-filter';
 import { InlineConverter } from './inline-conversion';
 import { InlineConversionModal } from './inline-conversion-dialog';
@@ -29,9 +35,9 @@ import type { PropertyValueKind } from './frontmatter-values';
 import { noteEditError, textOnlyList, type ListItem } from './note-value-operations';
 
 const VIEW = 'supercharged-properties';
-interface Preferences { folders?: string[]; customPinOverrides?: Record<string, boolean>; showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
+interface Preferences extends BulkSettings { folders?: string[]; customPinOverrides?: Record<string, boolean>; showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
 interface ValueFilter { property: string; value: string; propertyLabel: string; label: string }
-const defaults: Preferences = { showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
+const defaults: Preferences = { ...bulkSettings({}), showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 
 export default class SuperchargedPropertiesPlugin extends Plugin {
   index = new PropertyIndex();
@@ -50,6 +56,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     const saved = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded as Record<string, unknown> : {};
     const profiles = loadProfiles(saved?.profiles);
     this.prefs = {
+      ...bulkSettings(saved),
       showInlineProperties: saved.showInlineProperties === true,
       showTooltips: saved.showTooltips !== false,
       inlineViews: loadViewState(saved.inlineViews),
@@ -92,6 +99,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
       if (!checking) void this.inlineEditor.undo().then(result => { new Notice(`Restored ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed.`); this.rebuild(true); });
       return true;
     } });
+    registerBulkMenus(this, (mode, targets) => this.openBulkProperties(mode, recursive => resolveSelectionScope(targets, recursive, path => this.includesPath(path))));
     this.addSettingTab(new PreferencesTab(this));
     this.registerEvent(this.app.metadataCache.on('changed', (file, _data, cache) => {
       this.updateIndexedNote(file.path, cache.frontmatter);
@@ -198,6 +206,18 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     new Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 10000);
     for (const failure of result.failures) new Notice(`${failure.path}: ${failure.message}`, 10000);
     this.rebuild();
+  }
+
+  openBulkProperties(mode:'add'|'remove', scope:(recursive:boolean)=>BulkScope):void {
+    const fileAt=(path:string)=>{const file=this.app.vault.getAbstractFileByPath(path);return file instanceof TFile&&file.extension.toLowerCase()==='md'?file:undefined;};
+    const frontmatter=(path:string)=>{const file=fileAt(path);if(!file)return undefined;const cache=this.app.metadataCache.getFileCache(file);return cache?cache.frontmatter??{}:undefined;};
+    const configuredType=(key:string)=>this.typeResolver.configuredTypeFor(key);
+    const service=new BulkPropertiesService({eligible:path=>!!fileAt(path)&&this.includesPath(path),frontmatter,configuredType,process:async(path,update)=>{const file=fileAt(path);if(!file)throw new Error('Note not found.');await this.app.fileManager.processFrontMatter(file,update);}},this.valueEditor);
+    new BulkPropertiesModal(this.app,{mode,settings:this.prefs,scope,
+      catalog:paths=>propertyCatalog(this.index,paths,key=>configuredType(key)?noteEditType({id:fold(key)},this.typeResolver):undefined,frontmatter),
+      values:(key,paths)=>valueSuggestions(this.index,key,paths),preview:(paths,request)=>service.preview(paths,request),apply:(plan,progress)=>service.apply(plan,progress),
+      undo:()=>this.valueEditor.undo(),canUndo:()=>this.valueEditor.canUndo()
+    }).open();
   }
 
   convertInline(property: PropertyNode, paths: string[]): void {
@@ -1114,6 +1134,10 @@ export class PropertiesView extends ItemView {
     menu.addItem(item => item.setTitle('Copy matching note links').setIcon('link').onClick(() => {
       void this.copy([...node.paths].sort(natural).map(path => `[[${path.replace(/\.md$/, '')}]]`).join('\n'));
     }));
+    if (!this.inlineView) for (const mode of ['add','remove'] as const) menu.addItem(item => item.setTitle(mode==='add'?'Add properties to these notes…':'Remove properties from these notes…').setIcon(mode==='add'?'list-plus':'list-minus').onClick(()=>{
+      const paths=[...node.paths],label=node===property?property.label:`${property.label} = ${node.label}`;
+      this.plugin.openBulkProperties(mode,()=>resolveTreeScope(this.app.vault,paths,label,path=>this.plugin.includesPath(path),node===property));
+    }));
     if (node === property) {
       menu.addItem(item => item.setTitle('Rename property…').setIcon('pencil').onClick(() => this.inlineView ? this.plugin.editInline(property, 'rename-property') : this.plugin.renameProperty(property)));
       menu.addItem(item => item.setTitle('Delete property…').setIcon('trash-2').onClick(() => this.inlineView ? this.plugin.editInline(property, 'delete-property') : this.plugin.deleteProperty(property)));
@@ -1158,6 +1182,15 @@ class PreferencesTab extends PluginSettingTab {
   getSettingDefinitions() {
     // New hosts index these definitions; display() keeps compatibility with Obsidian 1.7.2.
     return [
+      { name: 'Include subfolders by default', desc: 'Default folder scope for Add and Remove properties.', render: (setting: Setting) => {
+        setting.addToggle(toggle=>toggle.setValue(this.plugin.prefs.bulkIncludeSubfolders).onChange(async value=>{this.plugin.prefs.bulkIncludeSubfolders=value;await this.plugin.save();}));
+      } },
+      { name: 'Default when a note already has the property', render: (setting: Setting) => {
+        setting.addDropdown(dropdown=>dropdown.addOptions({skip:'Skip',merge:'Merge into list',overwrite:'Overwrite'}).setValue(this.plugin.prefs.bulkExistsMode).onChange(async value=>{this.plugin.prefs.bulkExistsMode=bulkSettings({bulkExistsMode:value}).bulkExistsMode;await this.plugin.save();}));
+      } },
+      { name: 'List delimiter', desc: 'One character used to separate list items in Add properties.', render: (setting: Setting) => {
+        setting.addText(text=>text.setValue(this.plugin.prefs.bulkListDelimiter).onChange(async value=>{if(!validDelimiter(value)){text.setValue(this.plugin.prefs.bulkListDelimiter);new Notice('Use exactly one character.');return;}this.plugin.prefs.bulkListDelimiter=value;await this.plugin.save();}));
+      } },
       { name: 'Show inline properties', desc: 'Add a separate Inline Properties view for Dataview-style fields in note bodies. Reads Markdown notes in included folders; no Dataview plugin is required.', render: (setting: Setting) => {
         setting.addToggle(toggle => toggle.setValue(this.plugin.prefs.showInlineProperties).onChange(value => this.plugin.setShowInlineProperties(value)));
       } },

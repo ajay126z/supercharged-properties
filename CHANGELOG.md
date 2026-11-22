@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Separate Add and Remove properties workflows for explorer folders, multi-selections, and scoped YAML property/value rows.
+- Compact typed rows, native name/value suggestions, existing-property picker, in-scope counts, and removal selection with filtering.
+- Skip, Merge into list, and Overwrite defaults; configurable recursion and list delimiter; per-note previews with progressive disclosure.
+- Plan-based sequential writes, progress, per-key drift checks, and retryable shared session undo.
+
 ## [1.5.1] - 2026-11-21
 
 ### Fixed
