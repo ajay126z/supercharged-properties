@@ -1200,7 +1200,7 @@ function applyTooltips(root, enabled) {
 }
 
 // src/main.ts
-var import_obsidian12 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 
 // src/sorting.ts
 var sortOptions = {
@@ -2590,10 +2590,294 @@ function attachNoteMenu(element, open) {
   };
 }
 
+// src/explorer-counts/explorer-counts.ts
+var import_obsidian12 = require("obsidian");
+
+// src/explorer-counts/counting.ts
+var ROOT_PATH = "/";
+function folderOf(filePath) {
+  const index = filePath.lastIndexOf("/");
+  return index === -1 ? ROOT_PATH : filePath.slice(0, index);
+}
+function parentFolder(folderPath) {
+  if (folderPath === ROOT_PATH) return null;
+  const index = folderPath.lastIndexOf("/");
+  return index === -1 ? ROOT_PATH : folderPath.slice(0, index);
+}
+function countByFolder(filePaths) {
+  const counts = /* @__PURE__ */ new Map();
+  const bump = (folder, field) => {
+    const entry = counts.get(folder) ?? { direct: 0, total: 0 };
+    entry[field] += 1;
+    counts.set(folder, entry);
+  };
+  for (const path of filePaths) {
+    const folder = folderOf(path);
+    bump(folder, "direct");
+    for (let current = folder; current !== null; current = parentFolder(current)) {
+      bump(current, "total");
+    }
+  }
+  return counts;
+}
+function formatCount(counts, mode, hideZero) {
+  const value = counts ?? { direct: 0, total: 0 };
+  const shown = mode === "direct" ? value.direct : value.total;
+  if (hideZero && shown === 0) return null;
+  if (mode === "direct") return String(value.direct);
+  if (mode === "both") return `${value.direct} \xB7 ${value.total}`;
+  return String(value.total);
+}
+function describeCount(counts, noun) {
+  const value = counts ?? { direct: 0, total: 0 };
+  const words = (n) => `${n} ${n === 1 ? noun.singular : noun.plural}`;
+  return value.total === value.direct ? words(value.total) : `${words(value.total)}, ${value.direct} directly in this folder`;
+}
+
+// src/explorer-counts/explorer-counts.ts
+var BADGE_CLASS = "pv-folder-count";
+var EXPLORER_VIEW_TYPE = "file-explorer";
+var FOLDER_TITLE_SELECTOR = ".nav-folder-title[data-path]";
+var ExplorerCounts = class {
+  constructor(app, getSettings, options = {}) {
+    this.app = app;
+    this.getSettings = getSettings;
+    this.options = options;
+    this.running = false;
+    this.failed = false;
+    this.counts = /* @__PURE__ */ new Map();
+    this.observers = /* @__PURE__ */ new Map();
+    this.vaultRefs = [];
+    this.workspaceRefs = [];
+    this.scheduleRecount = (0, import_obsidian12.debounce)(() => this.guard(() => {
+      this.rebuild();
+      this.render();
+    }), 250, true);
+    this.scheduleRender = (0, import_obsidian12.debounce)(() => this.guard(() => this.render()), 100, true);
+  }
+  /** Start listening and decorating. Safe to call repeatedly. */
+  start() {
+    if (this.running || this.failed) return;
+    this.running = true;
+    this.app.workspace.onLayoutReady(() => {
+      if (!this.running) return;
+      this.guard(() => {
+        const { vault, workspace } = this.app;
+        this.vaultRefs.push(
+          vault.on("create", () => this.scheduleRecount()),
+          vault.on("delete", () => this.scheduleRecount()),
+          vault.on("rename", () => this.scheduleRecount())
+        );
+        this.workspaceRefs.push(
+          workspace.on("layout-change", () => {
+            this.attach();
+            this.scheduleRender();
+          })
+        );
+        this.rebuild();
+        this.attach();
+        this.render();
+      });
+    });
+  }
+  /** Stop everything and remove every badge. Safe to call repeatedly. */
+  stop() {
+    this.running = false;
+    this.scheduleRecount.cancel();
+    this.scheduleRender.cancel();
+    for (const ref of this.vaultRefs) this.app.vault.offref(ref);
+    for (const ref of this.workspaceRefs) this.app.workspace.offref(ref);
+    this.vaultRefs = [];
+    this.workspaceRefs = [];
+    for (const [container, observer] of this.observers) {
+      observer.disconnect();
+      this.removeBadges(container);
+    }
+    this.observers.clear();
+    for (const leaf of this.app.workspace.getLeavesOfType(EXPLORER_VIEW_TYPE)) {
+      this.removeBadges(leaf.view.containerEl);
+    }
+    this.counts.clear();
+  }
+  /** Call after the settings change: starts, stops, or refreshes to match `enabled`. */
+  apply() {
+    const enabled = this.getSettings().enabled;
+    if (!enabled) this.failed = false;
+    if (enabled && !this.running) this.start();
+    else if (!enabled && this.running) this.stop();
+    else if (this.running) this.guard(() => {
+      this.rebuild();
+      this.render();
+    });
+  }
+  rebuild() {
+    const settings = this.getSettings();
+    const { vault } = this.app;
+    const files = settings.countAllFiles ? vault.getFiles() : vault.getMarkdownFiles();
+    const skip = settings.skipExcludedFolders ? this.options.isExcluded : void 0;
+    const paths = [];
+    for (const file of files) {
+      if (skip && skip(file.path)) continue;
+      paths.push(file.path);
+    }
+    this.counts = countByFolder(paths);
+  }
+  /** Observe every File explorer leaf (including ones in popout windows). */
+  attach() {
+    const containers = /* @__PURE__ */ new Set();
+    for (const leaf of this.app.workspace.getLeavesOfType(EXPLORER_VIEW_TYPE)) {
+      containers.add(leaf.view.containerEl);
+    }
+    for (const [container, observer] of this.observers) {
+      if (containers.has(container)) continue;
+      observer.disconnect();
+      this.observers.delete(container);
+    }
+    for (const container of containers) {
+      if (this.observers.has(container)) continue;
+      const observer = new MutationObserver(() => this.scheduleRender());
+      observer.observe(container, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["data-path"]
+      });
+      this.observers.set(container, observer);
+    }
+  }
+  render() {
+    const settings = this.getSettings();
+    const noun = settings.countAllFiles ? { singular: "file", plural: "files" } : { singular: "note", plural: "notes" };
+    for (const [container, observer] of this.observers) {
+      if (container.querySelector(".nav-folder") && !container.querySelector(FOLDER_TITLE_SELECTOR)) {
+        throw new Error("File explorer folder rows not found");
+      }
+      container.querySelectorAll(FOLDER_TITLE_SELECTOR).forEach((title) => {
+        const path = title.getAttribute("data-path") ?? "";
+        const counts = this.counts.get(path);
+        const text = formatCount(counts, settings.mode, settings.hideZero);
+        let badge = title.querySelector(`:scope > .${BADGE_CLASS}`);
+        if (text === null) {
+          badge?.remove();
+          return;
+        }
+        if (!badge) {
+          badge = title.createSpan({ cls: BADGE_CLASS });
+          badge.setAttribute("aria-hidden", "true");
+        }
+        if (badge.textContent !== text) badge.textContent = text;
+        const tooltip = describeCount(counts, noun);
+        if (badge.getAttribute("title") !== tooltip) badge.setAttribute("title", tooltip);
+      });
+      observer.takeRecords();
+    }
+  }
+  removeBadges(container) {
+    container.querySelectorAll(`.${BADGE_CLASS}`).forEach((element) => element.remove());
+  }
+  guard(action) {
+    try {
+      action();
+    } catch (error) {
+      this.fail(error);
+    }
+  }
+  fail(error) {
+    if (this.failed) return;
+    this.failed = true;
+    console.error("[Supercharged Properties] Folder counts stopped after an error", error);
+    this.stop();
+    new import_obsidian12.Notice("Folder counts were turned off for this session because the File explorer could not be updated.");
+    this.options.onFailure?.(error);
+  }
+};
+function explorerCountsSettingDefinitions(get, update) {
+  return [
+    {
+      name: "Show note counts in the File explorer",
+      desc: "Optional. Adds a count next to each folder in Obsidian's built-in File explorer. Off by default; the options below apply only when this is on.",
+      render: (setting) => {
+        setting.addToggle(
+          (toggle) => toggle.setValue(get().enabled).onChange(async (value) => {
+            await update({ enabled: value });
+          })
+        );
+      }
+    },
+    {
+      name: "File explorer count to show",
+      render: (setting) => {
+        setting.addDropdown(
+          (dropdown) => dropdown.addOptions({
+            total: "Notes including subfolders",
+            direct: "Notes directly in the folder",
+            both: "Both (direct \xB7 total)"
+          }).setValue(get().mode).onChange(async (value) => {
+            await update({ mode: value });
+          })
+        );
+      }
+    },
+    {
+      name: "Hide zero counts in the File explorer",
+      render: (setting) => {
+        setting.addToggle(
+          (toggle) => toggle.setValue(get().hideZero).onChange(async (value) => {
+            await update({ hideZero: value });
+          })
+        );
+      }
+    },
+    {
+      name: "Count all files in the File explorer",
+      desc: "Include attachments and other file types, not only notes.",
+      render: (setting) => {
+        setting.addToggle(
+          (toggle) => toggle.setValue(get().countAllFiles).onChange(async (value) => {
+            await update({ countAllFiles: value });
+          })
+        );
+      }
+    },
+    {
+      name: "Skip excluded folders in the File explorer counts",
+      desc: "Do not count files inside this plugin's Excluded folders.",
+      render: (setting) => {
+        setting.addToggle(
+          (toggle) => toggle.setValue(get().skipExcludedFolders).onChange(async (value) => {
+            await update({ skipExcludedFolders: value });
+          })
+        );
+      }
+    }
+  ];
+}
+
+// src/explorer-counts/settings.ts
+var DEFAULT_EXPLORER_COUNTS = {
+  enabled: false,
+  mode: "total",
+  hideZero: true,
+  countAllFiles: false,
+  skipExcludedFolders: false
+};
+function normalizeExplorerCounts(raw) {
+  const source = raw !== null && typeof raw === "object" ? raw : {};
+  const bool = (value, fallback) => typeof value === "boolean" ? value : fallback;
+  const mode = source.mode === "direct" || source.mode === "both" || source.mode === "total" ? source.mode : DEFAULT_EXPLORER_COUNTS.mode;
+  return {
+    enabled: bool(source.enabled, DEFAULT_EXPLORER_COUNTS.enabled),
+    mode,
+    hideZero: bool(source.hideZero, DEFAULT_EXPLORER_COUNTS.hideZero),
+    countAllFiles: bool(source.countAllFiles, DEFAULT_EXPLORER_COUNTS.countAllFiles),
+    skipExcludedFolders: bool(source.skipExcludedFolders, DEFAULT_EXPLORER_COUNTS.skipExcludedFolders)
+  };
+}
+
 // src/main.ts
 var VIEW = "supercharged-properties";
 var defaults = { showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: "name", hidden: "", excludedFolders: "", expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
-var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
+var SuperchargedPropertiesPlugin = class extends import_obsidian13.Plugin {
   constructor() {
     super(...arguments);
     this.index = new PropertyIndex();
@@ -2610,6 +2894,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       inlineViews: loadViewState(saved.inlineViews),
       profiles,
       ...saved.folders !== void 0 ? { folders: normalizeFolders(saved.folders) } : {},
+      ...saved.explorerCounts !== void 0 ? { explorerCounts: normalizeExplorerCounts(saved.explorerCounts) } : {},
       customPinOverrides: loadPinOverrides(saved.customPinOverrides),
       activeProfile: typeof saved.activeProfile === "string" && profiles.some((profile) => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v) => typeof v === "string") : null,
@@ -2651,7 +2936,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
     this.addCommand({ id: "undo-inline-edit", name: "Undo last inline property edit", checkCallback: (checking) => {
       if (!this.inlineEditor.canUndo()) return false;
       if (!checking) void this.inlineEditor.undo().then((result) => {
-        new import_obsidian12.Notice(`Restored ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed.`);
+        new import_obsidian13.Notice(`Restored ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed.`);
         this.rebuild(true);
       });
       return true;
@@ -2664,7 +2949,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
     }));
     this.registerEvent(this.app.metadataCache.on("resolved", () => this.scheduleRebuild()));
     this.registerEvent(this.app.vault.on("create", (file) => {
-      if (file instanceof import_obsidian12.TFile && file.extension === "md" && this.includesPath(file.path)) {
+      if (file instanceof import_obsidian13.TFile && file.extension === "md" && this.includesPath(file.path)) {
         this.inline.update(file);
         const cache = this.app.metadataCache.getFileCache(file);
         if (cache) {
@@ -2674,17 +2959,17 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       }
     }));
     this.registerEvent(this.app.vault.on("modify", (file) => {
-      if (file instanceof import_obsidian12.TFile) this.inline.update(file);
+      if (file instanceof import_obsidian13.TFile) this.inline.update(file);
     }));
     this.registerEvent(this.app.vault.on("delete", (file) => {
-      if (file instanceof import_obsidian12.TFile) {
+      if (file instanceof import_obsidian13.TFile) {
         this.index.remove(file.path);
         this.inline.remove(file.path);
         this.refresh();
       } else this.scheduleRebuild();
     }));
     this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
-      if (file instanceof import_obsidian12.TFile) {
+      if (file instanceof import_obsidian13.TFile) {
         this.index.remove(oldPath);
         this.inline.remove(oldPath);
         this.inline.update(file);
@@ -2697,6 +2982,18 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       window.clearTimeout(this.timer);
       window.clearTimeout(this.rebuildTimer);
     });
+    this.explorerCounts = new ExplorerCounts(this.app, () => this.explorerCountsSettings(), {
+      isExcluded: (path) => !this.includesPath(path)
+    });
+    this.register(() => this.explorerCounts.stop());
+    this.addCommand({
+      id: "toggle-folder-counts",
+      name: "Toggle folder counts",
+      callback: () => {
+        void this.updateExplorerCounts({ enabled: !this.explorerCountsSettings().enabled });
+      }
+    });
+    this.explorerCounts.apply();
     this.app.workspace.onLayoutReady(() => this.rebuild());
   }
   includesPath(path) {
@@ -2715,6 +3012,14 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
     this.prefs.showInlineProperties = enabled;
     this.inline.setEnabled(enabled);
     if (enabled) this.inline.sync(this.app.vault.getMarkdownFiles());
+    await this.save();
+  }
+  explorerCountsSettings() {
+    return this.prefs.explorerCounts ?? DEFAULT_EXPLORER_COUNTS;
+  }
+  async updateExplorerCounts(patch) {
+    this.prefs.explorerCounts = { ...this.explorerCountsSettings(), ...patch };
+    this.explorerCounts.apply();
     await this.save();
   }
   scheduleRebuild() {
@@ -2745,21 +3050,21 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
   save() {
     const snapshot = JSON.parse(JSON.stringify(this.prefs));
     this.saveQueue = this.saveQueue.then(() => this.saveData(snapshot)).catch(() => {
-      new import_obsidian12.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
+      new import_obsidian13.Notice("Could not save Supercharged Properties settings. Check vault permissions and available storage.");
     });
     this.refresh();
     return this.saveQueue;
   }
   async applyValueEdit(preview, verb = "Updated") {
     const result = await this.valueEditor.apply(preview);
-    new import_obsidian12.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
-    for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian13.Notice(`${verb} ${result.updated} notes; skipped ${result.unchanged} changed notes; ${result.failures.length} failed. Undo last property edit is available in the command palette.`, 1e4);
+    for (const failure of result.failures) new import_obsidian13.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
   }
   async undoValueEdit() {
     const result = await this.valueEditor.undo();
-    new import_obsidian12.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
-    for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+    new import_obsidian13.Notice(`Restored ${result.restored} notes; skipped ${result.skipped} later edits; ${result.failures.length} failed.`, 1e4);
+    for (const failure of result.failures) new import_obsidian13.Notice(`${failure.path}: ${failure.message}`, 1e4);
     this.rebuild();
   }
   convertInline(property, paths) {
@@ -2769,7 +3074,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       preview: (options, selected) => this.inlineConverter.preview(options, selected),
       apply: async (plan) => {
         const result = await this.inlineConverter.apply(plan);
-        new import_obsidian12.Notice(`Converted ${result.updated} notes; skipped ${result.skipped}; ${result.failures.length} failed.${result.failures.length ? " " + result.failures.join("\n") : ""}`);
+        new import_obsidian13.Notice(`Converted ${result.updated} notes; skipped ${result.skipped}; ${result.failures.length} failed.${result.failures.length ? " " + result.failures.join("\n") : ""}`);
         this.rebuild(true);
       }
     }).open();
@@ -2789,7 +3094,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
           Object.assign(state, { scope: prefs.scope, pinned: prefs.pinned, hidden: prefs.hidden });
           await this.save();
         }
-        new import_obsidian12.Notice(`Updated ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed. Use Undo last inline property edit to restore the last batch.`, 1e4);
+        new import_obsidian13.Notice(`Updated ${result.updated} notes; skipped ${result.skipped}; ${result.failed} failed. Use Undo last inline property edit to restore the last batch.`, 1e4);
         this.rebuild(true);
       }
     }).open();
@@ -2804,8 +3109,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
           includeRenamedProperty(this.prefs, preview.source, preview.target);
           await this.save();
         }
-        new import_obsidian12.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian13.Notice(`Renamed in ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian13.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
       }
     }).open();
@@ -2816,8 +3121,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       preview: () => this.valueEditor.previewPropertyDelete(property.id, property.paths),
       apply: async (preview) => {
         const result = await this.valueEditor.apply(preview);
-        new import_obsidian12.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
-        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian13.Notice(`Deleted ${property.label} from ${result.updated} notes; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Use Undo last property edit to restore the last batch.`, 1e4);
+        for (const failure of result.failures) new import_obsidian13.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
       }
     }).open();
@@ -2846,8 +3151,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
         await this.typeResolver.load();
         const result = await this.valueEditor.apply(preview);
         const action = preview.changes.some((change) => change.remove) ? "Removed property from" : "Updated";
-        new import_obsidian12.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
-        for (const failure of result.failures) new import_obsidian12.Notice(`${failure.path}: ${failure.message}`, 1e4);
+        new import_obsidian13.Notice(`${action} ${result.updated} notes; ${preview.unchanged} already matched; skipped ${preview.conflicts.length + result.unchanged}; ${result.failures.length} failed. Undo last property edit is available for successful changes.`, 1e4);
+        for (const failure of result.failures) new import_obsidian13.Notice(`${failure.path}: ${failure.message}`, 1e4);
         this.rebuild();
         complete();
       }
@@ -2864,7 +3169,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
       preview: (edit) => edit.mode === "split" && !supportsTextSplit(property, this.typeResolver) ? { total: 0, changes: [] } : this.valueEditor.preview(edit, node.paths),
       apply: (preview) => {
         if (mode === "split" && !supportsTextSplit(property, this.typeResolver)) {
-          new import_obsidian12.Notice("Split into list is only available for text properties.");
+          new import_obsidian13.Notice("Split into list is only available for text properties.");
           return Promise.resolve();
         }
         return this.applyValueEdit(preview, mode === "delete" ? "Deleted from" : "Updated");
@@ -2888,7 +3193,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian12.Plugin {
 function el2(parent, tag, cls = "", text = "") {
   return parent.createEl(tag, { cls, text });
 }
-var PropertiesView = class extends import_obsidian12.ItemView {
+var PropertiesView = class extends import_obsidian13.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -2937,7 +3242,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.searchHeader = el2(toolbar, "div", "pv-search-header");
     this.searchHeader.hidden = true;
     const search = el2(this.searchHeader, "div", "pv-search");
-    (0, import_obsidian12.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian13.setIcon)(el2(search, "span", "pv-icon"), "search");
     this.input = el2(search, "input", "pv-filter");
     this.input.type = "search";
     this.input.placeholder = "Find properties, values, notes\u2026";
@@ -3063,7 +3368,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     }
   }
   openSearchScopeMenu() {
-    const menu = new import_obsidian12.Menu();
+    const menu = new import_obsidian13.Menu();
     for (const [value, label] of [["any", "Search everything"], ["key", "Property names"], ["value", "Values"], ["note", "Note names / paths"]]) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.searchScope === value).onClick(() => {
         this.searchScope = value;
@@ -3088,11 +3393,11 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   iconButton(parent, title, icon, run) {
     const button = this.button(parent, "", title, run);
     button.className = "pv-icon-button";
-    (0, import_obsidian12.setIcon)(button, icon);
+    (0, import_obsidian13.setIcon)(button, icon);
     return button;
   }
   openSortMenu() {
-    const menu = new import_obsidian12.Menu();
+    const menu = new import_obsidian13.Menu();
     for (const [value, label] of Object.entries(sortOptions)) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.plugin.prefs.sort === value).onClick(() => {
         this.plugin.prefs.sort = sortOrder(value);
@@ -3179,7 +3484,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.folderRow = el2(this.scopePanel, "div", "pv-folder-row");
     this.renderFolders();
     const search = el2(this.scopePanel, "div", "pv-search pv-picker-search");
-    (0, import_obsidian12.setIcon)(el2(search, "span", "pv-icon"), "search");
+    (0, import_obsidian13.setIcon)(el2(search, "span", "pv-icon"), "search");
     const input = el2(search, "input", "pv-filter");
     input.type = "search";
     input.placeholder = "Find a property\u2026";
@@ -3250,30 +3555,30 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     const folders = normalizeFolders(prefs.folders);
     if (action === "new" || action === "update") {
       if (!keys.length && !(prefs.scope === null && folders.length)) {
-        new import_obsidian12.Notice("Please select at least one property.");
+        new import_obsidian13.Notice("Please select at least one property.");
         return;
       }
       if (!folders.length && (prefs.scope === null || sameKeys(keys, [...this.sourceIndex().properties.keys()]))) {
-        new import_obsidian12.Notice(this.inlineView ? "Inline Properties View already exists." : "All properties View already exists.");
+        new import_obsidian13.Notice(this.inlineView ? "Inline Properties View already exists." : "All properties View already exists.");
         return;
       }
     }
     if (action === "new" || action === "rename") {
       if (!name) {
-        new import_obsidian12.Notice("Enter a name for this view.");
+        new import_obsidian13.Notice("Enter a name for this view.");
         this.profileName.focus();
         return;
       }
       if (fold(name) === "all properties") {
-        new import_obsidian12.Notice("All properties View already exists.");
+        new import_obsidian13.Notice("All properties View already exists.");
         return;
       }
       if (fold(name) === "inline properties") {
-        new import_obsidian12.Notice("Inline Properties is a built-in view. Choose another name.");
+        new import_obsidian13.Notice("Inline Properties is a built-in view. Choose another name.");
         return;
       }
       if (prefs.profiles.some((profile) => fold(profile.name) === fold(name) && (action === "new" || profile !== active))) {
-        new import_obsidian12.Notice("A view with that name already exists.");
+        new import_obsidian13.Notice("A view with that name already exists.");
         return;
       }
     }
@@ -3361,7 +3666,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   addFolder() {
     const items = () => folderChoices(this.app.vault.getAllFolders().map((folder) => folder.path), this.folders, excludedFolders(this.plugin.prefs.excludedFolders ?? ""));
     const choose = (path) => this.setFolders([...this.folders, path]);
-    class FolderSuggest extends import_obsidian12.FuzzySuggestModal {
+    class FolderSuggest extends import_obsidian13.FuzzySuggestModal {
       getItems() {
         return items();
       }
@@ -3525,7 +3830,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     this.expandToggle.setAttribute("aria-label", toggleLabel);
     this.expandToggle.setAttribute("aria-pressed", String(this.allExpanded));
     this.expandToggle.disabled = this.visibleKeys.length === 0;
-    (0, import_obsidian12.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
+    (0, import_obsidian13.setIcon)(this.expandToggle, this.allExpanded ? "fold-vertical" : "list-tree");
     const displayedPaths = (this.filter || this.folders.length) && this.query ? searchPaths : valuePaths;
     const n = displayedPaths?.size ?? 0;
     const noteCount = `${n} ${n === 1 ? "note" : "notes"}`;
@@ -3562,10 +3867,10 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       const icon = el2(button, "span", "pv-icon pv-type-icon");
       icon.title = `Type: ${type}`;
       icon.setAttribute("aria-hidden", "true");
-      (0, import_obsidian12.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
+      (0, import_obsidian13.setIcon)(icon, this.inlineView ? "text" : this.plugin.typeResolver.iconFor(property));
     }
     el2(button, "span", "pv-label", node.label);
-    if (isKey && this.effectivePins().has(property.id)) (0, import_obsidian12.setIcon)(el2(button, "span", "pv-pin"), "pin");
+    if (isKey && this.effectivePins().has(property.id)) (0, import_obsidian13.setIcon)(el2(button, "span", "pv-pin"), "pin");
     if (!isKey) {
       const kind = JSON.parse(node.id)[0];
       if (kind !== "string") el2(button, "span", "pv-kind", kind);
@@ -3630,7 +3935,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
           Array.from(this.body.querySelectorAll(".pv-file")).find((note) => note.dataset.pvFocus === next.row)?.focus();
         });
       }
-      (0, import_obsidian12.setIcon)(el2(button, "span", "pv-icon"), "file-text");
+      (0, import_obsidian13.setIcon)(el2(button, "span", "pv-icon"), "file-text");
       el2(button, "span", "pv-note-name", path.split("/").pop()?.replace(/\.md$/, "") ?? path);
       const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
       if (folder) el2(button, "small", "pv-note-path", folder);
@@ -3659,7 +3964,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
         this.selectedNotes = void 0;
         this.render();
         const file = this.app.vault.getAbstractFileByPath(path);
-        if (file instanceof import_obsidian12.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian12.Notice("Unable to open note."));
+        if (file instanceof import_obsidian13.TFile) void this.app.workspace.getLeaf(event.ctrlKey || event.metaKey).openFile(file).catch(() => new import_obsidian13.Notice("Unable to open note."));
       });
     }
     if (paths.length > limit) this.button(notes, "Show more notes", "Show 100 more notes", () => {
@@ -3714,7 +4019,7 @@ var PropertiesView = class extends import_obsidian12.ItemView {
     });
   }
   showNoteMenu(point, property, path, row) {
-    const menu = new import_obsidian12.Menu();
+    const menu = new import_obsidian13.Menu();
     const selection = this.selectedNotes;
     const paths = selection?.property === property.id && selection.paths.has(path) ? [...selection.paths] : [path];
     menu.addItem((item) => item.setTitle(`Change ${property.label}\u2026`).setIcon("pencil").onClick(() => {
@@ -3740,9 +4045,9 @@ var PropertiesView = class extends import_obsidian12.ItemView {
   async copy(text) {
     try {
       await this.contentEl.ownerDocument.defaultView.navigator.clipboard.writeText(text);
-      new import_obsidian12.Notice("Copied to clipboard.");
+      new import_obsidian13.Notice("Copied to clipboard.");
     } catch {
-      new import_obsidian12.Notice("Clipboard unavailable.");
+      new import_obsidian13.Notice("Clipboard unavailable.");
     }
   }
   async search(property, node) {
@@ -3761,27 +4066,27 @@ var PropertiesView = class extends import_obsidian12.ItemView {
       if (typeof view.setQuery !== "function") {
         created?.detach();
         created = null;
-        new import_obsidian12.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian13.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
       view.setQuery(query);
       created = null;
-      if (this.inlineView) new import_obsidian12.Notice("Inline Search matches text on the same line and can include code examples or other fields.");
+      if (this.inlineView) new import_obsidian13.Notice("Inline Search matches text on the same line and can include code examples or other fields.");
       if (!this.inlineView && node !== property && JSON.parse(node.id)[0] === "empty") {
-        new import_obsidian12.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
+        new import_obsidian13.Notice("Search matches null properties; the local empty row also includes blank strings and empty lists.");
       }
     } catch {
       if (created) {
         created.detach();
         created = null;
-        new import_obsidian12.Notice("Enable the Search core plugin to use Open in Search.");
+        new import_obsidian13.Notice("Enable the Search core plugin to use Open in Search.");
         return;
       }
-      new import_obsidian12.Notice("Could not open Search. Your notes remain available in the property tree.");
+      new import_obsidian13.Notice("Could not open Search. Your notes remain available in the property tree.");
     }
   }
   showMenu(event, property, node) {
-    const menu = new import_obsidian12.Menu();
+    const menu = new import_obsidian13.Menu();
     menu.addItem((item) => item.setTitle("Open in Search").setIcon("search").onClick(() => {
       void this.search(property, node);
     }));
@@ -3805,7 +4110,7 @@ ${property.label}`;
 ${property.label}`;
         void this.plugin.save();
         this.render();
-        new import_obsidian12.Notice("Property hidden. Restore it in Supercharged Properties settings.");
+        new import_obsidian13.Notice("Property hidden. Restore it in Supercharged Properties settings.");
       }));
     }
     if (this.inlineView) menu.addItem((item) => item.setTitle("Convert to YAML property\u2026").setIcon("arrow-right-left").onClick(() => {
@@ -3832,7 +4137,7 @@ ${property.label}`;
     menu.showAtMouseEvent(event);
   }
 };
-var PreferencesTab = class extends import_obsidian12.PluginSettingTab {
+var PreferencesTab = class extends import_obsidian13.PluginSettingTab {
   constructor(plugin) {
     super(plugin.app, plugin);
     this.plugin = plugin;
@@ -3874,13 +4179,17 @@ var PreferencesTab = class extends import_obsidian12.PluginSettingTab {
           this.plugin.prefs.hidden = value;
           await this.plugin.save();
         }));
-      } }
+      } },
+      ...explorerCountsSettingDefinitions(
+        () => this.plugin.explorerCountsSettings(),
+        (patch) => this.plugin.updateExplorerCounts(patch)
+      )
     ];
   }
   display() {
     this.containerEl.replaceChildren();
     for (const definition of this.getSettingDefinitions()) {
-      const setting = new import_obsidian12.Setting(this.containerEl).setName(definition.name);
+      const setting = new import_obsidian13.Setting(this.containerEl).setName(definition.name);
       if (definition.desc) setting.setDesc(definition.desc);
       definition.render(setting);
     }

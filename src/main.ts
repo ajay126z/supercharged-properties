@@ -28,8 +28,12 @@ import { isWikilink, type ValueEditMode, type ValueEditRequest } from './value-o
 import type { PropertyValueKind } from './frontmatter-values';
 import { noteEditError, textOnlyList, type ListItem } from './note-value-operations';
 
+// Folder Explorer Count
+import { ExplorerCounts, explorerCountsSettingDefinitions } from './explorer-counts/explorer-counts';
+import { DEFAULT_EXPLORER_COUNTS, normalizeExplorerCounts, type ExplorerCountsSettings } from './explorer-counts/settings';
+
 const VIEW = 'supercharged-properties';
-interface Preferences { folders?: string[]; customPinOverrides?: Record<string, boolean>; showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
+interface Preferences { explorerCounts?: ExplorerCountsSettings; folders?: string[]; customPinOverrides?: Record<string, boolean>; showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
 interface ValueFilter { property: string; value: string; propertyLabel: string; label: string }
 const defaults: Preferences = { showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 
@@ -41,6 +45,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
   prefs: Preferences = { ...defaults, inlineViews: loadViewState(null) };
   typeResolver!: PropertyTypeResolver;
   valueEditor!: ValueEditor;
+  explorerCounts!: ExplorerCounts;
   private timer: number | undefined;
   private rebuildTimer: number | undefined;
   private saveQueue: Promise<void> = Promise.resolve();
@@ -55,6 +60,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
       inlineViews: loadViewState(saved.inlineViews),
       profiles,
       ...(saved.folders !== undefined ? { folders: normalizeFolders(saved.folders) } : {}),
+      ...(saved.explorerCounts !== undefined ? { explorerCounts: normalizeExplorerCounts(saved.explorerCounts) } : {}),
       customPinOverrides: loadPinOverrides(saved.customPinOverrides),
       activeProfile: typeof saved.activeProfile === 'string' && profiles.some(profile => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v: unknown) => typeof v === 'string') : null,
@@ -122,6 +128,16 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
       } else this.scheduleRebuild();
     }));
     this.register(() => { this.inline.setEnabled(false, false); window.clearTimeout(this.timer); window.clearTimeout(this.rebuildTimer); });
+    this.explorerCounts = new ExplorerCounts(this.app, () => this.explorerCountsSettings(), {
+      isExcluded: path => !this.includesPath(path),
+    });
+    this.register(() => this.explorerCounts.stop());
+    this.addCommand({
+      id: 'toggle-folder-counts',
+      name: 'Toggle folder counts',
+      callback: () => { void this.updateExplorerCounts({ enabled: !this.explorerCountsSettings().enabled }); }
+    });
+    this.explorerCounts.apply(); // does nothing unless enabled
     this.app.workspace.onLayoutReady(() => this.rebuild());
   }
 
@@ -145,6 +161,16 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     this.inline.setEnabled(enabled);
     if (enabled) this.inline.sync(this.app.vault.getMarkdownFiles());
     await this.save();
+  }
+
+  explorerCountsSettings(): ExplorerCountsSettings {
+    return this.prefs.explorerCounts ?? DEFAULT_EXPLORER_COUNTS;
+  }
+
+  async updateExplorerCounts(patch: Partial<ExplorerCountsSettings>): Promise<void> {
+    this.prefs.explorerCounts = { ...this.explorerCountsSettings(), ...patch };
+    this.explorerCounts.apply();
+    await this.save(); // goes through your saveQueue
   }
 
   private scheduleRebuild(): void {
@@ -1153,6 +1179,15 @@ export class PropertiesView extends ItemView {
 
 }
 
+function addSettingsHeading(parent: HTMLElement, text: string): void {
+  // Setting.setHeading() is unavailable on the minimum supported Obsidian 1.7.2.
+  if (typeof (Setting.prototype as Setting & { setHeading?: () => Setting }).setHeading === 'function') {
+    new Setting(parent).setName(text).setHeading();
+    return;
+  }
+  parent.createEl('h3', { text });
+}
+
 class PreferencesTab extends PluginSettingTab {
   constructor(private plugin: SuperchargedPropertiesPlugin) { super(plugin.app, plugin); }
   getSettingDefinitions() {
@@ -1188,7 +1223,11 @@ class PreferencesTab extends PluginSettingTab {
         setting.addTextArea(text => text.setValue(this.plugin.prefs.hidden).onChange(async value => {
           this.plugin.prefs.hidden = value; await this.plugin.save();
         }));
-      } }
+      } },
+      ...explorerCountsSettingDefinitions(
+        () => this.plugin.explorerCountsSettings(),
+        patch => this.plugin.updateExplorerCounts(patch)
+      )
     ];
   }
   display(): void {
