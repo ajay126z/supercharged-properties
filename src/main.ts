@@ -717,6 +717,16 @@ export class PropertiesView extends ItemView {
   private matches(text: string, scope: string): boolean {
     return (this.searchScope === 'any' || this.searchScope === scope) && fold(text).includes(this.query);
   }
+  /** Match the row's displayed note count, independently of expansion and pagination. */
+  private searchMatchingPaths(property: PropertyNode, node: ValueNode): Set<string> {
+    if (!this.query || this.matches(property.label, 'key')) return new Set(node.paths);
+    if (node !== property && this.matches(node.label, 'value')) return new Set(node.paths);
+    const paths = new Set([...node.paths].filter(path => this.matches(path, 'note')));
+    if (node === property) for (const value of property.values.values()) {
+      if (this.matches(value.label, 'value')) for (const path of value.paths) paths.add(path);
+    }
+    return paths;
+  }
   private setFilter(filter: ValueFilter | null): void {
     this.filter = filter;
     this.filterNoteList.reset();
@@ -833,10 +843,7 @@ export class PropertiesView extends ItemView {
       if (!keyMatches && !values.length && !noteMatches(property)) continue;
       visible++;
       // Count distinct matching notes, independently of expansion and pagination.
-      const matchingPaths = keyMatches ? property.paths : new Set([...property.paths].filter(path => this.matches(path, 'note')));
-      if (!keyMatches) for (const value of values) if (this.matches(value.label, 'value')) {
-        for (const path of value.paths) matchingPaths.add(path);
-      }
+      const matchingPaths = this.searchMatchingPaths(property, property);
       if ((this.filter || this.folders.length) && this.query) for (const path of matchingPaths) searchPaths.add(path);
       this.visibleKeys.push(property.id);
       const group = el(this.body, 'div', 'pv-group');
@@ -865,7 +872,7 @@ export class PropertiesView extends ItemView {
         valueToggle.className = 'pv-toggle';
         valueToggle.dataset.pvFocus = JSON.stringify(['value-toggle', property.id, value.id]);
         valueToggle.setAttribute('aria-expanded', String(showNotes));
-        const matchingCount = keyMatches || this.matches(value.label, 'value') ? value.paths.size : [...value.paths].filter(path => this.matches(path, 'note')).length;
+        const matchingCount = this.searchMatchingPaths(property, value).size;
         const valueButton = this.nodeButton(valueRow, property, value, toggleValue, matchingCount);
         valueButton.setAttribute('aria-expanded', String(showNotes));
         if (showNotes) this.renderNotes(valueGroup, property, value, id, keyMatches || this.matches(value.label, 'value'));
@@ -1135,12 +1142,12 @@ export class PropertiesView extends ItemView {
       void this.copy([...node.paths].sort(natural).map(path => `[[${path.replace(/\.md$/, '')}]]`).join('\n'));
     }));
     if (!this.inlineView) for (const mode of ['add','remove'] as const) menu.addItem(item => item.setTitle(mode==='add'?'Add properties to these notes…':'Remove properties from these notes…').setIcon(mode==='add'?'list-plus':'list-minus').onClick(()=>{
-      const paths=[...node.paths],label=node===property?property.label:`${property.label} = ${node.label}`;
+      const paths=[...this.searchMatchingPaths(property, node)],label=node===property?property.label:`${property.label} = ${node.label}`;
       this.plugin.openBulkProperties(mode,()=>resolveTreeScope(this.app.vault,paths,label,path=>this.plugin.includesPath(path),node===property));
     }));
     if (node === property) {
       menu.addItem(item => item.setTitle('Rename property…').setIcon('pencil').onClick(() => this.inlineView ? this.plugin.editInline(property, 'rename-property') : this.plugin.renameProperty(property)));
-      menu.addItem(item => item.setTitle('Delete property…').setIcon('trash-2').onClick(() => this.inlineView ? this.plugin.editInline(property, 'delete-property') : this.plugin.deleteProperty(property)));
+      menu.addItem(item => item.setTitle('Delete property…').setIcon('trash-2').onClick(() => this.inlineView ? this.plugin.editInline(property, 'delete-property') : this.plugin.deleteProperty({ ...property, paths: this.searchMatchingPaths(property, property) })));
       const pinned = this.effectivePins().has(property.id);
       menu.addItem(item => item.setTitle(pinned ? 'Unpin property' : 'Pin property').setIcon('pin').onClick(() => {
         this.togglePin(property.id);

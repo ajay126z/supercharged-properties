@@ -12,7 +12,7 @@ Add several frontmatter properties to a folder or group of notes, or remove whol
 
 The header shows the scope and exact eligible note count. **Include subfolders** applies to folders, including folders in a multi-selection. Excluded folders always win; their notes and non-Markdown files are omitted and counted separately. Overlapping selections count a note only once. A note without frontmatter can receive new properties.
 
-Explorer selections ignore the plugin's view filters. YAML row actions use the row's already-filtered paths, including active Folder and Value filters. Tree search remains display-only. These actions do not appear in Inline views; existing inline-field editing and conversion remain available separately.
+Explorer selections ignore the plugin's view filters. YAML row actions use the row's already-filtered paths, including active Folder and Value filters. The active tree search also narrows these row actions to the notes represented by the displayed row count, regardless of collapsed branches or pagination. For example, searching `Calendar/Compass` before removing a property limits the batch to matching notes. Clear the search to restore the full row scope. These actions do not appear in Inline views; existing inline-field editing and conversion remain available separately.
 
 ## Add properties
 

@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Limit Delete property and tree Add/Remove properties to the active search matches, reusing displayed row-count semantics and preserving notes outside the searched subset.
+
 - Improve Add/Remove preview readability with theme-matched text and neutral backgrounds, using colored edge markers and plus/minus signs to distinguish changes.
 
 ### Added

@@ -1250,3 +1250,47 @@ it('opens bulk dialogs with only the derived YAML node paths and omits both acti
  const value=[...property.values.values()][0];(view as any).showMenu(new MouseEvent('contextmenu'),property,value);(Menu as any).items.find((i:any)=>i.title==='Remove properties from these notes…').run();expect(plugin.openBulkProperties.mock.calls[1][1](true).paths).toEqual(['Projects/One.md']);
  (view as any).inlineView=true;(view as any).showMenu(new MouseEvent('contextmenu'),property,value);expect((Menu as any).items.some((i:any)=>i.title.startsWith('Add properties')||i.title.startsWith('Remove properties'))).toBe(false);
 });
+
+it('limits both property removal options to all 16 path-search matches out of 1045, including collapsed results',()=>{
+ plugin.index=new PropertyIndex();const files=new Map<string,TFile>();
+ for(let i=0;i<1045;i++){const path=`Calendar/${i<16?'Compass':'Other'}/Note ${i}.md`;plugin.index.update(path,{OMG:'Yes'});files.set(path,Object.assign(new TFile(),{path,extension:'md'}));}
+ plugin.deleteProperty=vi.fn();plugin.openBulkProperties=vi.fn();plugin.includesPath=()=>true;
+ (view.app as any).vault.getAbstractFileByPath=(path:string)=>files.get(path);
+ const property=plugin.index.properties.get('omg'),value=[...property.values.values()][0];const expected=[...files.keys()].filter(path=>path.includes('/Compass/')).sort();
+ (view as any).query='calendar/compass';(view as any).searchScope='note';view.render();expect(view.contentEl.querySelector('[aria-label="Toggle OMG (16)"]')).not.toBeNull();
+ for(const node of [property,value]){
+  (view as any).showMenu(new MouseEvent('contextmenu'),property,node);const items=(Menu as any).items;
+  if(node===property){items.find((i:any)=>i.title==='Delete property…').run();expect([...plugin.deleteProperty.mock.calls.at(-1)[0].paths].sort()).toEqual(expected);}
+  items.find((i:any)=>i.title==='Remove properties from these notes…').run();expect(plugin.openBulkProperties.mock.calls.at(-1)[1](true).paths).toEqual(expected);
+ }
+ (view as any).searchExpanded=false;view.render();(view as any).showMenu(new MouseEvent('contextmenu'),property,property);(Menu as any).items.find((i:any)=>i.title==='Delete property…').run();expect(plugin.deleteProperty.mock.calls.at(-1)[0].paths.size).toBe(16);
+ expect(property.paths.size).toBe(1045);expect(value.paths.size).toBe(1045);
+ (view as any).query='';view.render();(view as any).showMenu(new MouseEvent('contextmenu'),property,property);(Menu as any).items.find((i:any)=>i.title==='Delete property…').run();expect(plugin.deleteProperty.mock.calls.at(-1)[0].paths.size).toBe(1045);
+});
+it('uses row search semantics for removal scopes across property, value, and everything search',()=>{
+ const property=plugin.index.properties.get('status');
+ (view as any).query='done';(view as any).searchScope='value';expect([...(view as any).searchMatchingPaths(property,property)]).toEqual(['Projects/One.md']);
+ (view as any).query='status';(view as any).searchScope='key';expect((view as any).searchMatchingPaths(property,property).size).toBe(2);
+ (view as any).query='projects/';(view as any).searchScope='any';expect([...(view as any).searchMatchingPaths(property,property)]).toEqual(['Projects/One.md']);
+ (view as any).query='missing';expect((view as any).searchMatchingPaths(property,property).size).toBe(0);
+});
+
+import {ValueEditor} from '../src/value-editor';
+import {BulkPropertiesService} from '../src/bulk-properties-service';
+it.each(['delete','remove'] as const)('writes and undoes only 16 searched notes through the %s property action',async(action)=>{
+ plugin.index=new PropertyIndex();const files=new Map<string,TFile>(),disk=new Map<string,string>();
+ for(let i=0;i<1045;i++){const path=`Calendar/${i<16?'Compass':'Other'}/Note ${i}.md`;plugin.index.update(path,{OMG:'Yes',other:'keep'});files.set(path,Object.assign(new TFile(),{path,extension:'md'}));disk.set(path,'---\n'+JSON.stringify({OMG:'Yes',other:'keep'})+'\n---\nBody\n');}
+ const original=new Map(disk),read=(path:string)=>JSON.parse(disk.get(path)!.split('\n')[1]);
+ const process=vi.fn(async(path:string,update:any)=>{const fm=read(path);update(fm);disk.set(path,'---\n'+JSON.stringify(fm)+'\n---\nBody\n');});
+ const app:any=view.app;app.vault.getAbstractFileByPath=(path:string)=>files.get(path);app.metadataCache={getFileCache:(file:TFile)=>({frontmatter:read(file.path)})};app.fileManager={processFrontMatter:(file:TFile,update:any)=>process(file.path,update)};
+ const editor=new ValueEditor(app);plugin.includesPath=()=>true;plugin.deleteProperty=vi.fn();plugin.openBulkProperties=vi.fn();
+ (view as any).query='calendar/compass';(view as any).searchScope='note';const property=(view as any).activeIndex().properties.get('omg');
+ (view as any).showMenu(new MouseEvent('contextmenu'),property,property);
+ if(action==='delete'){
+  (Menu as any).items.find((i:any)=>i.title==='Delete property…').run();const scoped=plugin.deleteProperty.mock.calls[0][0];const plan=editor.previewPropertyDelete(scoped.label,scoped.paths);expect(plan.total).toBe(16);expect((await editor.apply(plan)).updated).toBe(16);
+ }else{
+  (Menu as any).items.find((i:any)=>i.title==='Remove properties from these notes…').run();const scope=plugin.openBulkProperties.mock.calls[0][1](true);const service=new BulkPropertiesService({eligible:path=>files.has(path),frontmatter:read,configuredType:()=>undefined,process},editor);const plan=service.preview(scope.paths,{keys:['OMG']});expect(plan.notes.filter(n=>n.changes.length)).toHaveLength(16);await service.apply(plan);
+ }
+ expect(process).toHaveBeenCalledTimes(16);for(const [path,text]of disk)if(path.includes('/Compass/'))expect(read(path)).toEqual({other:'keep'});else expect(text).toBe(original.get(path));
+ expect((await editor.undo()).restored).toBe(16);for(const [path,text]of disk){expect(read(path)).toEqual({OMG:'Yes',other:'keep'});if(!path.includes('/Compass/'))expect(text).toBe(original.get(path));}expect(process).toHaveBeenCalledTimes(32);
+});

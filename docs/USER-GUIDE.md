@@ -194,7 +194,7 @@ Counts are distinct note paths, not property assignments or list items. For one 
 
 The expandable note list sorts by note name, with numeric ordering (Note 2 before Note 10) and full path as a tie-breaker. Folder labels and full-path tooltips (when Show tooltips is enabled) distinguish duplicate names. It initially shows up to 200 notes; **Show more** loads the next batch. The count includes all matching notes, even before all rows are loaded.
 
-When a Value filter is active, the matching-note dropdown and its count also follow the tree search (property names, values, or note names/paths). This works whether you search before or after applying the Value filter. Clearing the search restores the full Value filter note list; collapsing branches does not change the list. Search narrows the displayed list only: edit previews continue to use the Value filter's full note subset.
+When a Value filter is active, the matching-note dropdown and its count also follow the tree search (property names, values, or note names/paths). This works whether you search before or after applying the Value filter. Clearing the search restores the full Value filter note list; collapsing branches does not change the list. Search also narrows **Delete property…**, **Add properties to these notes…**, and **Remove properties from these notes…** to the matching row notes. Other row edit previews continue to use the full Folder/Value-filtered subset.
 
 Click or tap a name to open that note in the current editor. Ctrl/Cmd-click opens a new tab; Obsidian's additional opening modifiers are respected. Opening a note leaves the filter and disclosure state intact. This list is for opening notes only; use note rows in the property tree for selection and editing. On desktop, Page preview works according to Obsidian's settings (by default, hold Ctrl/Cmd while hovering). It requires the Page preview core plugin.
 
@@ -243,7 +243,7 @@ This setting does not change your notes or Obsidian's global Search settings. **
 | Control | Tree and counts | Copied note links | New bulk edits |
 | --- | --- | --- | --- |
 | Value filter | Recalculates properties, values, and counts for matching notes; hides the filter property. | Copies only matching subset links. | Narrows value edits, property renames, and property deletion to the subset. |
-| Tree search | Filters displayed branches; row counts still represent their full indexed note set. | Copies the row's full indexed note set, not just visible search matches. | Does not restrict the selected row's batch to search matches. |
+| Tree search | Filters branches and shows distinct matching-note counts. | Copies the row's full Folder/Value-filtered note set. | Narrows Delete property and tree Add/Remove properties to matching row notes; other row edits keep their full Folder/Value-filtered scope. |
 | Property selection / saved view | Shows selected properties; does not filter notes within a property. | Uses the selected row's full indexed note set. | Does not narrow the selected row's notes. |
 | Hidden properties | Hides named properties without removing their indexed notes. | Available from visible rows. | Does not act as a note exclusion rule. |
 | Folder filter | Includes notes from selected folders and descendants; intersects the Value filter. | Only links inside the combined scope. | Only notes inside the combined scope. |
@@ -314,7 +314,7 @@ A saved view is marked **(modified)** when its selected keys or normalized folde
 
 Deleted or newly excluded folders remain as muted, dashed chips. They are not automatically removed or rewritten on folder rename. Remove them or choose replacement folders, then Update the saved view. An empty folder scope shows **No notes in the selected folders.**
 
-**Open in Search** and **Copy search query** remain vault-wide. Tree search changes what you see, not the edit scope; use the folder chips and Value filter to limit edits. Preview and confirm every batch. Undo restores only notes changed by that batch; notes outside its folder scope are untouched.
+**Open in Search** and **Copy search query** remain vault-wide. Tree search additionally narrows Delete property and tree Add/Remove properties to the row's matching notes. Other row edits use the folder chips and Value filter to limit their scope. Preview and confirm every batch. Undo restores only notes changed by that batch; notes outside its folder scope are untouched.
 
 ## Sort, pin, and hide
 

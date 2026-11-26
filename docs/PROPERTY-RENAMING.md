@@ -56,7 +56,7 @@ Another successful property-name or value batch replaces the previous undo. Undo
 
 Right-click the **property row** and choose **Delete property…**. Review every eligible note and the separate **Skipped notes** list, then click **Delete from N notes** to confirm.
 
-Deletion removes the property key and its complete value from each eligible note, including lists, nested lists, objects, text, numbers, booleans, and empty values. Other properties and the note body are not edited. The action covers matching notes in included folders, narrowed by any active [Value filter](USER-GUIDE.md#value-filter), including notes hidden by tree search or saved views. Excluded folders are omitted from previews and checked again before writes.
+Deletion removes the property key and its complete value from each eligible note, including lists, nested lists, objects, text, numbers, booleans, and empty values. Other properties and the note body are not edited. Deletion covers matching notes in included folders, narrowed by Folder and [Value filters](USER-GUIDE.md#value-filter) and the active tree search. Its preview count matches the property row count, including matching notes under collapsed branches or beyond pagination. Clear the search to delete across the full filtered property scope. Saved views do not further restrict notes. Excluded folders are omitted from previews and checked again before writes.
 
 The plugin skips a note when:
 

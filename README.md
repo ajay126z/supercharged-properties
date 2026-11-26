@@ -8,7 +8,7 @@ Choose the properties you want to see, save views for different projects, and ex
 
 ## Add or remove properties across notes
 
-From a folder, multi-selection, or YAML property/value row, choose **Add properties…** or **Remove properties…**. Reuse existing names and values, choose typed values, and review the per-note preview before applying. Add up to 20 properties together; remove whole keys from the notes that contain them. Exclusions, conflict checks, and shared session undo help keep changes controlled. [Add and Remove guide](docs/ADD-REMOVE-PROPERTIES.md). Available in the upcoming release.
+From a folder, multi-selection, or YAML property/value row, choose **Add properties…** or **Remove properties…**. Reuse existing names and values, choose typed values, and review the per-note preview before applying. Add up to 20 properties together; remove whole keys from the notes that contain them. Tree Add/Remove actions and Delete property respect the active search, so searching a folder path limits their previews to matching notes. Exclusions, conflict checks, and shared session undo help keep changes controlled. [Add and Remove guide](docs/ADD-REMOVE-PROPERTIES.md). Available in the upcoming release.
 
 ## Explore your notes
 

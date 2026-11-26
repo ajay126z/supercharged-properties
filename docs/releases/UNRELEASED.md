@@ -11,3 +11,5 @@ Add typed frontmatter properties or remove whole keys across folders, explorer m
 Explorer actions ignore view filters; tree actions retain their scoped paths. No new actions appear in Inline views. Existing single-property editing and inline conversion remain available.
 
 Read the [Add and Remove guide](../ADD-REMOVE-PROPERTIES.md). This feature has not been released; version metadata remains unchanged until release preparation.
+
+Delete property and tree Add/Remove properties now honor active tree search. Their preview scope matches the displayed row count, including matches beyond pagination or inside collapsed branches. Explorer batches and other row-edit scopes retain their existing behavior.
