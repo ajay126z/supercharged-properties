@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Improve Add/Remove preview readability with theme-matched text and neutral backgrounds, using colored edge markers and plus/minus signs to distinguish changes.
+
 ### Added
 
 - Separate Add and Remove properties workflows for explorer folders, multi-selections, and scoped YAML property/value rows.

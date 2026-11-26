@@ -200,9 +200,9 @@
 .pv-bulk-choice { display:flex; align-items:center; gap:8px; padding:8px 4px; }
 .pv-bulk-choice strong { flex:1; overflow-wrap:anywhere; }
 .pv-bulk-choice small { color:var(--text-muted); }
-.pv-bulk-diff-add, .pv-bulk-diff-remove { font-family:var(--font-monospace); font-size:12px; border-radius:4px; padding:2px 6px; white-space:pre-wrap; overflow-wrap:anywhere; }
-.pv-bulk-diff-add { background:var(--background-modifier-success); }
-.pv-bulk-diff-remove { background:var(--background-modifier-error); }
+.pv-bulk-diff-add, .pv-bulk-diff-remove { color:var(--text-normal); background:var(--background-primary); border-inline-start:3px solid; margin-block:4px; font-family:var(--font-monospace); font-size:12px; border-radius:4px; padding:2px 6px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.pv-bulk-diff-add { border-inline-start-color:var(--color-green); }
+.pv-bulk-diff-remove { border-inline-start-color:var(--color-red); }
 .pv-bulk-editor .pv-edit-change > small { display:block; color:var(--text-muted); }
 .pv-bulk-editor .pv-edit-actions > span { margin-right:auto; align-self:center; }
 .pv-bulk-suggestion { display:flex; align-items:center; gap:8px; }

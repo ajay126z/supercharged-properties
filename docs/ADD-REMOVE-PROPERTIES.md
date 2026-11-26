@@ -48,7 +48,7 @@ For removing individual list items or setting an empty value, use [selected-note
 
 ## Review and apply
 
-Choose **Preview changes**. The preview gives a summary per property and per-note additions/removals, using the current metadata cache. It shows 20 changed notes initially; **Show more** loads 20 more. Notes that would not change are not counted in the confirmation button. More than 200 changed notes produces an additional reminder.
+Choose **Preview changes**. The preview gives a summary per property and per-note additions/removals, using the current metadata cache. Changes use normal theme text on a neutral background, with green/red edge markers and plus/minus signs for additions/removals. It shows 20 changed notes initially; **Show more** loads 20 more. Notes that would not change are not counted in the confirmation button. More than 200 changed notes produces an additional reminder.
 
 **Back** restores the form and your entered values. **Add to N notes** or **Remove from N notes** is the only write confirmation. **Nothing to change** is disabled when the preview contains no changes.
 
