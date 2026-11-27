@@ -39,6 +39,10 @@ All properties and existing saved views continue to show YAML frontmatter. To sa
 
 **Convert inline fields to YAML.** Move or copy inline fields into Obsidian properties from the inline property/value menu. Choose notes, handle existing values with Skip/Merge/Overwrite, and preview before confirming. Repeated fields become lists; conversion includes one-step session undo. [Conversion guide](docs/BULK-EDITING.md#convert-inline-properties-to-yaml).
 
+## Folder counts in File explorer
+
+Optionally show note counts beside folders in Obsidian’s File explorer. Choose counts for the current folder, all subfolders, or both; hide zeros or include attachments. Off by default. Counts include notes without properties and are independent of your selected property view and filters. [Setup and options](docs/USER-GUIDE.md#file-explorer-folder-counts). Available in the unreleased development version.
+
 ## Focus a view on folders
 
 Open **Choose properties to show → + Add folder** to show notes from chosen folders and their subfolders. Manage folder chips or choose **Clear** inside that panel to broaden the view. Folder paths stay hidden while the panel is closed. Folder filters narrow counts, copied links, and edits, and combine with **Filter by Value**. Save them with YAML or Inline views—even when all properties are selected. Global **Excluded folders** always wins. [Folder filter guide](docs/USER-GUIDE.md#folder-filters).

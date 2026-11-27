@@ -253,3 +253,12 @@ it('normalizes and persists bulk settings through the existing save queue',async
  const {plugin}=await setup({bulkIncludeSubfolders:'false',bulkExistsMode:'invalid',bulkListDelimiter:'ab'});expect(plugin.prefs).toMatchObject({bulkIncludeSubfolders:true,bulkExistsMode:'skip',bulkListDelimiter:','});
  const saveData=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saveData;plugin.prefs.bulkIncludeSubfolders=false;plugin.prefs.bulkExistsMode='merge';plugin.prefs.bulkListDelimiter=';';await plugin.save();const restored=await setup(saveData.mock.calls[0][0]);expect(restored.plugin.prefs).toMatchObject({bulkIncludeSubfolders:false,bulkExistsMode:'merge',bulkListDelimiter:';'});
 });
+
+it('loads Explorer count preferences safely and saves updates through the shared queue',async()=>{
+ const {plugin}=await setup({explorerCounts:{enabled:false,mode:'both',countAllFiles:true,hideZero:'invalid'}});
+ expect(plugin.explorerCountsSettings()).toEqual({enabled:false,mode:'both',countAllFiles:true,hideZero:true,skipExcludedFolders:false});
+ const snapshots:any[]=[];(plugin as any).saveData=vi.fn(async data=>{snapshots.push(data);});
+ await Promise.all([plugin.updateExplorerCounts({mode:'direct'}),plugin.updateExplorerCounts({hideZero:false})]);
+ expect(snapshots[0].explorerCounts.mode).toBe('direct');expect(snapshots[0].explorerCounts.hideZero).toBe(true);expect(snapshots[1].explorerCounts.hideZero).toBe(false);
+ const changed=vi.spyOn(plugin.explorerCounts,'exclusionsChanged');await plugin.setExcludedFolders('Templates');expect(changed).toHaveBeenCalledOnce();
+});

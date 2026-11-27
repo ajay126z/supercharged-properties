@@ -20,6 +20,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Compact typed rows, native name/value suggestions, existing-property picker, in-scope counts, and removal selection with filtering.
 - Skip, Merge into list, and Overwrite defaults; configurable recursion and list delimiter; per-note previews with progressive disclosure.
 - Plan-based sequential writes, progress, per-key drift checks, and retryable shared session undo.
+- Optional File explorer folder counts with direct, recursive, and combined modes, zero hiding, attachment counting, optional global exclusions, and a command-palette toggle. Counts are independent of property filters and include notes without properties.
+- Lifecycle and DOM integration coverage for startup, live changes, exclusions, additional panes, cleanup, failure isolation, accessibility, and saved settings.
 
 ## [1.5.1] - 2026-11-21
 

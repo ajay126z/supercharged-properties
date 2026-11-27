@@ -215,3 +215,16 @@
 
 /* Reserve offscreen search-branch space until it enters the scrolling viewport. */
 .pv-search-pending { overflow-anchor:none; }
+
+/* File explorer counts (optional feature; only used when it is turned on) */
+.pv-folder-count {
+  margin-left: auto;
+  padding-left: 8px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+.nav-folder-title:hover .pv-folder-count {
+  color: var(--text-muted);
+}
