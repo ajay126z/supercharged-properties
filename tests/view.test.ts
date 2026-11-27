@@ -1294,3 +1294,43 @@ it.each(['delete','remove'] as const)('writes and undoes only 16 searched notes 
  expect(process).toHaveBeenCalledTimes(16);for(const [path,text]of disk)if(path.includes('/Compass/'))expect(read(path)).toEqual({other:'keep'});else expect(text).toBe(original.get(path));
  expect((await editor.undo()).restored).toBe(16);for(const [path,text]of disk){expect(read(path)).toEqual({OMG:'Yes',other:'keep'});if(!path.includes('/Compass/'))expect(text).toBe(original.get(path));}expect(process).toHaveBeenCalledTimes(32);
 });
+
+it.skipIf(!process.env.PV_SEARCH_BENCH)('benchmarks repeated folder-path searches on a 1045-note fixture',()=>{
+ plugin.index=new PropertyIndex();for(let i=0;i<1045;i++){const fm:Record<string,string>={};for(let p=0;p<8;p++)fm[`property${p}`]=`Value ${i}`;plugin.index.update(`Calendar/${i<16?'Compass':'Other'}/Note ${i}.md`,fm);}
+ (view as any).query='calendar/compass';(view as any).searchScope='note';const times:number[]=[];for(let i=0;i<5;i++){const start=performance.now();view.render();times.push(performance.now()-start);}times.sort((a,b)=>a-b);console.log(`SEARCH BENCH median=${times[2].toFixed(1)}ms notes=${view.contentEl.querySelectorAll('.pv-file').length}`);expect(view.contentEl.querySelectorAll('.pv-file')).toHaveLength(128);
+});
+it('coalesces large path-search typing bursts, blocks stale actions, and cancels pending work on close',async()=>{
+ vi.useFakeTimers();try{
+ plugin.index=new PropertyIndex();for(let i=0;i<1045;i++)plugin.index.update(`Calendar/${i<16?'Compass':'Other'}/${i}.md`,{OMG:'Yes'});
+ const render=vi.spyOn(view,'render');const input=document.querySelector<HTMLInputElement>('.pv-filter')!;
+ for(const query of ['C','Calendar','Calendar/Compass']){input.value=query;input.dispatchEvent(new Event('input'));}
+ expect(render).not.toHaveBeenCalled();expect((view as any).body.inert).toBe(true);expect((view as any).selectionBar.inert).toBe(true);
+ await vi.advanceTimersByTimeAsync(80);expect(render).toHaveBeenCalledTimes(1);expect((view as any).body.inert).toBe(false);expect(view.contentEl.querySelectorAll('.pv-file')).toHaveLength(16);
+ input.value='Calendar/Other';input.dispatchEvent(new Event('input'));input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter'}));expect(render).toHaveBeenCalledTimes(2);expect((view as any).body.inert).toBe(false);
+ input.value='Calendar/Compass';input.dispatchEvent(new Event('input'));await view.onClose();await vi.advanceTimersByTimeAsync(100);expect(render).toHaveBeenCalledTimes(2);
+ }finally{vi.useRealTimers();}
+});
+it('resolves linked sort keys only for search-matching values and invalidates match caches on updates',()=>{
+ plugin.index=new PropertyIndex();for(let i=0;i<1045;i++)plugin.index.update(`Calendar/${i<16?'Compass':'Other'}/${i}.md`,{linked:`[[Target ${i}]]`});
+ const resolve=vi.fn(()=>null);(view.app as any).metadataCache={getFirstLinkpathDest:resolve};(view as any).query='calendar/compass';(view as any).searchScope='note';view.render();expect(resolve).toHaveBeenCalledTimes(16);
+ plugin.index.update('Calendar/Compass/extra.md',{linked:'[[Extra]]'});resolve.mockClear();view.render();expect(resolve).toHaveBeenCalledTimes(17);expect(view.contentEl.querySelectorAll('.pv-file')).toHaveLength(17);
+ (view as any).query='target 100';(view as any).searchScope='value';resolve.mockClear();view.render();expect(resolve).toHaveBeenCalledTimes(11);
+});
+it('keeps exact counts and deletion scope before offscreen search rows mount, and flushes ranges in DOM order',()=>{
+ vi.stubGlobal('IntersectionObserver',class {observe(){} unobserve(){} disconnect(){}});
+ try{
+  plugin.index=new PropertyIndex();for(let i=0;i<1045;i++)plugin.index.update(`Calendar/${i<16?'Compass':'Other'}/Note ${i}.md`,{OMG:`Value ${i}`});
+  (view.app.vault as any).getAbstractFileByPath=(path:string)=>Object.assign(new TFile(),{path,extension:'md'});
+  plugin.deleteProperty=vi.fn();plugin.openBulkProperties=vi.fn();plugin.includesPath=()=>true;
+  (view as any).query='calendar/compass';(view as any).searchScope='note';view.render();
+  expect(view.contentEl.querySelector('[aria-label="Toggle OMG (16)"]')).not.toBeNull();
+  expect(view.contentEl.querySelectorAll('.pv-file')).toHaveLength(0);
+  const property=plugin.index.properties.get('omg');
+  (view as any).showMenu(new MouseEvent('contextmenu'),property,property);
+  (Menu as any).items.find((i:any)=>i.title==='Delete property…').run();expect(plugin.deleteProperty.mock.calls[0][0].paths.size).toBe(16);
+  (Menu as any).items.find((i:any)=>i.title==='Remove properties from these notes…').run();expect(plugin.openBulkProperties.mock.calls[0][1](true).paths).toHaveLength(16);
+  const notes=(view as any).orderedRenderedNotes(property);expect(notes).toHaveLength(16);expect(notes[0].path).toBe('Calendar/Compass/Note 0.md');expect(notes[15].path).toBe('Calendar/Compass/Note 15.md');
+  (view as any).noteAnchor={property:property.id,row:notes[0].row,context:(view as any).noteSelectionContext()};
+  (view as any).selectNoteRange(property,notes[15].row,notes[15].path);expect((view as any).selectedNotes.paths.size).toBe(16);
+ }finally{vi.unstubAllGlobals();}
+});

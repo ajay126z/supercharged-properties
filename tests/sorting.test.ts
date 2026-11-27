@@ -31,3 +31,8 @@ it('uses resolved basenames and strips unresolved wikilink folders, aliases, hea
  expect(values[0].label).toBe('[[Journal/2026-W21|First]]');
  expect(sortNodes(values,'count',key)).toEqual(sortNodes(values,'count'));
 });
+import {natural} from '../src/index';
+it('retains locale-aware natural ordering with the reused collator',()=>{
+ const labels=['2026-W9','2026-W21','Éclair','eclair','Alpha','alpha','file 002','file 10'];
+ for(const a of labels)for(const b of labels)expect(Math.sign(natural(a,b))).toBe(Math.sign(a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})));
+});

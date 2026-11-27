@@ -3,7 +3,10 @@ import { readPropertyValues } from './frontmatter-values';
 export interface ValueNode { id: string; label: string; paths: Set<string> }
 export interface PropertyNode extends ValueNode { values: Map<string, ValueNode> }
 export const fold = (text: string): string => text.trim().normalize('NFC').toLowerCase();
-export const natural = (a: string, b: string): number => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+// Reuse the locale comparator: constructing collation options for every comparison
+// dominates sorting thousands of property values and note paths during search.
+const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+export const natural = (a: string, b: string): number => naturalCollator.compare(a, b);
 
 /** Incremental, read-only frontmatter index. Each note contributes at most one count per row. */
 export class PropertyIndex {

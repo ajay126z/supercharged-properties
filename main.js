@@ -26,6 +26,84 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
+// src/search-tree-renderer.ts
+var SearchTreeRenderer = class {
+  constructor(root) {
+    this.root = root;
+    this.pending = /* @__PURE__ */ new Map();
+    this.ready = [];
+    this.generation = 0;
+    this.win = root.ownerDocument.defaultView;
+  }
+  reset() {
+    this.generation++;
+    this.observer?.disconnect();
+    this.observer = void 0;
+    this.pending.clear();
+    this.ready = [];
+    if (this.frame !== void 0) this.win.cancelAnimationFrame(this.frame);
+    this.frame = void 0;
+  }
+  add(parent, height, render, eager = false) {
+    if (eager || !this.win.IntersectionObserver) {
+      render();
+      return;
+    }
+    if (!this.observer) {
+      const generation = this.generation;
+      this.observer = new this.win.IntersectionObserver((entries) => {
+        if (generation !== this.generation) return;
+        for (const entry of entries) if (entry.isIntersecting && this.pending.has(entry.target)) {
+          this.observer?.unobserve(entry.target);
+          this.ready.push(entry.target);
+        }
+        this.schedule();
+      }, { root: this.root, rootMargin: "300px 0px" });
+    }
+    parent.style.minHeight = `${Math.max(28, height)}px`;
+    parent.setAttribute("aria-busy", "true");
+    parent.classList.add("pv-search-pending");
+    this.pending.set(parent, render);
+    this.observer.observe(parent);
+  }
+  /** Keyboard navigation and range selection need the complete branch in DOM order. */
+  flush(root) {
+    for (const [parent, render] of this.pending) {
+      if (root === parent || root.contains(parent)) {
+        this.pending.delete(parent);
+        this.observer?.unobserve(parent);
+        parent.style.removeProperty("min-height");
+        parent.removeAttribute("aria-busy");
+        parent.classList.remove("pv-search-pending");
+        render();
+      }
+    }
+  }
+  schedule() {
+    if (this.frame !== void 0 || !this.ready.length) return;
+    const generation = this.generation;
+    this.frame = this.win.requestAnimationFrame(() => {
+      this.frame = void 0;
+      if (generation !== this.generation) return;
+      const start = this.win.performance.now();
+      this.ready.sort((a, b) => a.compareDocumentPosition(b) & this.win.Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+      while (this.ready.length) {
+        const parent = this.ready.shift(), render = this.pending.get(parent);
+        this.pending.delete(parent);
+        if (render && parent.isConnected) {
+          parent.style.removeProperty("min-height");
+          parent.removeAttribute("aria-busy");
+          parent.classList.remove("pv-search-pending");
+          render();
+          if (generation !== this.generation) return;
+        }
+        if (this.win.performance.now() - start >= 6) break;
+      }
+      this.schedule();
+    });
+  }
+};
+
 // src/frontmatter-values.ts
 var EMPTY = Object.freeze({ kind: "empty", text: "" });
 var TRUE = Object.freeze({ kind: "boolean", text: "true" });
@@ -100,7 +178,8 @@ function readList(input) {
 
 // src/index.ts
 var fold = (text) => text.trim().normalize("NFC").toLowerCase();
-var natural = (a, b) => a.localeCompare(b, void 0, { numeric: true, sensitivity: "base" });
+var naturalCollator = new Intl.Collator(void 0, { numeric: true, sensitivity: "base" });
+var natural = (a, b) => naturalCollator.compare(a, b);
 var PropertyIndex = class _PropertyIndex {
   constructor() {
     this.properties = /* @__PURE__ */ new Map();
@@ -3984,7 +4063,7 @@ var PropertiesView = class extends import_obsidian16.ItemView {
     this.input.setAttribute("aria-label", "Filter properties and values");
     this.input.addEventListener("input", () => {
       this.query = fold(this.input.value);
-      this.render();
+      this.scheduleSearchRender();
     });
     this.searchScopeButton = this.iconButton(this.searchHeader, "Search in: Search everything", "sliders-horizontal", () => this.openSearchScopeMenu());
     this.searchScopeButton.setAttribute("aria-haspopup", "menu");
@@ -3992,6 +4071,9 @@ var PropertiesView = class extends import_obsidian16.ItemView {
       if (event.key === "Escape") {
         event.preventDefault();
         this.toggleSearch(false);
+      } else if (event.key === "Enter" && this.searchTimer !== void 0) {
+        event.preventDefault();
+        this.render();
       }
     });
     const profileRow = el2(toolbar, "div", "pv-profile-row");
@@ -4077,11 +4159,14 @@ var PropertiesView = class extends import_obsidian16.ItemView {
     this.selectionBar = el2(this.contentEl, "div", "pv-note-selection");
     this.selectionBar.hidden = true;
     this.body = el2(this.contentEl, "div", "pv-tree");
+    this.searchTree = new SearchTreeRenderer(this.body);
     this.body.setAttribute("aria-label", "Properties, values and notes");
     this.contentEl.appendChild(this.summary);
     this.render();
   }
   async onClose() {
+    this.cancelSearchRender();
+    this.searchTree?.reset();
     this.profilePicker?.close(false);
     this.contentEl.removeEventListener("keydown", this.onSelectionKeydown);
     this.disposeNoteMenus();
@@ -4089,6 +4174,34 @@ var PropertiesView = class extends import_obsidian16.ItemView {
     this.noteAnchor = void 0;
     this.disposeViewport?.();
     this.disposeViewport = void 0;
+  }
+  cancelSearchRender() {
+    this.contentEl.ownerDocument.defaultView?.clearTimeout(this.searchTimer);
+    this.searchTimer = void 0;
+    if (this.body) {
+      this.body.inert = false;
+      this.body.removeAttribute("aria-busy");
+    }
+    if (this.selectionBar) this.selectionBar.inert = false;
+  }
+  scheduleSearchRender() {
+    this.cancelSearchRender();
+    this.searchTree?.reset();
+    let assignments = 0;
+    if (this.query && (this.searchScope === "any" || this.searchScope === "note")) {
+      for (const property of this.sourceIndex().properties.values()) {
+        assignments += property.paths.size;
+        if (assignments > 500) break;
+      }
+    }
+    if (assignments <= 500) {
+      this.render();
+      return;
+    }
+    this.body.inert = true;
+    this.body.setAttribute("aria-busy", "true");
+    this.selectionBar.inert = true;
+    this.searchTimer = this.contentEl.ownerDocument.defaultView.setTimeout(() => this.render(), 80);
   }
   toggleSearch(show) {
     this.searchHeader.hidden = !show;
@@ -4372,16 +4485,24 @@ var PropertiesView = class extends import_obsidian16.ItemView {
     this.scopeChoices.scrollTop = scroll;
   }
   matches(text, scope) {
-    return (this.searchScope === "any" || this.searchScope === scope) && fold(text).includes(this.query);
+    if (this.searchScope !== "any" && this.searchScope !== scope) return false;
+    const cached = this.renderTextMatches?.get(text);
+    if (cached !== void 0) return cached;
+    const matched = fold(text).includes(this.query);
+    this.renderTextMatches?.set(text, matched);
+    return matched;
   }
   /** Match the row's displayed note count, independently of expansion and pagination. */
   searchMatchingPaths(property, node) {
-    if (!this.query || this.matches(property.label, "key")) return new Set(node.paths);
-    if (node !== property && this.matches(node.label, "value")) return new Set(node.paths);
+    if (!this.query || this.matches(property.label, "key")) return node.paths;
+    if (node !== property && this.matches(node.label, "value")) return node.paths;
+    const cached = this.renderPathMatches?.get(node);
+    if (cached) return cached;
     const paths = new Set([...node.paths].filter((path) => this.matches(path, "note")));
     if (node === property) for (const value of property.values.values()) {
       if (this.matches(value.label, "value")) for (const path of value.paths) paths.add(path);
     }
+    this.renderPathMatches?.set(node, paths);
     return paths;
   }
   setFilter(filter) {
@@ -4474,6 +4595,10 @@ var PropertiesView = class extends import_obsidian16.ItemView {
   }
   render() {
     if (!this.body) return;
+    this.cancelSearchRender();
+    this.searchTree?.reset();
+    this.renderTextMatches = /* @__PURE__ */ new Map();
+    this.renderPathMatches = /* @__PURE__ */ new Map();
     if (this.inlineView && !this.plugin.prefs.showInlineProperties) {
       this.inlineView = false;
       this.filter = null;
@@ -4516,8 +4641,9 @@ var PropertiesView = class extends import_obsidian16.ItemView {
     this.visibleKeys = [];
     for (const property of properties) {
       const keyMatches = !this.query || this.matches(property.label, "key");
-      const noteMatches = (node) => [...node.paths].some((path) => this.matches(path, "note"));
-      const values = sortNodes(property.values.values(), this.plugin.prefs.sort, (node) => linkedValueSortKey(node, (target, source) => this.app.metadataCache.getFirstLinkpathDest(target, source))).filter((v) => keyMatches || this.matches(v.label, "value") || noteMatches(v));
+      const noteMatches = (node) => this.searchMatchingPaths(property, node).size > 0;
+      const candidates = [...property.values.values()].filter((v) => keyMatches || this.matches(v.label, "value") || noteMatches(v));
+      const values = sortNodes(candidates, this.plugin.prefs.sort, (node) => linkedValueSortKey(node, (target, source) => this.app.metadataCache.getFirstLinkpathDest(target, source)));
       if (!keyMatches && !values.length && !noteMatches(property)) continue;
       visible++;
       const matchingPaths = this.searchMatchingPaths(property, property);
@@ -4534,35 +4660,55 @@ var PropertiesView = class extends import_obsidian16.ItemView {
       button.setAttribute("aria-expanded", String(expanded));
       if (!expanded) continue;
       const children = el2(group, "div", "pv-values");
-      const limit = this.limits.get(property.id) ?? 100;
-      for (const value of values.slice(0, limit)) {
-        const valueGroup = el2(children, "div", "pv-value-group");
-        const id = JSON.stringify([property.id, value.id]);
-        const automaticNotes = this.expandedValues.has(id) || !!this.query && this.autoExpandSearchNotes && !keyMatches && !this.matches(value.label, "value") && noteMatches(value);
-        const showNotes = this.query ? this.searchValueExpansion.get(id) ?? automaticNotes : automaticNotes;
-        const valueRow = el2(valueGroup, "div", "pv-row");
-        const toggleValue = () => {
-          if (this.query) this.searchValueExpansion.set(id, !showNotes);
-          else if (showNotes) this.expandedValues.delete(id);
-          else this.expandedValues.add(id);
+      children.dataset.pvProperty = property.id;
+      children.addEventListener("focusin", () => this.searchTree?.flush(children), { once: true });
+      const eagerProperty = this.selectedNotes?.property === property.id || !!focusId && JSON.parse(focusId).includes(property.id);
+      const renderChildren = () => {
+        const limit = this.limits.get(property.id) ?? 100;
+        for (const value of values.slice(0, limit)) {
+          const valueGroup = el2(children, "div", "pv-value-group");
+          const id = JSON.stringify([property.id, value.id]);
+          const automaticNotes = this.expandedValues.has(id) || !!this.query && this.autoExpandSearchNotes && !keyMatches && !this.matches(value.label, "value") && noteMatches(value);
+          const showNotes = this.query ? this.searchValueExpansion.get(id) ?? automaticNotes : automaticNotes;
+          const renderValue = () => {
+            const valueRow = el2(valueGroup, "div", "pv-row");
+            const toggleValue = () => {
+              if (this.query) this.searchValueExpansion.set(id, !showNotes);
+              else if (showNotes) this.expandedValues.delete(id);
+              else this.expandedValues.add(id);
+              this.render();
+            };
+            const valueToggle = this.iconButton(valueRow, `${showNotes ? "Collapse" : "Expand"} notes for ${property.label}: ${value.label}`, showNotes ? "chevron-down" : "chevron-right", toggleValue);
+            valueToggle.className = "pv-toggle";
+            valueToggle.dataset.pvFocus = JSON.stringify(["value-toggle", property.id, value.id]);
+            valueToggle.setAttribute("aria-expanded", String(showNotes));
+            const matchingCount = this.searchMatchingPaths(property, value).size;
+            const valueButton = this.nodeButton(valueRow, property, value, toggleValue, matchingCount);
+            valueButton.setAttribute("aria-expanded", String(showNotes));
+            if (showNotes) this.renderNotes(valueGroup, property, value, id, keyMatches || this.matches(value.label, "value"));
+            applyTooltips(valueGroup, this.plugin.prefs.showTooltips !== false);
+          };
+          const noteCount2 = showNotes ? Math.min(this.searchMatchingPaths(property, value).size, this.limits.get(`notes:${id}`) ?? 100) : 0;
+          if (this.query) this.searchTree.add(valueGroup, 28 + noteCount2 * 28, renderValue, eagerProperty);
+          else renderValue();
+        }
+        if (values.length > limit) this.button(children, `Show more (${values.length - limit})`, "Show more values", () => {
+          this.limits.set(property.id, limit + 100);
           this.render();
-        };
-        const valueToggle = this.iconButton(valueRow, `${showNotes ? "Collapse" : "Expand"} notes for ${property.label}: ${value.label}`, showNotes ? "chevron-down" : "chevron-right", toggleValue);
-        valueToggle.className = "pv-toggle";
-        valueToggle.dataset.pvFocus = JSON.stringify(["value-toggle", property.id, value.id]);
-        valueToggle.setAttribute("aria-expanded", String(showNotes));
-        const matchingCount = this.searchMatchingPaths(property, value).size;
-        const valueButton = this.nodeButton(valueRow, property, value, toggleValue, matchingCount);
-        valueButton.setAttribute("aria-expanded", String(showNotes));
-        if (showNotes) this.renderNotes(valueGroup, property, value, id, keyMatches || this.matches(value.label, "value"));
+        });
+        const assigned = new Set([...property.values.values()].flatMap((value) => [...value.paths]));
+        const otherPaths = new Set([...property.paths].filter((path) => !assigned.has(path)));
+        if (otherPaths.size) this.renderNotes(children, property, { ...property, paths: otherPaths }, property.id, keyMatches);
+      };
+      const shownValues = values.slice(0, this.limits.get(property.id) ?? 100);
+      let estimatedHeight = shownValues.length * 28;
+      if (this.query) for (const value of shownValues) {
+        const id = JSON.stringify([property.id, value.id]);
+        const automatic = this.expandedValues.has(id) || this.autoExpandSearchNotes && !keyMatches && !this.matches(value.label, "value");
+        if (this.searchValueExpansion.get(id) ?? automatic) estimatedHeight += Math.min(this.searchMatchingPaths(property, value).size, this.limits.get(`notes:${id}`) ?? 100) * 28;
       }
-      if (values.length > limit) this.button(children, `Show more (${values.length - limit})`, "Show more values", () => {
-        this.limits.set(property.id, limit + 100);
-        this.render();
-      });
-      const assigned = new Set([...property.values.values()].flatMap((value) => [...value.paths]));
-      const otherPaths = new Set([...property.paths].filter((path) => !assigned.has(path)));
-      if (otherPaths.size) this.renderNotes(children, property, { ...property, paths: otherPaths }, property.id, keyMatches);
+      if (this.query) this.searchTree.add(children, estimatedHeight, renderChildren, eagerProperty);
+      else renderChildren();
     }
     this.allExpanded = this.visibleKeys.length > 0 && this.visibleKeys.every((key) => this.propertyExpanded(key));
     const toggleLabel = this.allExpanded ? "Collapse all properties" : "Expand all properties";
@@ -4593,6 +4739,8 @@ var PropertiesView = class extends import_obsidian16.ItemView {
     applyTooltips(this.contentEl, this.plugin.prefs.showTooltips !== false);
     this.body.scrollTop = scroll;
     if (focusId) Array.from(this.contentEl.querySelectorAll("[data-pv-focus]")).find((e) => e.dataset.pvFocus === focusId)?.focus({ preventScroll: true });
+    this.renderTextMatches = void 0;
+    this.renderPathMatches = void 0;
   }
   nodeButton(row, property, node, run, count = node.paths.size) {
     const isKey = node === property;
@@ -4620,7 +4768,8 @@ var PropertiesView = class extends import_obsidian16.ItemView {
   }
   renderNotes(parent, property, node, id, ancestorMatches) {
     const notes = el2(parent, "div", "pv-notes");
-    const paths = noteRows(node.paths, this.plugin.prefs.sort === "name-desc").map((note) => note.path).filter((path) => !this.query || ancestorMatches || this.matches(path, "note"));
+    const matchedPaths = !this.query || ancestorMatches ? node.paths : new Set([...node.paths].filter((path) => this.matches(path, "note")));
+    const paths = noteRows(matchedPaths, this.plugin.prefs.sort === "name-desc").map((note) => note.path);
     const limitKey = `notes:${id}`;
     const limit = this.limits.get(limitKey) ?? 100;
     for (const path of paths.slice(0, limit)) {
@@ -4661,7 +4810,7 @@ var PropertiesView = class extends import_obsidian16.ItemView {
         button.addEventListener("keydown", (event) => {
           if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
           event.preventDefault();
-          const notes2 = this.renderedNotes.get(property.id) ?? [];
+          const notes2 = this.orderedRenderedNotes(property);
           const index = notes2.findIndex((note) => note.row === rowId2);
           const next = notes2[index + (event.key === "ArrowDown" ? 1 : -1)];
           if (!next) return;
@@ -4712,9 +4861,18 @@ var PropertiesView = class extends import_obsidian16.ItemView {
       this.render();
     });
   }
+  orderedRenderedNotes(property) {
+    const branch = Array.from(this.body.querySelectorAll(".pv-values")).find((element) => element.dataset.pvProperty === property.id);
+    if (branch) this.searchTree?.flush(branch);
+    const rows = new Map((this.renderedNotes.get(property.id) ?? []).map((note) => [note.row, note]));
+    return Array.from(this.body.querySelectorAll(".pv-file")).flatMap((button) => {
+      const note = rows.get(button.dataset.pvFocus ?? "");
+      return note ? [note] : [];
+    });
+  }
   selectNoteRange(property, row, path) {
     const context = this.noteSelectionContext();
-    const notes = this.renderedNotes.get(property.id) ?? [];
+    const notes = this.orderedRenderedNotes(property);
     const anchor = this.noteAnchor;
     const start = anchor?.property === property.id && anchor.context === context ? notes.findIndex((note) => note.row === anchor.row) : -1;
     const end = notes.findIndex((note) => note.row === row);

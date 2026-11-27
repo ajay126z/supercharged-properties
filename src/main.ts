@@ -1,3 +1,4 @@
+import { SearchTreeRenderer } from './search-tree-renderer';
 import {bulkSettings,validDelimiter,type BulkSettings} from './bulk-properties';
 import {resolveSelectionScope,resolveTreeScope,type BulkScope} from './bulk-scope';
 import {propertyCatalog,valueSuggestions} from './property-catalog';
@@ -364,6 +365,10 @@ export class PropertiesView extends ItemView {
   private selectionBar!: HTMLElement;
   private noteMenuDisposers: Array<() => void> = [];
   private query = '';
+  private searchTimer: number | undefined;
+  private searchTree?: SearchTreeRenderer;
+  private renderTextMatches?: Map<string, boolean>;
+  private renderPathMatches?: Map<ValueNode, Set<string>>;
   private searchScope = 'any';
   private searchExpanded = true;
   private autoExpandSearchNotes = true;
@@ -418,11 +423,12 @@ export class PropertiesView extends ItemView {
     this.input = el(search, 'input', 'pv-filter');
     this.input.type = 'search'; this.input.placeholder = 'Find properties, values, notes…';
     this.input.setAttribute('aria-label', 'Filter properties and values');
-    this.input.addEventListener('input', () => { this.query = fold(this.input.value); this.render(); });
+    this.input.addEventListener('input', () => { this.query = fold(this.input.value); this.scheduleSearchRender(); });
     this.searchScopeButton = this.iconButton(this.searchHeader, 'Search in: Search everything', 'sliders-horizontal', () => this.openSearchScopeMenu());
     this.searchScopeButton.setAttribute('aria-haspopup', 'menu');
     this.input.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); this.toggleSearch(false); }
+      else if (event.key === 'Enter' && this.searchTimer !== undefined) { event.preventDefault(); this.render(); }
     });
     const profileRow = el(toolbar, 'div', 'pv-profile-row');
     this.scopeButton = this.iconButton(profileRow, 'Choose properties to show', 'panels-top-left', () => {
@@ -489,12 +495,15 @@ export class PropertiesView extends ItemView {
     this.selectionBar = el(this.contentEl, 'div', 'pv-note-selection');
     this.selectionBar.hidden = true;
     this.body = el(this.contentEl, 'div', 'pv-tree');
+    this.searchTree = new SearchTreeRenderer(this.body);
     this.body.setAttribute('aria-label', 'Properties, values and notes');
     this.contentEl.appendChild(this.summary);
     this.render();
   }
 
   async onClose(): Promise<void> {
+    this.cancelSearchRender();
+    this.searchTree?.reset();
     this.profilePicker?.close(false);
     this.contentEl.removeEventListener('keydown', this.onSelectionKeydown);
     this.disposeNoteMenus();
@@ -504,6 +513,29 @@ export class PropertiesView extends ItemView {
     this.disposeViewport = undefined;
   }
 
+  private cancelSearchRender(): void {
+    this.contentEl.ownerDocument.defaultView?.clearTimeout(this.searchTimer);
+    this.searchTimer = undefined;
+    if (this.body) { this.body.inert = false; this.body.removeAttribute('aria-busy'); }
+    if (this.selectionBar) this.selectionBar.inert = false;
+  }
+  private scheduleSearchRender(): void {
+    this.cancelSearchRender();
+    this.searchTree?.reset();
+    // Small trees remain immediate. Large path searches wait briefly for a typing
+    // burst to finish instead of building the same broad intermediate DOM repeatedly.
+    let assignments = 0;
+    if (this.query && (this.searchScope === 'any' || this.searchScope === 'note')) {
+      for (const property of this.sourceIndex().properties.values()) {
+        assignments += property.paths.size;
+        if (assignments > 500) break;
+      }
+    }
+    if (assignments <= 500) { this.render(); return; }
+    this.body.inert = true; this.body.setAttribute('aria-busy', 'true');
+    this.selectionBar.inert = true;
+    this.searchTimer = this.contentEl.ownerDocument.defaultView!.setTimeout(() => this.render(), 80);
+  }
   private toggleSearch(show: boolean): void {
     this.searchHeader.hidden = !show;
     this.searchToggle.setAttribute('aria-expanded', String(show));
@@ -715,16 +747,24 @@ export class PropertiesView extends ItemView {
     this.scopeChoices.scrollTop = scroll;
   }
   private matches(text: string, scope: string): boolean {
-    return (this.searchScope === 'any' || this.searchScope === scope) && fold(text).includes(this.query);
+    if (this.searchScope !== 'any' && this.searchScope !== scope) return false;
+    const cached = this.renderTextMatches?.get(text);
+    if (cached !== undefined) return cached;
+    const matched = fold(text).includes(this.query);
+    this.renderTextMatches?.set(text, matched);
+    return matched;
   }
   /** Match the row's displayed note count, independently of expansion and pagination. */
   private searchMatchingPaths(property: PropertyNode, node: ValueNode): Set<string> {
-    if (!this.query || this.matches(property.label, 'key')) return new Set(node.paths);
-    if (node !== property && this.matches(node.label, 'value')) return new Set(node.paths);
+    if (!this.query || this.matches(property.label, 'key')) return node.paths;
+    if (node !== property && this.matches(node.label, 'value')) return node.paths;
+    const cached = this.renderPathMatches?.get(node);
+    if (cached) return cached;
     const paths = new Set([...node.paths].filter(path => this.matches(path, 'note')));
     if (node === property) for (const value of property.values.values()) {
       if (this.matches(value.label, 'value')) for (const path of value.paths) paths.add(path);
     }
+    this.renderPathMatches?.set(node, paths);
     return paths;
   }
   private setFilter(filter: ValueFilter | null): void {
@@ -801,6 +841,11 @@ export class PropertiesView extends ItemView {
 
   render(): void {
     if (!this.body) return;
+    this.cancelSearchRender();
+    this.searchTree?.reset();
+    // Per-render caches cannot survive index updates or changes in search scope.
+    this.renderTextMatches = new Map();
+    this.renderPathMatches = new Map();
     if (this.inlineView && !this.plugin.prefs.showInlineProperties) {
       this.inlineView = false; this.filter = null; this.filterNoteList.reset();
       this.selectedNotes = undefined; this.noteAnchor = undefined;
@@ -838,8 +883,10 @@ export class PropertiesView extends ItemView {
     this.visibleKeys = [];
     for (const property of properties) {
       const keyMatches = !this.query || this.matches(property.label, 'key');
-      const noteMatches = (node: ValueNode) => [...node.paths].some(path => this.matches(path, 'note'));
-      const values = sortNodes(property.values.values(), this.plugin.prefs.sort, node => linkedValueSortKey(node, (target, source) => this.app.metadataCache.getFirstLinkpathDest(target, source))).filter(v => keyMatches || this.matches(v.label, 'value') || noteMatches(v));
+      const noteMatches = (node: ValueNode) => this.searchMatchingPaths(property, node).size > 0;
+      // Discard non-matches before sorting or resolving linked note names.
+      const candidates = [...property.values.values()].filter(v => keyMatches || this.matches(v.label, 'value') || noteMatches(v));
+      const values = sortNodes(candidates, this.plugin.prefs.sort, node => linkedValueSortKey(node, (target, source) => this.app.metadataCache.getFirstLinkpathDest(target, source)));
       if (!keyMatches && !values.length && !noteMatches(property)) continue;
       visible++;
       // Count distinct matching notes, independently of expansion and pagination.
@@ -856,32 +903,50 @@ export class PropertiesView extends ItemView {
       button.setAttribute('aria-expanded', String(expanded));
       if (!expanded) continue;
       const children = el(group, 'div', 'pv-values');
-      const limit = this.limits.get(property.id) ?? 100;
-      for (const value of values.slice(0, limit)) {
-        const valueGroup = el(children, 'div', 'pv-value-group');
+      children.dataset.pvProperty = property.id;
+      children.addEventListener('focusin', () => this.searchTree?.flush(children), {once: true});
+      const eagerProperty = this.selectedNotes?.property === property.id || !!focusId && (JSON.parse(focusId) as string[]).includes(property.id);
+      const renderChildren = () => {
+        const limit = this.limits.get(property.id) ?? 100;
+        for (const value of values.slice(0, limit)) {
+          const valueGroup = el(children, 'div', 'pv-value-group');
+          const id = JSON.stringify([property.id, value.id]);
+          const automaticNotes = this.expandedValues.has(id) || (!!this.query && this.autoExpandSearchNotes && !keyMatches && !this.matches(value.label, 'value') && noteMatches(value));
+          const showNotes = this.query ? this.searchValueExpansion.get(id) ?? automaticNotes : automaticNotes;
+          const renderValue = () => {
+            const valueRow = el(valueGroup, 'div', 'pv-row');
+            const toggleValue = () => {
+              if (this.query) this.searchValueExpansion.set(id, !showNotes);
+              else if (showNotes) this.expandedValues.delete(id); else this.expandedValues.add(id);
+              this.render();
+            };
+            const valueToggle = this.iconButton(valueRow, `${showNotes ? 'Collapse' : 'Expand'} notes for ${property.label}: ${value.label}`, showNotes ? 'chevron-down' : 'chevron-right', toggleValue);
+            valueToggle.className = 'pv-toggle';
+            valueToggle.dataset.pvFocus = JSON.stringify(['value-toggle', property.id, value.id]);
+            valueToggle.setAttribute('aria-expanded', String(showNotes));
+            const matchingCount = this.searchMatchingPaths(property, value).size;
+            const valueButton = this.nodeButton(valueRow, property, value, toggleValue, matchingCount);
+            valueButton.setAttribute('aria-expanded', String(showNotes));
+            if (showNotes) this.renderNotes(valueGroup, property, value, id, keyMatches || this.matches(value.label, 'value'));
+            applyTooltips(valueGroup, this.plugin.prefs.showTooltips !== false);
+          };
+          const noteCount = showNotes ? Math.min(this.searchMatchingPaths(property, value).size, this.limits.get(`notes:${id}`) ?? 100) : 0;
+          if (this.query) this.searchTree!.add(valueGroup, 28 + noteCount * 28, renderValue, eagerProperty); else renderValue();
+        }
+        if (values.length > limit) this.button(children, `Show more (${values.length - limit})`, 'Show more values', () => { this.limits.set(property.id, limit + 100); this.render(); });
+        // Properties with unsupported object values still expose their notes.
+        const assigned = new Set([...property.values.values()].flatMap(value => [...value.paths]));
+        const otherPaths = new Set([...property.paths].filter(path => !assigned.has(path)));
+        if (otherPaths.size) this.renderNotes(children, property, { ...property, paths: otherPaths }, property.id, keyMatches);
+      };
+      const shownValues = values.slice(0, this.limits.get(property.id) ?? 100);
+      let estimatedHeight = shownValues.length * 28;
+      if (this.query) for (const value of shownValues) {
         const id = JSON.stringify([property.id, value.id]);
-        const automaticNotes = this.expandedValues.has(id) || (!!this.query && this.autoExpandSearchNotes && !keyMatches && !this.matches(value.label, 'value') && noteMatches(value));
-        const showNotes = this.query ? this.searchValueExpansion.get(id) ?? automaticNotes : automaticNotes;
-        const valueRow = el(valueGroup, 'div', 'pv-row');
-        const toggleValue = () => {
-          if (this.query) this.searchValueExpansion.set(id, !showNotes);
-          else if (showNotes) this.expandedValues.delete(id); else this.expandedValues.add(id);
-          this.render();
-        };
-        const valueToggle = this.iconButton(valueRow, `${showNotes ? 'Collapse' : 'Expand'} notes for ${property.label}: ${value.label}`, showNotes ? 'chevron-down' : 'chevron-right', toggleValue);
-        valueToggle.className = 'pv-toggle';
-        valueToggle.dataset.pvFocus = JSON.stringify(['value-toggle', property.id, value.id]);
-        valueToggle.setAttribute('aria-expanded', String(showNotes));
-        const matchingCount = this.searchMatchingPaths(property, value).size;
-        const valueButton = this.nodeButton(valueRow, property, value, toggleValue, matchingCount);
-        valueButton.setAttribute('aria-expanded', String(showNotes));
-        if (showNotes) this.renderNotes(valueGroup, property, value, id, keyMatches || this.matches(value.label, 'value'));
+        const automatic = this.expandedValues.has(id) || (this.autoExpandSearchNotes && !keyMatches && !this.matches(value.label, 'value'));
+        if (this.searchValueExpansion.get(id) ?? automatic) estimatedHeight += Math.min(this.searchMatchingPaths(property, value).size, this.limits.get(`notes:${id}`) ?? 100) * 28;
       }
-      if (values.length > limit) this.button(children, `Show more (${values.length - limit})`, 'Show more values', () => { this.limits.set(property.id, limit + 100); this.render(); });
-      // Properties with unsupported object values still expose their notes.
-      const assigned = new Set([...property.values.values()].flatMap(value => [...value.paths]));
-      const otherPaths = new Set([...property.paths].filter(path => !assigned.has(path)));
-      if (otherPaths.size) this.renderNotes(children, property, { ...property, paths: otherPaths }, property.id, keyMatches);
+      if (this.query) this.searchTree!.add(children, estimatedHeight, renderChildren, eagerProperty); else renderChildren();
     }
     this.allExpanded = this.visibleKeys.length > 0 && this.visibleKeys.every(key => this.propertyExpanded(key));
     const toggleLabel = this.allExpanded ? 'Collapse all properties' : 'Expand all properties';
@@ -914,6 +979,8 @@ export class PropertiesView extends ItemView {
     applyTooltips(this.contentEl, this.plugin.prefs.showTooltips !== false);
     this.body.scrollTop = scroll;
     if (focusId) Array.from(this.contentEl.querySelectorAll<HTMLElement>('[data-pv-focus]')).find(e => e.dataset.pvFocus === focusId)?.focus({ preventScroll: true });
+    this.renderTextMatches = undefined;
+    this.renderPathMatches = undefined;
   }
   private nodeButton(row: HTMLElement, property: PropertyNode, node: ValueNode, run: () => void, count = node.paths.size): HTMLButtonElement {
     const isKey = node === property;
@@ -937,7 +1004,8 @@ export class PropertiesView extends ItemView {
   }
   private renderNotes(parent: HTMLElement, property: PropertyNode, node: ValueNode, id: string, ancestorMatches: boolean): void {
     const notes = el(parent, 'div', 'pv-notes');
-    const paths = noteRows(node.paths, this.plugin.prefs.sort === 'name-desc').map(note => note.path).filter(path => !this.query || ancestorMatches || this.matches(path, 'note'));
+    const matchedPaths = !this.query || ancestorMatches ? node.paths : new Set([...node.paths].filter(path => this.matches(path, 'note')));
+    const paths = noteRows(matchedPaths, this.plugin.prefs.sort === 'name-desc').map(note => note.path);
     const limitKey = `notes:${id}`; const limit = this.limits.get(limitKey) ?? 100;
     for (const path of paths.slice(0, limit)) {
       const rowId = JSON.stringify(['note', property.id, id, path]);
@@ -973,7 +1041,7 @@ export class PropertiesView extends ItemView {
         button.addEventListener('keydown', event => {
           if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
           event.preventDefault();
-          const notes = this.renderedNotes.get(property.id) ?? [];
+          const notes = this.orderedRenderedNotes(property);
           const index = notes.findIndex(note => note.row === rowId);
           const next = notes[index + (event.key === 'ArrowDown' ? 1 : -1)];
           if (!next) return;
@@ -1020,9 +1088,18 @@ export class PropertiesView extends ItemView {
     if (paths.length > limit) this.button(notes, 'Show more notes', 'Show 100 more notes', () => { this.limits.set(limitKey, limit + 100); this.render(); });
   }
 
+  private orderedRenderedNotes(property: PropertyNode): Array<{row: string; path: string}> {
+    const branch = Array.from(this.body.querySelectorAll<HTMLElement>('.pv-values')).find(element => element.dataset.pvProperty === property.id);
+    if (branch) this.searchTree?.flush(branch);
+    const rows = new Map((this.renderedNotes.get(property.id) ?? []).map(note => [note.row, note]));
+    return Array.from(this.body.querySelectorAll<HTMLElement>('.pv-file')).flatMap(button => {
+      const note = rows.get(button.dataset.pvFocus ?? ''); return note ? [note] : [];
+    });
+  }
+
   private selectNoteRange(property: PropertyNode, row: string, path: string): void {
     const context = this.noteSelectionContext();
-    const notes = this.renderedNotes.get(property.id) ?? [];
+    const notes = this.orderedRenderedNotes(property);
     const anchor = this.noteAnchor;
     const start = anchor?.property === property.id && anchor.context === context
       ? notes.findIndex(note => note.row === anchor.row) : -1;

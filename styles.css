@@ -212,3 +212,6 @@
 .pv-bulk-conflict { display:flex; gap:4px; flex-wrap:wrap; }
 .pv-bulk-conflict button { flex:1; white-space:normal; height:auto; }
 .pv-bulk-conflict button[aria-pressed="true"] { background:var(--interactive-accent); color:var(--text-on-accent); }
+
+/* Reserve offscreen search-branch space until it enters the scrolling viewport. */
+.pv-search-pending { overflow-anchor:none; }

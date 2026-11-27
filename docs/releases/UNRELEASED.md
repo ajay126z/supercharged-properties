@@ -13,3 +13,7 @@ Explorer actions ignore view filters; tree actions retain their scoped paths. No
 Read the [Add and Remove guide](../ADD-REMOVE-PROPERTIES.md). This feature has not been released; version metadata remains unchanged until release preparation.
 
 Delete property and tree Add/Remove properties now honor active tree search. Their preview scope matches the displayed row count, including matches beyond pagination or inside collapsed branches. Explorer batches and other row-edit scopes retain their existing behavior.
+
+Search everything and Note names / paths now reuse match results during rendering, filter before sorting, and share a natural-sort comparator. Large trees combine typing bursts into one refresh; Enter refreshes immediately. Search matching and deletion scope remain unchanged.
+
+Search results now build offscreen value and note rows as you scroll, yielding between small rendering chunks. Counts and removal previews include the full matching subset; keyboard navigation and range selection load their property branch when needed.

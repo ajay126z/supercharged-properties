@@ -103,6 +103,8 @@ Within nonempty lists, null entries contribute to `(empty)`; blank text and empt
 2. Enter part of a property name, value, note name, or path.
 3. Use the sliders button beside the input to choose a search scope.
 
+For large trees, Search everything and Note names / paths wait briefly after typing before refreshing results. Press Enter for an immediate refresh. Small-tree searches and clearing the search remain immediate. Search branches load as they approach the visible area, so offscreen note rows do not hold up typing. Counts and property-removal scope still use the full matching subset, including results not yet drawn. Keyboard navigation and range selection load the complete property branch when needed.
+
 | Scope | Searches |
 | --- | --- |
 | Search everything | Property names, values, and note paths. |
@@ -114,7 +116,7 @@ Search uses case-insensitive substring matching. It is a local tree filter, not 
 
 Matching branches expand automatically. You can then expand or collapse individual properties and value branches with their arrows, including after Collapse all. After Collapse all, expanding a property shows only its values; expand a value separately to see its notes. A new search automatically reveals matching note branches again. These choices stay in place during live refresh and reset when the search or view changes. A matching property can show all its values; a matching value can show all its notes. A note-path match reveals the relevant note branch. Clear the input to return to ordinary browsing. **Escape** or hiding the search input clears the tree search, but keeps an active Value filter. Changing the property view also clears the tree search.
 
-Search operates within your current property selection and excludes hidden properties. It does not limit the scope of bulk edits or the row's copy-links action.
+Search operates within your current property selection and excludes hidden properties. It narrows YAML Delete property and tree Add/Remove properties to matching notes. Other row edits and the copy-links action retain their full Folder/Value-filtered scope.
 
 ## Inline properties
 
