@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Pure counting helpers for the optional File explorer counts feature.
  * No Obsidian imports, so this file is trivially unit-testable.

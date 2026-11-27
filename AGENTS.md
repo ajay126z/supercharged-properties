@@ -113,3 +113,7 @@ License metadata must stay synchronized across `package.json`, `package-lock.jso
 ## Folder filters
 
 `folder-filter.ts` normalizes optional profile/source-state `folders`, reusing the exclusion path parser and boundary matcher. `PropertyIndex.paths()` returns distinct represented note paths, also on scoped indexes. `PropertiesView.filterPaths()` intersects folder includes with the temporary Value filter; derived nodes carry that scope into copy/edit menus. The index still applies global exclusions first. Saved profile keys use the full source index, while modified state compares both keys and normalized folders. Built-in/legacy view selection clears folders. Keep stale paths for manual review; do not rewrite them on rename unless exclusions gain the same behavior. Search queries remain vault-wide; tree search is display-only, including conversion.
+
+## File explorer counts
+
+`src/explorer-counts/` is an optional display-only feature, disabled by default. It counts vault paths independently of the property index and scopes. Never mutate Explorer-owned labels or attributes: add/remove only `.pv-folder-count` badges. DOM selectors are feature-detected because File explorer markup is not a public API. Startup generations invalidate stale layout callbacks; timers, events, observers, and badges must all clean up on stop. Use each container's document for observers in popouts. Exclusion changes notify the service through `setExcludedFolders`; settings persist through `saveQueue`. Tests cover pure counts, lifecycle/DOM behavior, and host settings wiring.

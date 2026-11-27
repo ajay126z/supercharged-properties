@@ -11,6 +11,8 @@ These guides describe **1.5.0**, including Inline Properties and saved folder fi
 | [Bulk value editing](BULK-EDITING.md) | Rename, delete, merge, wikilink conversion, text-only splitting, eligibility, preview, confirmation, conflicts, and one-step undo. |
 | [Property-name renaming](PROPERTY-RENAMING.md) | Key renaming and deletion, case corrections, collision handling, preserved values, preference updates, and shared undo. |
 
+The development branch also includes [File explorer folder counts](USER-GUIDE.md#file-explorer-folder-counts); see [unreleased notes](releases/UNRELEASED.md).
+
 ### Common tasks
 
 - [Browse and edit inline properties](USER-GUIDE.md#inline-properties)

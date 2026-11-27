@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Optional feature: show a note count next to each folder in Obsidian's built-in File explorer.
  *
@@ -11,7 +12,7 @@
  * The File explorer DOM is not a public Obsidian API. The selectors used below
  * (`.nav-folder-title[data-path]`) may break in a future Obsidian update.
  */
-import { App, Debouncer, EventRef, Notice, Setting, debounce } from 'obsidian';
+import { App, EventRef, Notice, Setting } from 'obsidian';
 import { CountMode, FolderCounts, countByFolder, describeCount, formatCount } from './counting';
 import { ExplorerCountsSettings } from './settings';
 
@@ -22,6 +23,8 @@ const FOLDER_TITLE_SELECTOR = '.nav-folder-title[data-path]';
 export interface ExplorerCountsOptions {
   /** Read-only check, used only when "Skip excluded folders" is on. */
   isExcluded?: (path: string) => boolean;
+  /** Shared hover-hint preference; accessible descriptions remain available. */
+  showTooltips?: () => boolean;
   /** Called once if the feature turned itself off after an error. */
   onFailure?: (error: unknown) => void;
 }
@@ -29,29 +32,48 @@ export interface ExplorerCountsOptions {
 export class ExplorerCounts {
   private running = false;
   private failed = false;
+  private ready = false;
+  private generation = 0;
   private counts = new Map<string, FolderCounts>();
   private readonly observers = new Map<HTMLElement, MutationObserver>();
   private vaultRefs: EventRef[] = [];
   private workspaceRefs: EventRef[] = [];
-  private readonly scheduleRecount: Debouncer<[], void>;
-  private readonly scheduleRender: Debouncer<[], void>;
+  private recountTimer?: number;
+  private renderTimer?: number;
 
   constructor(
     private readonly app: App,
     private readonly getSettings: () => ExplorerCountsSettings,
     private readonly options: ExplorerCountsOptions = {},
-  ) {
-    this.scheduleRecount = debounce(() => this.guard(() => { this.rebuild(); this.render(); }), 250, true);
-    this.scheduleRender = debounce(() => this.guard(() => this.render()), 100, true);
+  ) {}
+
+  private scheduleRecount = (): void => {
+    if (!this.running || !this.ready) return;
+    window.clearTimeout(this.recountTimer);
+    this.recountTimer = window.setTimeout(() => this.guard(() => { this.rebuild(); this.render(); }), 250);
+  };
+
+  private scheduleRender = (): void => {
+    if (!this.running || !this.ready) return;
+    window.clearTimeout(this.renderTimer);
+    this.renderTimer = window.setTimeout(() => this.guard(() => this.render()), 100);
+  };
+
+  refreshDisplay(): void { this.scheduleRender(); }
+
+  exclusionsChanged(): void {
+    if (this.getSettings().skipExcludedFolders) this.scheduleRecount();
   }
 
   /** Start listening and decorating. Safe to call repeatedly. */
   start(): void {
     if (this.running || this.failed) return;
     this.running = true;
+    const generation = ++this.generation;
     // Register after layout is ready: vault "create" events also fire for every file while loading.
     this.app.workspace.onLayoutReady(() => {
-      if (!this.running) return;
+      if (!this.running || generation !== this.generation) return;
+      this.ready = true;
       this.guard(() => {
         const { vault, workspace } = this.app;
         this.vaultRefs.push(
@@ -61,8 +83,7 @@ export class ExplorerCounts {
         );
         this.workspaceRefs.push(
           workspace.on('layout-change', () => {
-            this.attach();
-            this.scheduleRender();
+            this.guard(() => { this.attach(); this.scheduleRender(); });
           }),
         );
         this.rebuild();
@@ -74,9 +95,9 @@ export class ExplorerCounts {
 
   /** Stop everything and remove every badge. Safe to call repeatedly. */
   stop(): void {
-    this.running = false;
-    this.scheduleRecount.cancel();
-    this.scheduleRender.cancel();
+    this.running = false; this.ready = false; this.generation++;
+    window.clearTimeout(this.recountTimer);
+    window.clearTimeout(this.renderTimer);
     for (const ref of this.vaultRefs) this.app.vault.offref(ref);
     for (const ref of this.workspaceRefs) this.app.workspace.offref(ref);
     this.vaultRefs = [];
@@ -86,10 +107,6 @@ export class ExplorerCounts {
       this.removeBadges(container);
     }
     this.observers.clear();
-    // Also clear badges in any explorer leaf that was never observed.
-    for (const leaf of this.app.workspace.getLeavesOfType(EXPLORER_VIEW_TYPE)) {
-      this.removeBadges(leaf.view.containerEl);
-    }
     this.counts.clear();
   }
 
@@ -99,7 +116,7 @@ export class ExplorerCounts {
     if (!enabled) this.failed = false; // turning it off then on again retries after a failure
     if (enabled && !this.running) this.start();
     else if (!enabled && this.running) this.stop();
-    else if (this.running) this.guard(() => { this.rebuild(); this.render(); });
+    else if (this.running && this.ready) this.guard(() => { this.rebuild(); this.render(); });
   }
 
   private rebuild(): void {
@@ -124,11 +141,14 @@ export class ExplorerCounts {
     for (const [container, observer] of this.observers) {
       if (containers.has(container)) continue;
       observer.disconnect();
+      this.removeBadges(container);
       this.observers.delete(container);
     }
     for (const container of containers) {
       if (this.observers.has(container)) continue;
-      const observer = new MutationObserver(() => this.scheduleRender());
+      const Observer = container.ownerDocument.defaultView?.MutationObserver;
+      if (!Observer) throw new Error('File explorer observation unavailable');
+      const observer = new Observer(() => this.scheduleRender());
       observer.observe(container, {
         childList: true,
         subtree: true,
@@ -160,11 +180,13 @@ export class ExplorerCounts {
         }
         if (!badge) {
           badge = title.createSpan({ cls: BADGE_CLASS });
-          badge.setAttribute('aria-hidden', 'true');
+          badge.setAttribute('role', 'img');
         }
         if (badge.textContent !== text) badge.textContent = text;
         const tooltip = describeCount(counts, noun);
-        if (badge.getAttribute('title') !== tooltip) badge.setAttribute('title', tooltip);
+        badge.setAttribute('aria-label', tooltip);
+        if (this.options.showTooltips?.() === false) badge.removeAttribute('title');
+        else if (badge.getAttribute('title') !== tooltip) badge.setAttribute('title', tooltip);
       });
       // Drop the mutations caused by our own badges so they do not trigger another render.
       observer.takeRecords();
@@ -176,6 +198,7 @@ export class ExplorerCounts {
   }
 
   private guard(action: () => void): void {
+    if (!this.running) return;
     try {
       action();
     } catch (error) {
@@ -227,8 +250,8 @@ export function explorerCountsSettingDefinitions(
         setting.addDropdown(dropdown =>
           dropdown
             .addOptions({
-              total: 'Notes including subfolders',
-              direct: 'Notes directly in the folder',
+              total: 'Including subfolders',
+              direct: 'Directly in the folder',
               both: 'Both (direct · total)',
             })
             .setValue(get().mode)

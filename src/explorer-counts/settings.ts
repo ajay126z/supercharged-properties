@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 /**
  * Settings for the optional File explorer counts feature.
  * Pure (no Obsidian imports) so it can be tested without mocks.

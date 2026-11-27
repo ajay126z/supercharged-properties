@@ -2645,22 +2645,40 @@ var ExplorerCounts = class {
     this.options = options;
     this.running = false;
     this.failed = false;
+    this.ready = false;
+    this.generation = 0;
     this.counts = /* @__PURE__ */ new Map();
     this.observers = /* @__PURE__ */ new Map();
     this.vaultRefs = [];
     this.workspaceRefs = [];
-    this.scheduleRecount = (0, import_obsidian12.debounce)(() => this.guard(() => {
-      this.rebuild();
-      this.render();
-    }), 250, true);
-    this.scheduleRender = (0, import_obsidian12.debounce)(() => this.guard(() => this.render()), 100, true);
+    this.scheduleRecount = () => {
+      if (!this.running || !this.ready) return;
+      window.clearTimeout(this.recountTimer);
+      this.recountTimer = window.setTimeout(() => this.guard(() => {
+        this.rebuild();
+        this.render();
+      }), 250);
+    };
+    this.scheduleRender = () => {
+      if (!this.running || !this.ready) return;
+      window.clearTimeout(this.renderTimer);
+      this.renderTimer = window.setTimeout(() => this.guard(() => this.render()), 100);
+    };
+  }
+  refreshDisplay() {
+    this.scheduleRender();
+  }
+  exclusionsChanged() {
+    if (this.getSettings().skipExcludedFolders) this.scheduleRecount();
   }
   /** Start listening and decorating. Safe to call repeatedly. */
   start() {
     if (this.running || this.failed) return;
     this.running = true;
+    const generation = ++this.generation;
     this.app.workspace.onLayoutReady(() => {
-      if (!this.running) return;
+      if (!this.running || generation !== this.generation) return;
+      this.ready = true;
       this.guard(() => {
         const { vault, workspace } = this.app;
         this.vaultRefs.push(
@@ -2670,8 +2688,10 @@ var ExplorerCounts = class {
         );
         this.workspaceRefs.push(
           workspace.on("layout-change", () => {
-            this.attach();
-            this.scheduleRender();
+            this.guard(() => {
+              this.attach();
+              this.scheduleRender();
+            });
           })
         );
         this.rebuild();
@@ -2683,8 +2703,10 @@ var ExplorerCounts = class {
   /** Stop everything and remove every badge. Safe to call repeatedly. */
   stop() {
     this.running = false;
-    this.scheduleRecount.cancel();
-    this.scheduleRender.cancel();
+    this.ready = false;
+    this.generation++;
+    window.clearTimeout(this.recountTimer);
+    window.clearTimeout(this.renderTimer);
     for (const ref of this.vaultRefs) this.app.vault.offref(ref);
     for (const ref of this.workspaceRefs) this.app.workspace.offref(ref);
     this.vaultRefs = [];
@@ -2694,9 +2716,6 @@ var ExplorerCounts = class {
       this.removeBadges(container);
     }
     this.observers.clear();
-    for (const leaf of this.app.workspace.getLeavesOfType(EXPLORER_VIEW_TYPE)) {
-      this.removeBadges(leaf.view.containerEl);
-    }
     this.counts.clear();
   }
   /** Call after the settings change: starts, stops, or refreshes to match `enabled`. */
@@ -2705,7 +2724,7 @@ var ExplorerCounts = class {
     if (!enabled) this.failed = false;
     if (enabled && !this.running) this.start();
     else if (!enabled && this.running) this.stop();
-    else if (this.running) this.guard(() => {
+    else if (this.running && this.ready) this.guard(() => {
       this.rebuild();
       this.render();
     });
@@ -2731,11 +2750,14 @@ var ExplorerCounts = class {
     for (const [container, observer] of this.observers) {
       if (containers.has(container)) continue;
       observer.disconnect();
+      this.removeBadges(container);
       this.observers.delete(container);
     }
     for (const container of containers) {
       if (this.observers.has(container)) continue;
-      const observer = new MutationObserver(() => this.scheduleRender());
+      const Observer = container.ownerDocument.defaultView?.MutationObserver;
+      if (!Observer) throw new Error("File explorer observation unavailable");
+      const observer = new Observer(() => this.scheduleRender());
       observer.observe(container, {
         childList: true,
         subtree: true,
@@ -2763,11 +2785,13 @@ var ExplorerCounts = class {
         }
         if (!badge) {
           badge = title.createSpan({ cls: BADGE_CLASS });
-          badge.setAttribute("aria-hidden", "true");
+          badge.setAttribute("role", "img");
         }
         if (badge.textContent !== text) badge.textContent = text;
         const tooltip = describeCount(counts, noun);
-        if (badge.getAttribute("title") !== tooltip) badge.setAttribute("title", tooltip);
+        badge.setAttribute("aria-label", tooltip);
+        if (this.options.showTooltips?.() === false) badge.removeAttribute("title");
+        else if (badge.getAttribute("title") !== tooltip) badge.setAttribute("title", tooltip);
       });
       observer.takeRecords();
     }
@@ -2776,6 +2800,7 @@ var ExplorerCounts = class {
     container.querySelectorAll(`.${BADGE_CLASS}`).forEach((element) => element.remove());
   }
   guard(action) {
+    if (!this.running) return;
     try {
       action();
     } catch (error) {
@@ -2809,8 +2834,8 @@ function explorerCountsSettingDefinitions(get, update) {
       render: (setting) => {
         setting.addDropdown(
           (dropdown) => dropdown.addOptions({
-            total: "Notes including subfolders",
-            direct: "Notes directly in the folder",
+            total: "Including subfolders",
+            direct: "Directly in the folder",
             both: "Both (direct \xB7 total)"
           }).setValue(get().mode).onChange(async (value) => {
             await update({ mode: value });
@@ -2983,7 +3008,8 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian13.Plugin {
       window.clearTimeout(this.rebuildTimer);
     });
     this.explorerCounts = new ExplorerCounts(this.app, () => this.explorerCountsSettings(), {
-      isExcluded: (path) => !this.includesPath(path)
+      isExcluded: (path) => !this.includesPath(path),
+      showTooltips: () => this.prefs.showTooltips
     });
     this.register(() => this.explorerCounts.stop());
     this.addCommand({
@@ -3005,6 +3031,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian13.Plugin {
   }
   async setExcludedFolders(value) {
     this.prefs.excludedFolders = value;
+    this.explorerCounts?.exclusionsChanged();
     this.rebuild();
     await this.save();
   }
@@ -4150,6 +4177,7 @@ var PreferencesTab = class extends import_obsidian13.PluginSettingTab {
       { name: "Show tooltips", desc: "Show hover hints on the property browser controls and rows. Turning this off keeps screen-reader labels and note previews available.", render: (setting) => {
         setting.addToggle((toggle) => toggle.setValue(this.plugin.prefs.showTooltips).onChange(async (value) => {
           this.plugin.prefs.showTooltips = value;
+          this.plugin.explorerCounts?.refreshDisplay();
           await this.plugin.save();
         }));
       } },

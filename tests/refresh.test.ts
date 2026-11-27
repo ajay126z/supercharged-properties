@@ -248,3 +248,12 @@ it('retains stale include paths on folder rename/delete and lets exclusions win 
  expect(plugin.index.paths()).toEqual(new Set(['Library/A.md']));expect(plugin.prefs.folders).toEqual(['Books']);expect(plugin.prefs.profiles[0].folders).toEqual(['Books']);expect(plugin.prefs.inlineViews.folders).toEqual(['Books']);expect(plugin.prefs.excludedFolders).toBe('Books/Templates');
  files.splice(0,files.length);vault.emit('delete',{path:'Library'});await vi.advanceTimersByTimeAsync(151);expect(plugin.index.paths().size).toBe(0);expect(plugin.prefs.folders).toEqual(['Books']);
 });
+
+it('loads Explorer count preferences safely and saves updates through the shared queue',async()=>{
+ const {plugin}=await setup({explorerCounts:{enabled:false,mode:'both',countAllFiles:true,hideZero:'invalid'}});
+ expect(plugin.explorerCountsSettings()).toEqual({enabled:false,mode:'both',countAllFiles:true,hideZero:true,skipExcludedFolders:false});
+ const snapshots:any[]=[];(plugin as any).saveData=vi.fn(async data=>{snapshots.push(data);});
+ await Promise.all([plugin.updateExplorerCounts({mode:'direct'}),plugin.updateExplorerCounts({hideZero:false})]);
+ expect(snapshots[0].explorerCounts.mode).toBe('direct');expect(snapshots[0].explorerCounts.hideZero).toBe(true);expect(snapshots[1].explorerCounts.hideZero).toBe(false);
+ const changed=vi.spyOn(plugin.explorerCounts,'exclusionsChanged');await plugin.setExcludedFolders('Templates');expect(changed).toHaveBeenCalledOnce();
+});

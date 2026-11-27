@@ -382,6 +382,23 @@ The plugin enumerates Markdown notes in your current vault to build the property
 
 Security scanners may flag vault enumeration and clipboard access as capabilities. These capabilities support the features described above; removing them would remove vault-wide indexing or the Copy actions.
 
+## File explorer folder counts
+
+Available in the unreleased development version. Turn on **Settings → Supercharged Properties → Show note counts in the File explorer** to add a count beside folders in Obsidian’s built-in File explorer. This feature is off by default. It changes the display only and never edits notes.
+
+- **Including subfolders** shows all Markdown notes in a folder and its descendants (the default).
+- **Directly in the folder** counts only notes in that folder.
+- **Both (direct · total)** shows both numbers. For example, `3 · 12` means 3 notes directly in the folder and 12 including subfolders.
+- **Hide zero counts in the File explorer** is on by default. In Direct mode, a folder with notes only in subfolders has no badge. In Both mode, `0 · 5` remains visible.
+- **Count all files in the File explorer** includes attachments and other file types. It is off by default.
+- **Skip excluded folders in the File explorer counts** applies the plugin’s global Excluded folders list, including descendants. It is off by default; enable it if templates should not contribute to Explorer counts. Changes to exclusions update counts automatically.
+
+Counts include notes without YAML or inline properties. Saved views, hidden properties, tree search, and Value and Folder filters do not narrow Explorer counts. **Show note counts** controls the property tree separately. File and folder creation, deletion, and moves refresh Explorer badges after a short delay. Collapsing a folder does not change its count. The vault-root folder, when shown, includes all counted files.
+
+Use **Supercharged Properties: Toggle folder counts** in the command palette to turn badges on or off. The preference persists across restarts. Turning it off or unloading the plugin removes its badges. **Show tooltips** controls badge hover hints; accessible count descriptions remain available.
+
+The built-in **Files** core plugin must be enabled to see the badges. If File explorer’s layout is incompatible, counts stop for the session and a notice appears; other Supercharged Properties features continue working. Turn the setting off and back on to retry. Counts also appear in additional Explorer panes, including popout windows where supported.
+
 ## Settings and commands
 
 Open **Settings → Supercharged Properties**.
@@ -395,6 +412,11 @@ Open **Settings → Supercharged Properties**.
 | Sort by | Selects the shared property/value sort preference. |
 | Excluded folders | One vault-relative folder per line, including subfolders; omitted from the index and new bulk edits. |
 | Hidden properties | One property name per line; remove a name to restore it. Leave empty to hide none. |
+| Show note counts in the File explorer | Optional folder badges; off by default. |
+| File explorer count to show | Including subfolders, directly in the folder, or both. |
+| Hide zero counts in the File explorer | Hide badges whose displayed count is zero; on by default. |
+| Count all files in the File explorer | Include attachments and other non-Markdown files; off by default. |
+| Skip excluded folders in the File explorer counts | Apply global folder exclusions to Explorer counts; off by default. |
 
 Preferences, pinned properties, property selections, and saved views are saved as plugin settings. They are not added to your notes. Bulk-edit undo is temporary and is not saved with preferences.
 
@@ -405,6 +427,7 @@ Available command-palette commands use the prefix **Supercharged Properties:**.
 | Open sidebar | Opens or reveals the properties view. |
 | Open in tab | Opens a properties view in a tab. |
 | Refresh property index | Rebuilds metadata and type-icon information. |
+| Toggle folder counts | Turn File explorer folder badges on or off. |
 | Undo last inline property edit | Restore the last successful inline batch, skipping notes changed afterward. Separate from YAML undo. |
 | Undo last property edit | Restores the last eligible property-name or value edit batch; available only while an undo batch exists and no edit is running. |
 

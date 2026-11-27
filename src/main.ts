@@ -130,6 +130,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
     this.register(() => { this.inline.setEnabled(false, false); window.clearTimeout(this.timer); window.clearTimeout(this.rebuildTimer); });
     this.explorerCounts = new ExplorerCounts(this.app, () => this.explorerCountsSettings(), {
       isExcluded: path => !this.includesPath(path),
+      showTooltips: () => this.prefs.showTooltips,
     });
     this.register(() => this.explorerCounts.stop());
     this.addCommand({
@@ -152,6 +153,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
 
   async setExcludedFolders(value: string): Promise<void> {
     this.prefs.excludedFolders = value;
+    this.explorerCounts?.exclusionsChanged();
     this.rebuild();
     await this.save();
   }
@@ -170,7 +172,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
   async updateExplorerCounts(patch: Partial<ExplorerCountsSettings>): Promise<void> {
     this.prefs.explorerCounts = { ...this.explorerCountsSettings(), ...patch };
     this.explorerCounts.apply();
-    await this.save(); // goes through your saveQueue
+    await this.save(); // serialized with other preference updates
   }
 
   private scheduleRebuild(): void {
@@ -1179,15 +1181,6 @@ export class PropertiesView extends ItemView {
 
 }
 
-function addSettingsHeading(parent: HTMLElement, text: string): void {
-  // Setting.setHeading() is unavailable on the minimum supported Obsidian 1.7.2.
-  if (typeof (Setting.prototype as Setting & { setHeading?: () => Setting }).setHeading === 'function') {
-    new Setting(parent).setName(text).setHeading();
-    return;
-  }
-  parent.createEl('h3', { text });
-}
-
 class PreferencesTab extends PluginSettingTab {
   constructor(private plugin: SuperchargedPropertiesPlugin) { super(plugin.app, plugin); }
   getSettingDefinitions() {
@@ -1198,7 +1191,7 @@ class PreferencesTab extends PluginSettingTab {
       } },
       { name: 'Show tooltips', desc: 'Show hover hints on the property browser controls and rows. Turning this off keeps screen-reader labels and note previews available.', render: (setting: Setting) => {
         setting.addToggle(toggle => toggle.setValue(this.plugin.prefs.showTooltips).onChange(async value => {
-          this.plugin.prefs.showTooltips = value; await this.plugin.save();
+          this.plugin.prefs.showTooltips = value; this.plugin.explorerCounts?.refreshDisplay(); await this.plugin.save();
         }));
       } },
       { name: 'Show note counts', render: (setting: Setting) => {
