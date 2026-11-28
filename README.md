@@ -1,218 +1,141 @@
+---
+created: 2026-11-27
+updated: 2026-11-27
+---
 # Supercharged Properties
 
-**Find notes by their properties and keep your vault's metadata consistent.**
+**Find the right notes. Keep your properties consistent.**
 
-Supercharged Properties brings your properties, their values, and the notes that use them into one browsable view. Find every note marked `doing`, explore notes by author or topic, and clean up inconsistent property names and values across many notes at once.
+Your vault already knows which books you’re reading, which projects are active, and which notes belong to a topic. Supercharged Properties makes that information easy to explore: browse **properties → values → notes**, save views for different kinds of work, and clean up inconsistent metadata across many notes at once.
 
-Choose the properties you want to see, save views for different projects, and exclude template folders to keep your results focused. Bulk edits show a preview before you confirm, with one-step undo for the last batch.
+Go from “show me everything marked `active`” to the notes, authors, and topics behind that value. When it’s time to make changes, review exactly which notes will change before confirming, with session undo for the last successful batch.
 
-## Add or remove properties across notes
+[Get started](#get-started) · [User guide](docs/USER-GUIDE.md) · [Latest release](https://github.com/ajay126z/supercharged-properties/releases/latest)
 
-From a folder, multi-selection, or YAML property/value row, choose **Add properties…** or **Remove properties…**. Reuse existing names and values, choose typed values, and review the per-note preview before applying. Add up to 20 properties together; remove whole keys from the notes that contain them. Tree Add/Remove actions and Delete property respect the active search, so searching a folder path limits their previews to matching notes. Exclusions, conflict checks, and shared session undo help keep changes controlled. [Add and Remove guide](docs/ADD-REMOVE-PROPERTIES.md). Available in the upcoming release.
+## Find notes without remembering filenames
 
-This development README includes upcoming features. See [changes since 1.5.1](docs/releases/UNRELEASED.md) for what is not yet in the published release.
-
-## Explore your notes
-
-- **Browse properties → values → notes.** Expand a property to see its values, then open the notes that use them. Expand/collapse all preserves your search, active view, and Value filter. Individual branch arrows also work within search and filtered results. After Collapse all, expand properties → values → notes one level at a time. Property/value counts and the Value filter’s matching-note list update as you search.
-- **Find what you need.** Search property names, values, note names, or folder paths. Large note/path searches combine rapid keystrokes into one refresh and load offscreen results as you scroll to keep typing responsive. Open matching notes in Obsidian Search or copy their links.
-- **See how properties are used.** Note counts show how common each property or value is. Type icons help distinguish text, lists, numbers, dates, and checkboxes.
-- **Choose your order.** Sort alphabetically, by how many notes use a property or value, or choose **Manual** to restore your saved property order. Select **Reorder properties…** in the sort menu to arrange properties with drag handles, the row menu, or keyboard. Use **Done** to keep the order or **Cancel** to discard the session and restore the previous automatic sort. Manual orders belong to each view; pinned properties stay first. [Manual ordering guide](docs/USER-GUIDE.md#reorder-properties-manually). A–Z and Z–A order linked values and expanded notes by note filename, with natural numeric ordering.
-- **Value filter.** Explore other properties only among notes sharing a value, with counts and note links recalculated for that group.
-- **Stay up to date.** The view refreshes as your notes change.
-
-![Browse properties and search matching notes](docs/media/01-browse-and-search.gif)
-
-Pins set in **All properties** are shared across YAML views. Pin or unpin inside a saved view to change only that view, without affecting All properties or other views.
-
-## Browse inline properties
-
-Enable **Settings → Supercharged Properties → Show inline properties**, then choose **Inline Properties** from the view dropdown. Browse a separate **property → value → notes** tree for fields written in note bodies:
-
-```markdown
-author:: AJ
-[topic:: design]
-(rating:: 4)
-```
-
-All properties and existing saved views continue to show YAML frontmatter. To save an inline view, choose **Inline Properties**, open **Choose properties to show**, select fields, enter a name, and choose **Save new**. The view picker opens downward with a scrollable list that fits the screen. Inline views appear as **Inline: Name** and have their own Update, Rename, and Delete controls. Inline browsing supports search, sorting, distinct-note counts, copied note links, and Value filters. Right-click or long-press inline rows to rename or delete a property, rename a value, or select several values to replace with one new text value. Edits require Preview changes and Confirm changes, with **Undo last inline property edit** available until reload. Inline pins and hidden properties are separate from YAML. Open in Search and Copy search query use text queries that may also match code examples. Excluded folders apply, and code, frontmatter, and comments are ignored. Fields in nested lists and indented list continuations are supported, including link values. Values are literal text; Dataview is not required. See [inline properties](docs/USER-GUIDE.md#inline-properties) for supported syntax and limits. Available in 1.5.0.
-
-![Enable inline properties, browse note-body fields, and preview a value edit](docs/media/08-inline-properties.gif)
-
-**Convert inline fields to YAML.** Move or copy inline fields into Obsidian properties from the inline property/value menu. Choose notes, handle existing values with Skip/Merge/Overwrite, and preview before confirming. Repeated fields become lists; conversion includes one-step session undo. [Conversion guide](docs/BULK-EDITING.md#convert-inline-properties-to-yaml).
-
-## Folder counts in File explorer
-
-Optionally show note counts beside folders in Obsidian’s File explorer. Choose counts for the current folder, all subfolders, or both; hide zeros or include attachments. Off by default. Counts include notes without properties and are independent of your selected property view and filters. [Setup and options](docs/USER-GUIDE.md#file-explorer-folder-counts). Available in the unreleased development version.
-
-## Focus a view on folders
-
-Open **Choose properties to show → + Add folder** to show notes from chosen folders and their subfolders. Manage folder chips or choose **Clear** inside that panel to broaden the view. Folder paths stay hidden while the panel is closed. Folder filters narrow counts, copied links, and edits, and combine with **Filter by Value**. Save them with YAML or Inline views—even when all properties are selected. Global **Excluded folders** always wins. [Folder filter guide](docs/USER-GUIDE.md#folder-filters).
-
-![Choose a folder filter, save a view, and restore its folder scope](docs/media/09-folder-filters.gif)
+Start with what you know about a note - its status, author, rating, or topic. Expand a property to see its values, then open the notes that use them. Search property names, values, note names, or paths to find what you need.
 
 ## Explore notes sharing a value
 
-Explore the rest of your metadata within a group of notes—for example, see which topics and authors occur among notes with `status: active`.
+**Use one shared value to explore and clean up the rest of a group’s metadata.**
 
-1. Right-click a value on desktop or long-press it on mobile, then choose **Filter by Value**.
-2. Browse the remaining properties. Counts and note links now reflect only matching notes; the filter property stays in the bar above the tree.
-3. Expand the **note count** to see the matching note names and folders. Click a name to open it, or Ctrl/Cmd-click to open a new tab. Larger groups offer **Show more** after the first 200 notes.
-4. Choose **Clear** to remove the Value filter; any folder filter remains active.
+Filter `status: active` to see which topics, authors, and other properties occur across your active notes. The tree and counts now describe that group, helping you spot inconsistent values or outdated fields without mixing in the rest of your vault.
 
-On mobile and narrow panes, the property and value wrap so the full condition stays readable. The note-count and Clear buttons move together below the label when needed.
+For example, your active project notes might use both `topic: UX` and `topic: user experience`. Filter by `status: active`, then merge those topic values within the matching group. Notes outside that group are not part of the edit.
+
+1. Right-click a value on desktop, or long-press on mobile, and choose **Filter by Value**.
+2. Explore the remaining properties, or expand the note count to see the matching notes.
+3. Rename or merge inconsistent values, or remove an outdated property from the group. Review the affected notes in the preview before confirming.
+4. Choose **Clear** to return to the broader view; any folder filter remains active.
 
 ![Filter by a value, reveal matching notes, and open a note](docs/media/07-value-filter-notes.gif)
 
-One filter is active per tab; choosing another replaces it. Notes entering or leaving that value update the results automatically. The filter is temporary and is not saved in a view. **Open in Search** and **Copy search query** remain vault-wide and do not include the value filter. See [Value filter](docs/USER-GUIDE.md#value-filter) for edit scope and examples. Available in **1.4.0**.
+The Value filter narrows property-row and value-row edits to matching notes and combines with folder filters. You can also copy matching note links. **Open in Search** remains vault-wide, so use the local tree and edit preview when working within the group. [Value filtering and edit scope](docs/USER-GUIDE.md#value-filter).
 
-> Design and concept inspired by @[RedPandaLi|RedPandaLi's](https://github.com/RedPandaLi) idea of Scoped Properties.
+## Build a view for the work in front of you
 
-## Keep your view focused
+A reading list needs different fields from a project dashboard. Show the properties you need, limit the view to chosen folders, and save the combination for later.
 
-- **Choose properties.** Show only the fields relevant to your current work.
-- **Save views.** Save property selections and folder filters as views such as Writing, Projects, or Reading, and switch between them. Dropdown property counts reflect each view’s own scope, independently of the selected view.
-- **Filter by folders.** Limit a view to selected folders and their subfolders. Counts, copied links, and edits follow that scope.
-- **Pin and hide.** Keep frequently used properties at the top and hide fields you do not need to see.
-- **Exclude folders.** Leave templates, drafts, or other folders out of the property list and counts. Exclusions include subfolders and also apply to new bulk edits.
+- **Reading:** keep author, rating, and reading status together.
+- **Projects:** focus on status and due dates in your Projects folder.
+- **Daily notes:** browse only the fields and folders used by your journal.
+
+Pin frequently used properties, hide distracting fields, and exclude template folders so they don’t inflate your results. Folder filters include subfolders and can be saved with both YAML and Inline views. Temporary value filters let you explore within a view without changing its saved selection.
 
 ![Choose properties and folders, save a view, and restore both selections](docs/media/02-saved-views.gif)
 
-![Exclude Templates folders from the property tree](docs/media/05-exclude-templates.gif)
+[Save your first view](docs/USER-GUIDE.md#save-and-manage-views) · [Exclude templates](docs/USER-GUIDE.md#exclude-template-or-other-folders)
 
-## Change selected notes
+## Clean up metadata without opening every note
 
-Update one note or several notes under the same property. For example, move selected tasks from `status: todo` and `status: active` to `status: closed`.
+Small inconsistencies accumulate. Fix them across matching notes with a before/after preview.
 
-1. Right-click a note on desktop or long-press it on mobile.
-2. Choose **Change status…** (the action uses your property's name). To edit several notes, choose **Select notes…**, select the notes, then choose **Change status…** in the selection bar.
-3. Choose the change, review the before/after preview, and confirm.
-
-| Property type | What you can change |
-| --- | --- |
-| Text | Choose an existing value or enter new text. |
-| Number | Set a number, such as a rating or estimate. |
-| Checkbox | Set checked or unchecked. |
-| Date / Date & time | Choose a date or local date and time. |
-| List | Add or remove multiple text or number items while keeping the other items. |
-| aliases / cssclasses | Add or remove text list items. |
-
-**Set empty (keep property)** clears a scalar value while keeping its key. **Remove property** deletes the entire key and value from the selected notes, including every item in a list. Removing individual list values leaves an empty list if the last item is removed. Selected-note editing is unavailable for tags.
-
-Selection shows checkboxes and highlighted rows on desktop and mobile. On desktop, **Alt/Option-click** toggles notes and **Shift-click** adds a displayed range. On mobile, use the checkboxes or tap rows in selection mode. You can select notes from different value groups under the same property. The mobile dialog keeps its actions above the keyboard.
-
-Only the selected notes are changed. Review the preview before applying; **Undo last property edit** restores the last successful batch. See [changing selected notes](docs/NOTE-VALUE-EDITING.md) for examples, supported values, and selection behavior.
-
-![Change selected note values with preview and undo](docs/media/06-edit-selected-values.gif)
-
-## Clean up properties across notes
-
-Right-click a property or value to make changes across matching notes:
-
-| Action | Example |
-| --- | --- |
-| Rename a property | Change `author` to `authors` while keeping each note's value. |
-| Delete a property | Remove `deprecated` from every note that still has it. |
-| Rename a value | Change `status: in-progress` to `status: active`. |
-| Delete a value | Remove `obsolete` from `status` values and list entries. |
-| Merge values | Combine `doing` with an existing `active` value. |
-| Convert text to a link | Change `Ada Lovelace` to `[[Ada Lovelace]]`. |
-| Split text into a list | Turn `research, writing, editing` into three list items. |
-
-**Split into list** is available only for text values under Text properties. It is not offered for List, Number, Checkbox, Date, Date & Time, tags, aliases, or cssclasses.
-
-Each edit shows the affected notes before you confirm. Property-name and deletion conflicts, and changes made since the preview, are skipped rather than overwritten. Browsing and organizing the view do not change your notes.
-
-Bulk edits apply to matching notes in included folders. An active **Value filter** narrows value edits, property renames, and property deletions to that group of notes. Tree search and saved views do not further narrow the affected notes. Review the preview before confirming.
-
-![Rename a property while preserving its values](docs/media/04-rename-property.gif)
+| What you want to fix                          | What you can do                                      |
+| --------------------------------------------- | ---------------------------------------------------- |
+| `doing` and `in-progress` mean the same thing | Merge them into `active`.                            |
+| An author is stored as plain text             | Convert `Ada Lovelace` into `[[Ada Lovelace]]`.      |
+| A property name needs to change               | Rename `author` to `authors`, keeping its values.    |
+| A text field contains several items           | Split `research, writing, editing` into a YAML list. |
+| Old metadata is no longer useful              | Delete a property or selected values.                |
 
 ![Merge property values with preview and undo](docs/media/03-merge-and-undo.gif)
 
-### Undo and edit limits
+**See the affected notes before you confirm.** Conflict checks skip incompatible changes or values edited since the preview. Browsing, filtering, and organizing views never modify notes.
 
-Use **Supercharged Properties: Undo last property edit** to undo the last successful batch. Undo preserves later edits by skipping conflicting values, including property keys recreated after a deletion. It is available until the plugin reloads or another successful batch replaces it. Deleting a property preserves your saved views and selections, so they still apply after undo.
+Use **Undo last property edit** to restore the last eligible YAML batch during the session. A later successful batch replaces it, and reloading clears it. Undo skips conflicting later edits; YAML comments and quoting may not restore exactly. Split into list is available only for Text properties. [Bulk-editing guide and safeguards](docs/BULK-EDITING.md).
 
-Edits can change property formatting, including YAML comments and quoting; undo restores names and values, not the original formatting. Renaming a property does not update its configured type, templates, or queries that reference its old name. See the [editing guide](docs/BULK-EDITING.md) and [property-renaming guide](docs/PROPERTY-RENAMING.md) for details.
+Folder and Value filters narrow row-edit batches. In the upcoming version, tree search also narrows **Delete property** and tree **Add/Remove properties** actions; other row edits keep their full Folder/Value-filtered scope. Always check the preview’s note list.
+
+## Update just the notes you choose
+
+Move selected tasks from `todo` and `active` to `closed`, rate several books, or add a list value to a group of notes—all under the same property.
+
+Right-click a note, or long-press on mobile, and choose **Change status…** (the action uses your property’s name). For several notes, choose **Select notes…**, make your selection, and use the selection bar. Desktop selection also supports Alt/Option-click and Shift-click, with checkboxes showing what is selected.
+
+Text, numbers, checkboxes, dates, and date-and-time properties support typed changes. Lists support adding or removing items. You can keep a property empty or remove its key entirely. Review the preview before applying.
+
+![Change selected note values with preview and undo](docs/media/06-edit-selected-values.gif)
+
+[Selected-note editing: types, selection, and undo](docs/NOTE-VALUE-EDITING.md)
+
+## Bring inline fields into the same workflow
+
+Already use fields such as `author:: AJ` or `[topic:: design]` in your note bodies? Turn on **Show inline properties** to browse them in a separate tree—no Dataview installation required.
+
+Save Inline views, filter by value, and rename, replace, or delete inline fields with previews and their own session undo. When you want those fields in Obsidian’s Properties view or Bases, **Convert to YAML property…** lets you move or copy them into frontmatter, review conflicts, and confirm the changes.
+
+[Inline properties](docs/USER-GUIDE.md#inline-properties) · [Convert inline fields to YAML](docs/BULK-EDITING.md#convert-inline-properties-to-yaml)
+
+## More control over your workspace
+
+These additions are **upcoming** and are not yet in the published 1.5.1 release. [See all upcoming changes](docs/releases/UNRELEASED.md).
+
+- **Add or remove properties across folders.** Add up to 20 typed properties together, or remove whole keys, from an Explorer folder, multi-selection, or YAML row. Reuse existing names and values, preview each note, and choose how to handle existing values. [Batch-property guide](docs/ADD-REMOVE-PROPERTIES.md).
+- **Keep properties in your own order.** Choose **Manual** to restore a view’s saved arrangement. Open **Reorder properties…** to use drag handles, menu moves, or keyboard controls. Done keeps the arrangement; Cancel restores the previous automatic sort and discards the session’s moves. [Manual ordering](docs/USER-GUIDE.md#reorder-properties-manually).
+- **See folder sizes at a glance.** Optional File explorer badges show note counts for each folder, including subfolders if you choose. Include attachments or skip excluded folders to suit your workflow. [Folder counts](docs/USER-GUIDE.md#file-explorer-folder-counts).
 
 ## Get started
 
-1. Enable **Supercharged Properties** in Obsidian's community plugin settings.
-2. Click its ribbon icon, or run **Supercharged Properties: Open sidebar** or **Open in tab** from the command palette.
-3. Expand a property, then a value, to browse its notes.
-4. Use **Choose properties to show** to select fields and save a view.
+Works on **desktop and mobile**, with **Obsidian 1.7.2 or later**. Use right-click menus on desktop and long-press menus on mobile. Obsidian’s core Search plugin is needed only for **Open in Search**.
 
-To exclude templates, open **Settings → Supercharged Properties → Excluded folders** and enter one folder path per line:
+### Install
 
-```text
-Templates
-Resources/Templates
-```
-
-Use paths relative to your vault, with matching capitalization. `Templates` excludes its subfolders but does not exclude `Templates Archive`. Changes take effect immediately. Obsidian's core Search is separate and can still return excluded notes.
-
-## Mobile use
-
-Version 1.2.1 improves saved-view controls on small screens: the name field and action buttons appear above the property list, the picker scrolls when space is limited, and it adjusts to the visible area above the keyboard. Opening the picker does not automatically open the keyboard. After typing a new view name, tap **Save new** or use **Done/Enter** to save; a successful save dismisses the name-field keyboard.
-
-When choosing properties, **All** and **None** keep the view name you have typed on both desktop and mobile. Saving All reports that the default view already exists; saving None asks you to select at least one property. The built-in **All properties** view cannot be deleted or renamed. These saved-view improvements are included in 1.2.1.
-
-## Settings
-
-| Setting | What it does |
-| --- | --- |
-| Show tooltips | Show hover hints in the property browser; enabled by default. |
-| Hidden inline properties | Hide inline property names without affecting YAML. |
-| Show inline properties | Add the separate Inline Properties view; disabled by default. |
-| Show note counts | Show how many distinct notes use each property or value. |
-| Sort by | Choose alphabetical order, note frequency, or Manual property ordering. |
-| Include subfolders by default | Include descendants in Add/Remove folder batches; on by default. |
-| Default when a note already has the property | Choose Skip, Merge into list, or Overwrite for Add properties. |
-| List delimiter | Separate Add properties list items; comma by default. |
-| Show note counts in the File explorer | Optional folder badges; off by default. |
-| File explorer count to show | Direct, including subfolders, or both. |
-| Hide zero counts in the File explorer | Hide empty badges; on by default. |
-| Count all files in the File explorer | Include attachments; off by default. |
-| Skip excluded folders in the File explorer counts | Apply global exclusions to badges; off by default. |
-| Excluded folders | Omit selected folders and their subfolders from the view and new bulk edits. |
-| Hidden properties | Hide named properties; remove a name here to show it again. |
-
-## Requirements and installation
-
-Works on desktop and mobile with **Obsidian 1.7.2 or later**. The core **Search** plugin is needed only for **Open in Search**.
-
-If available in the community plugin browser, open **Settings → Community plugins → Browse**, search for **Supercharged Properties**, then install and enable it.
+Open **Settings → Community plugins → Browse** and search for **Supercharged Properties**. If it is available there, install and enable it.
 
 For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the same [release](https://github.com/ajay126z/supercharged-properties/releases). Place them in `<YourVault>/.obsidian/plugins/supercharged-properties/`, reload Obsidian, and enable the plugin.
 
-## Privacy
+### Try your first view
 
-Your notes stay in your vault. The plugin does not send vault data to external services or read your clipboard. Copy actions replace the clipboard with the query or note links you choose to copy. Changes to notes require your confirmation.
+1. Click the ribbon icon or run **Supercharged Properties: Open sidebar** from the command palette.
+2. Expand a property you use often, then expand a value to see its notes.
+3. Right-click or long-press a value and choose **Filter by Value** to explore that group.
+4. Open **Choose properties to show**, select useful fields and optional folders, enter a view name, and choose **Save new**.
 
-## Help and documentation
+Saved views keep your property and folder selection; the temporary Value filter is not saved. To work in a full tab instead, run **Supercharged Properties: Open in tab**.
 
-- [Add or remove properties](docs/ADD-REMOVE-PROPERTIES.md) — typed folder and multi-note batches, previews, and undo.
-- [User guide](docs/USER-GUIDE.md) — browsing, search, saved views, exclusions, keyboard controls, and troubleshooting.
-- [Change selected notes](docs/NOTE-VALUE-EDITING.md) — typed values, list additions/removals, whole-property removal, desktop and mobile selection, and undo.
-- [Bulk value editing](docs/BULK-EDITING.md) — rename, delete, merge, link conversion, splitting, and undo.
-- [Property-name renaming](docs/PROPERTY-RENAMING.md) — renaming, deletion, previews, conflicts, and effects on saved views.
+[Full user guide](docs/USER-GUIDE.md) · [Settings and commands](docs/USER-GUIDE.md#settings-and-commands) · [Troubleshooting](docs/USER-GUIDE.md#troubleshooting)
+
+## Your notes stay in your vault
+
+The plugin does not send vault data to external services or read your clipboard. Copy actions write only the query or note links you choose. Changes to notes require preview and confirmation; browsing and view customization change only plugin preferences.
+
+## Help and support
+
+- [Documentation index](docs/README.md) — guides for browsing, editing, filtering, and organizing.
 - [Changelog](CHANGELOG.md) — changes by version.
-- [Documentation index](docs/README.md) — all user and contributor guides.
-- [Report an issue](https://github.com/ajay126z/supercharged-properties/issues).
+- [Report an issue](https://github.com/ajay126z/supercharged-properties/issues) — include the steps to reproduce it and your Obsidian/plugin versions.
 
-> Thanks for using Supercharged Properties! If you find it helpful, you can support its ongoing development by buying me a coffee.
->
-> <a href="https://www.buymeacoffee.com/ajayzapadiya" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+If Supercharged Properties saves you time, you can [support its development with a coffee](https://www.buymeacoffee.com/ajayzapadiya).
+
+<a href="https://www.buymeacoffee.com/ajayzapadiya"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="217" height="60"></a>
+
+Value filtering was inspired by [RedPandaLi](https://github.com/RedPandaLi)’s Scoped Properties idea.
 
 ## Contributing and license
 
-For source builds and development instructions, see [Contributing](CONTRIBUTING.md). Release maintainers can refer to the [release runbook](docs/RELEASING.md), [Publishing](docs/PUBLISHING.md), and [Release QA](docs/RELEASE-QA.md).
-
+See [Contributing](CONTRIBUTING.md) for source builds and development instructions, and the [release runbook](docs/RELEASING.md) for publishing.
 
 Copyright (c) 2026 Ajay Zapadiya. Released under the [MIT License](LICENSE). See [NOTICE.md](NOTICE.md) for third-party notices.
 
 Supercharged Properties is an independent community plugin and is not affiliated with or endorsed by Obsidian. Obsidian is a trademark of Dynalist Inc.
-
-
-
-
