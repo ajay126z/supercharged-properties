@@ -1,7 +1,3 @@
----
-created: 2026-11-27
-updated: 2026-11-28
----
 # Supercharged Properties
 
 **Find the right notes. Keep your properties consistent.**
