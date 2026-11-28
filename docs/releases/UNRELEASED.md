@@ -35,3 +35,5 @@ Choose **Sort properties → Manual** to restore the saved order without editing
 Manual ordering includes **Done** to finish arranging and **Cancel** to restore the last automatic sort and discard the session’s moves. **Reorder properties…** in the sort menu opens the controls again.
 
 Property dragging now defers background tree refreshes until the gesture finishes and accepts the empty area below the final property as a drop target. Pinned boundaries and cancellation remain enforced.
+
+View-dropdown counts now use each entry’s own scope. Switching to a folder-scoped profile no longer shrinks All properties or unrelated profile counts. This applies to YAML and Inline sources, while tree counts and editing scopes remain unchanged.

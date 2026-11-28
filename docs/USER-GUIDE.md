@@ -300,7 +300,7 @@ The view picker opens below the view bar and scrolls within the available screen
 
 Names cannot be blank or duplicate another view name, ignoring case. The input allows up to 80 characters. Update, Rename, and Delete require an active saved view.
 
-A view is marked **(modified)** when its current selection differs from the saved selection. Click Update to keep the changes, or choose the saved view again to restore its saved keys and folders. The dropdown count includes only currently present, non-hidden properties. A saved key that is temporarily absent from the vault is retained and becomes useful again when that property reappears.
+A view is marked **(modified)** when its current selection differs from the saved selection. Click Update to keep the changes, or choose the saved view again to restore its saved keys and folders. Each dropdown count includes currently present, non-hidden properties in that entry’s own property selection and folders. All properties uses the full indexed source. Selecting another profile, applying a temporary Value filter, or searching the tree does not narrow the other dropdown counts. An active modified view uses its current selection and folders. A saved key that is temporarily absent from the vault is retained and becomes useful again when that property reappears.
 
 ## Folder filters
 

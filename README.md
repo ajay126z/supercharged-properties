@@ -69,7 +69,7 @@ One filter is active per tab; choosing another replaces it. Notes entering or le
 ## Keep your view focused
 
 - **Choose properties.** Show only the fields relevant to your current work.
-- **Save views.** Save property selections and folder filters as views such as Writing, Projects, or Reading, and switch between them.
+- **Save views.** Save property selections and folder filters as views such as Writing, Projects, or Reading, and switch between them. Dropdown property counts reflect each view’s own scope, independently of the selected view.
 - **Filter by folders.** Limit a view to selected folders and their subfolders. Counts, copied links, and edits follow that scope.
 - **Pin and hide.** Keep frequently used properties at the top and hide fields you do not need to see.
 - **Exclude folders.** Leave templates, drafts, or other folders out of the property list and counts. Exclusions include subfolders and also apply to new bulk edits.

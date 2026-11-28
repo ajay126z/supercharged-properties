@@ -5044,20 +5044,28 @@ var PropertiesView = class extends import_obsidian17.ItemView {
     this.syncProfiles();
     applyTooltips(this.scopePanel, this.plugin.prefs.showTooltips !== false);
   }
-  syncProfiles(index = this.activeIndex()) {
+  syncProfiles() {
     const choices = [];
     const addSource = (inline, prefs2, source) => {
       const active2 = prefs2.profiles.find((profile) => profile.id === prefs2.activeProfile);
       const hidden = new Set((inline ? this.inlinePrefs.hidden ?? "" : this.plugin.prefs.hidden).split("\n").map(fold).filter(Boolean));
-      const available = inline === this.inlineView ? index : source;
-      const count = (keys) => new Set([...keys].filter((key) => available.properties.has(key) && !hidden.has(key))).size;
+      const count = (keys, folders) => {
+        const included = normalizeFolders(folders);
+        return new Set([...keys].filter((key) => {
+          const property = source.properties.get(key);
+          if (!property || hidden.has(key)) return false;
+          if (!included.length) return true;
+          for (const path of property.paths) if (isFolderExcluded(path, included)) return true;
+          return false;
+        })).size;
+      };
       const prefix2 = inline ? "inline:" : "";
       choices.push({ label: `${inline ? "Inline Properties" : "All properties"} (${count(source.properties.keys())})`, value: inline ? "inline" : "all" });
-      if ((prefs2.scope !== null || normalizeFolders(prefs2.folders).length) && !active2) choices.push({ label: `${inline ? "Inline: " : ""}Custom selection (${count(prefs2.scope ?? source.properties.keys())})`, value: `${prefix2}custom` });
+      if ((prefs2.scope !== null || normalizeFolders(prefs2.folders).length) && !active2) choices.push({ label: `${inline ? "Inline: " : ""}Custom selection (${count(prefs2.scope ?? source.properties.keys(), prefs2.folders)})`, value: `${prefix2}custom` });
       for (const profile of prefs2.profiles) {
         const keys = profile === active2 ? prefs2.scope ?? [...source.properties.keys()] : profile.keys;
         const modified = profile === active2 && (!sameKeys(profile.keys, keys) || !sameFolders(profile.folders, prefs2.folders));
-        choices.push({ label: `${inline ? "Inline: " : ""}${profile.name}${modified ? " (modified)" : ""} (${count(keys)})`, value: `${prefix2}profile:${profile.id}` });
+        choices.push({ label: `${inline ? "Inline: " : ""}${profile.name}${modified ? " (modified)" : ""} (${count(keys, profile === active2 ? prefs2.folders : profile.folders)})`, value: `${prefix2}profile:${profile.id}` });
       }
     };
     addSource(false, this.plugin.prefs, this.plugin.index);
@@ -5309,7 +5317,7 @@ var PropertiesView = class extends import_obsidian17.ItemView {
     this.scopeButton.title = "Choose properties to show";
     const valuePaths = this.filterPaths();
     const index = this.activeIndex(valuePaths);
-    this.syncProfiles(index);
+    this.syncProfiles();
     this.renderFolders();
     this.disposeNoteMenus();
     this.syncNoteSelection(index);

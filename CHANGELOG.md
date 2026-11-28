@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Keep view-dropdown property counts independent of the active profile’s filters. All properties counts the full source; each YAML or Inline profile counts its own selected keys and folders. Temporary search and Value filters do not affect dropdown counts.
+
 - Keep reorder gestures stable across background refreshes and progressive search rendering. Accept drops in the empty area below the final property; reject drops outside the pane or across pinned groups.
 
 - Speed up Search everything and Note names/paths by reusing natural collation, caching repeated matches per render, and filtering before sorting. Coalesce typing bursts for large trees without allowing stale tree actions. Render search branches near the viewport in small chunks, preserving full counts, edit scopes, keyboard navigation, and range selection.

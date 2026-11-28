@@ -1454,3 +1454,30 @@ it('restores inherited manual order without creating a saved-view override or op
  (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title==='Manual').run();expect(propertyOrder()).toEqual(['gamma','beta','alpha']);expect(plugin.prefs.profiles[0].order).toBeUndefined();expect(grip('gamma')).toBeNull();expect((view as any).orderActions.hidden).toBe(true);
  (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title==='Reorder properties…').run();moveGrip('alpha','Home');click('Cancel property reordering');expect(plugin.prefs.sort).toBe('count-asc');expect(plugin.prefs.profiles[0].order).toBeUndefined();expect(plugin.prefs.manualOrder).toEqual(['gamma','beta','alpha','delta']);
 });
+it.each([false,true])('keeps dropdown counts independent of the selected folder-scoped profile (inline=%s)',inline=>{
+ const source=new PropertyIndex(),keys=Array.from({length:78},(_,i)=>`key${i}`);
+ source.update('Books/A.md',Object.fromEntries(keys.slice(0,16).map(key=>[key,'yes'])));source.update('Other/B.md',Object.fromEntries(keys.slice(16).map(key=>[key,'yes'])));
+ if(inline){plugin.prefs.showInlineProperties=true;plugin.inline={index:source,pending:0,failures:new Set()};}else plugin.index=source;
+ const prefs=inline?(view as any).inlinePrefs:plugin.prefs;const prefix=inline?'inline:':'';
+ prefs.profiles=[{id:'books',name:'Books',keys:keys.slice(0,8),folders:['Books']},{id:'general',name:'General Properties',keys:keys.slice(16,22)},{id:'maps',name:'Maps',keys:keys.slice(0,77)},{id:'dots',name:'Dots',keys:[...keys.slice(0,4),...keys.slice(16,21)]},{id:'daily',name:'Daily Notes',keys:[...keys.slice(0,4),...keys.slice(16,24)]}];view.render();
+ const labels=()=>{click('Property view');const result=Array.from(document.querySelectorAll<HTMLElement>('.pv-view-option')).filter(e=>inline?e.dataset.value==='inline'||e.dataset.value?.startsWith('inline:'):!e.dataset.value?.startsWith('inline')).map(e=>e.textContent);(view as any).profilePicker.close(false);return result;};
+ const expected=[inline?'Inline Properties (78)':'All properties (78)',...['Books (8)','General Properties (6)','Maps (77)','Dots (9)','Daily Notes (12)'].map(label=>inline?'Inline: '+label:label)];
+ chooseView(inline?'inline':'all');expect(labels()).toEqual(expected);
+ for(const id of ['books','general','maps','dots','daily']){chooseView(`${prefix}profile:${id}`);expect(labels()).toEqual(expected);}
+});
+it('counts each profile using its own folders while ignoring temporary search and Value filters',()=>{
+ plugin.index=new PropertyIndex();plugin.index.update('Books/A.md',{status:'active',author:'AJ',rating:4});plugin.index.update('Other/B.md',{status:'closed',topic:'maps'});
+ plugin.prefs.profiles=[{id:'books',name:'Books',keys:['status','author','topic','missing'],folders:['Books']},{id:'other',name:'Other',keys:['status','author','topic'],folders:['Other']}];view.render();
+ const labels=()=>{click('Property view');const result=Array.from(document.querySelectorAll('.pv-view-option')).map(e=>e.textContent);(view as any).profilePicker.close(false);return result;};
+ const expected=['All properties (4)','Books (2)','Other (2)'];expect(labels()).toEqual(expected);chooseView('profile:books');
+ const status=plugin.index.properties.get('status'),value=[...status.values.values()].find((v:any)=>v.label==='active');(view as any).setFilter({property:status.id,propertyLabel:status.label,value:value.id,label:value.label});(view as any).query='author';(view as any).searchScope='key';view.render();expect(labels()).toEqual(expected);
+ expect(propertyOrder()).toEqual(['author']);expect(document.querySelector('.pv-summary')?.textContent).toBe('1 properties · Filtered (1 note)');
+ plugin.prefs.hidden='author';view.render();expect(labels()).toEqual(['All properties (3)','Books (1)','Other (2)']);
+ plugin.index.update('Books/New.md',{topic:'added'});view.render();expect(labels()).toEqual(['All properties (3)','Books (2)','Other (2)']);
+});
+it('keeps modified and custom folder-selection counts local to their dropdown entry',()=>{
+ plugin.index=new PropertyIndex();plugin.index.update('Books/A.md',{author:'AJ',rating:4});plugin.index.update('Other/B.md',{topic:'maps'});
+ plugin.prefs.profiles=[{id:'books',name:'Books',keys:['author','rating'],folders:['Books']},{id:'other',name:'Other',keys:['topic'],folders:['Other']}];view.render();chooseView('profile:books');plugin.prefs.folders=['Missing'];view.render();
+ expect(document.querySelector('[aria-label="Property view"]')?.textContent).toBe('Books (modified) (0)');
+ plugin.prefs.activeProfile=null;plugin.prefs.scope=null;plugin.prefs.folders=['Other'];view.render();click('Property view');expect(Array.from(document.querySelectorAll('.pv-view-option')).map(e=>e.textContent)).toEqual(['All properties (3)','Custom selection (1)','Books (2)','Other (1)']);
+});

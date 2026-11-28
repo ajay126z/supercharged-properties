@@ -797,20 +797,29 @@ export class PropertiesView extends ItemView {
     this.syncProfiles();
     applyTooltips(this.scopePanel, this.plugin.prefs.showTooltips !== false);
   }
-  private syncProfiles(index = this.activeIndex()): void {
+  private syncProfiles(): void {
     const choices: ViewChoice[] = [];
     const addSource = (inline: boolean, prefs: PropertyViewState, source: PropertyIndex) => {
       const active = prefs.profiles.find(profile => profile.id === prefs.activeProfile);
       const hidden = new Set((inline ? this.inlinePrefs.hidden ?? '' : this.plugin.prefs.hidden).split('\n').map(fold).filter(Boolean));
-      const available = inline === this.inlineView ? index : source;
-      const count = (keys: Iterable<string>) => new Set([...keys].filter(key => available.properties.has(key) && !hidden.has(key))).size;
+      // Each dropdown entry describes its own scope, never the active tree's temporary filters.
+      const count = (keys: Iterable<string>, folders?: string[]) => {
+        const included = normalizeFolders(folders);
+        return new Set([...keys].filter(key => {
+          const property = source.properties.get(key);
+          if (!property || hidden.has(key)) return false;
+          if (!included.length) return true;
+          for (const path of property.paths) if (isFolderExcluded(path, included)) return true;
+          return false;
+        })).size;
+      };
       const prefix = inline ? 'inline:' : '';
       choices.push({ label: `${inline ? 'Inline Properties' : 'All properties'} (${count(source.properties.keys())})`, value: inline ? 'inline' : 'all' });
-      if ((prefs.scope !== null || normalizeFolders(prefs.folders).length) && !active) choices.push({ label: `${inline ? 'Inline: ' : ''}Custom selection (${count(prefs.scope ?? source.properties.keys())})`, value: `${prefix}custom` });
+      if ((prefs.scope !== null || normalizeFolders(prefs.folders).length) && !active) choices.push({ label: `${inline ? 'Inline: ' : ''}Custom selection (${count(prefs.scope ?? source.properties.keys(), prefs.folders)})`, value: `${prefix}custom` });
       for (const profile of prefs.profiles) {
         const keys = profile === active ? prefs.scope ?? [...source.properties.keys()] : profile.keys;
         const modified = profile === active && (!sameKeys(profile.keys, keys) || !sameFolders(profile.folders, prefs.folders));
-        choices.push({ label: `${inline ? 'Inline: ' : ''}${profile.name}${modified ? ' (modified)' : ''} (${count(keys)})`, value: `${prefix}profile:${profile.id}` });
+        choices.push({ label: `${inline ? 'Inline: ' : ''}${profile.name}${modified ? ' (modified)' : ''} (${count(keys, profile === active ? prefs.folders : profile.folders)})`, value: `${prefix}profile:${profile.id}` });
       }
     };
     addSource(false, this.plugin.prefs, this.plugin.index);
@@ -1012,7 +1021,7 @@ export class PropertiesView extends ItemView {
     this.scopeButton.title = 'Choose properties to show';
     const valuePaths = this.filterPaths();
     const index = this.activeIndex(valuePaths);
-    this.syncProfiles(index);
+    this.syncProfiles();
     this.renderFolders();
     this.disposeNoteMenus();
     this.syncNoteSelection(index);
