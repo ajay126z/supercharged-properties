@@ -623,16 +623,16 @@ export class PropertiesView extends ItemView {
     const menu = new Menu();
     for (const [value, label] of Object.entries(sortOptions)) {
       menu.addItem(item => item.setTitle(label).setChecked(this.plugin.prefs.sort === value).onClick(() => {
-        if (value === 'manual') { this.beginOrder(); return; }
         this.orderSession = undefined;
+        if (this.plugin.prefs.sort !== 'manual') this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
         this.plugin.prefs.sort = sortOrder(value);
-        this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
+        if (this.plugin.prefs.sort !== 'manual') this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
         void this.plugin.save(); this.plugin.refresh(); this.render();
       }));
     }
     if (this.plugin.prefs.sort === 'manual') {
       menu.addSeparator();
-      if (!this.orderSession) menu.addItem(item => item.setTitle('Reorder properties').setIcon('grip-vertical').onClick(() => this.beginOrder()));
+      if (!this.orderSession) menu.addItem(item => item.setTitle('Reorder properties…').setIcon('grip-vertical').onClick(() => this.beginOrder()));
       menu.addItem(item => item.setTitle('Reset manual order').setDisabled(this.layerOrder === undefined).onClick(() => {
         this.writeOrder(undefined); void this.plugin.save(); this.render();
       }));
@@ -658,7 +658,8 @@ export class PropertiesView extends ItemView {
     const automatic = this.plugin.prefs.sort === 'manual' ? this.plugin.prefs.lastAutomaticSort ?? 'name' : this.plugin.prefs.sort;
     this.plugin.prefs.lastAutomaticSort = automatic === 'manual' ? 'name' : automatic;
     this.orderSession = {target, field, original: target[field] ? [...target[field]] : undefined, previousSort: this.plugin.prefs.lastAutomaticSort};
-    this.seedManualOrder(); this.plugin.prefs.sort = 'manual';
+    this.plugin.prefs.sort = 'manual';
+    if (!this.manualHintShown) { new Notice('Drag the handle or use the property menu to reorder.'); this.manualHintShown = true; }
     void this.plugin.save(); this.plugin.refresh(); this.render();
   }
   private restoreOrder(): void {
@@ -671,11 +672,6 @@ export class PropertiesView extends ItemView {
     if (keep) this.orderSession = undefined; else this.restoreOrder();
     void this.plugin.save(); this.plugin.refresh(); this.render(); this.sortButton.focus();
     this.orderLive.textContent = keep ? 'Property order saved.' : 'Reordering cancelled. Previous sort restored.';
-  }
-  private seedManualOrder(): void {
-    if (this.plugin.prefs.sort === 'manual') return;
-    if (this.layerOrder === undefined) this.writeOrder(this.sorted(this.sourceIndex().properties.values()).map(property => property.id));
-    if (!this.manualHintShown) { new Notice('Drag the handle or use the property menu to reorder.'); this.manualHintShown = true; }
   }
   private orderGroup(key: string): string[] {
     const pins = this.effectivePins();

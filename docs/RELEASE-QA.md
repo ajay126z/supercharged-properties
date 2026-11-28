@@ -332,7 +332,7 @@ Run this checklist against a build candidate before publishing. Automated checks
 
 ## Manual property order
 
-- [ ] Select Manual after each automatic sort: rows stay in place on first use, and previous orders return on later use.
+- [ ] Select Manual after each automatic sort: the saved/inherited order returns, without handles or Done/Cancel. First use falls back to inherited order or A–Z without creating an override. Choose Reorder properties… to open controls explicitly.
 - [ ] Drag with mouse and touch; check insertion line, edge autoscroll, pointer cancellation, Escape, and no accidental click after a drop.
 - [ ] Tab to a grip, use arrows/Home/End, and check focus plus screen-reader position announcements. Test Alt+arrows on a property name.
 - [ ] Confirm pinned-group boundaries, disabled menu moves, and long-press menus on mobile.

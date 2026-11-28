@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- Selecting Manual restores the saved or inherited order without opening reorder controls. Use Reorder properties… explicitly to arrange rows; first use falls back to the inherited order or A–Z.
+
 ### Fixed
 
 - Keep reorder gestures stable across background refreshes and progressive search rendering. Accept drops in the empty area below the final property; reject drops outside the pane or across pinned groups.

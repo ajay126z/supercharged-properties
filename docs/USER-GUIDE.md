@@ -340,7 +340,9 @@ Choose **Hide property** to remove a property from the tree. To restore it, open
 
 ### Reorder properties manually
 
-Available in the unreleased development version. Choose **Sort properties → Manual**. Reorder controls and **Done** / **Cancel** appear above the tree. On first use from the view’s sort menu, the current order becomes the starting order. Setting **Sort by → Manual** in Settings does not seed an order; views without one start A–Z.
+Available in the unreleased development version. Choose **Sort properties → Manual** to restore the current view’s saved order without opening editing controls. If this view has no saved order, it inherits the source’s base order, or uses A–Z when no base order exists. Switching to Manual does not create or overwrite a saved order.
+
+To change the order, choose **Sort properties → Reorder properties…**. Handles and **Done** / **Cancel** then appear. **Reset manual order** is a separate action that clears the current view’s explicit order.
 
 - Drag a property’s grip to a new position. Dragging starts only from the grip, so you can still scroll on the rest of the row on mobile. A line shows where the property will go; release to save or press Escape to cancel. You can drop in the empty area below the last property to move to the end of its group. Background tree refreshes wait until the gesture finishes.
 - Right-click the property name (long-press on mobile) and choose **Move up**, **Move down**, **Move to top**, or **Move to bottom**.
@@ -356,7 +358,7 @@ Orders are stored separately for YAML and Inline sources:
 | Custom selection, including a folder-only selection | A custom order; inherits the base until changed. |
 | Saved view | That saved view’s order; inherits the base until changed. |
 
-Choose **Done** to keep the arranged order, hide the handles, and continue browsing in Manual mode. Choose **Cancel** to discard this session’s moves and restore the last automatic sort (A–Z, Z–A, high-to-low, or low-to-high), while preserving any previously saved manual order. Use **Sort properties → Reorder properties** to arrange again. If no previous automatic sort is known, Cancel returns to A–Z.
+Choose **Done** to keep the arranged order, hide the handles, and continue browsing in Manual mode. Choose **Cancel** to discard this session’s moves and restore the last automatic sort (A–Z, Z–A, high-to-low, or low-to-high), while preserving any previously saved manual order. Use **Sort properties → Reorder properties…** to arrange again. If no previous automatic sort is known, Cancel returns to A–Z.
 
 Moves save as you arrange; you do not need **Update**, and order changes do not mark a view **(modified)**. Closing the view, changing order layers (for example switching saved views), or choosing an automatic sort ends arranging and retains the moves made so far. Use Cancel before leaving if you want to discard them. **Save new** copies an explicit order from the current view. Deleting a saved view retains its explicit order in the resulting custom selection. Switching to an automatic sort hides the controls but keeps all stored orders.
 
