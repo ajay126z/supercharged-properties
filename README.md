@@ -10,6 +10,8 @@ Choose the properties you want to see, save views for different projects, and ex
 
 From a folder, multi-selection, or YAML property/value row, choose **Add properties…** or **Remove properties…**. Reuse existing names and values, choose typed values, and review the per-note preview before applying. Add up to 20 properties together; remove whole keys from the notes that contain them. Tree Add/Remove actions and Delete property respect the active search, so searching a folder path limits their previews to matching notes. Exclusions, conflict checks, and shared session undo help keep changes controlled. [Add and Remove guide](docs/ADD-REMOVE-PROPERTIES.md). Available in the upcoming release.
 
+This development README includes upcoming features. See [changes since 1.5.1](docs/releases/UNRELEASED.md) for what is not yet in the published release.
+
 ## Explore your notes
 
 - **Browse properties → values → notes.** Expand a property to see its values, then open the notes that use them. Expand/collapse all preserves your search, active view, and Value filter. Individual branch arrows also work within search and filtered results. After Collapse all, expand properties → values → notes one level at a time. Property/value counts and the Value filter’s matching-note list update as you search.
@@ -164,6 +166,14 @@ When choosing properties, **All** and **None** keep the view name you have typed
 | Show inline properties | Add the separate Inline Properties view; disabled by default. |
 | Show note counts | Show how many distinct notes use each property or value. |
 | Sort by | Choose alphabetical order, note frequency, or Manual property ordering. |
+| Include subfolders by default | Include descendants in Add/Remove folder batches; on by default. |
+| Default when a note already has the property | Choose Skip, Merge into list, or Overwrite for Add properties. |
+| List delimiter | Separate Add properties list items; comma by default. |
+| Show note counts in the File explorer | Optional folder badges; off by default. |
+| File explorer count to show | Direct, including subfolders, or both. |
+| Hide zero counts in the File explorer | Hide empty badges; on by default. |
+| Count all files in the File explorer | Include attachments; off by default. |
+| Skip excluded folders in the File explorer counts | Apply global exclusions to badges; off by default. |
 | Excluded folders | Omit selected folders and their subfolders from the view and new bulk edits. |
 | Hidden properties | Hide named properties; remove a name here to show it again. |
 
@@ -181,6 +191,7 @@ Your notes stay in your vault. The plugin does not send vault data to external s
 
 ## Help and documentation
 
+- [Add or remove properties](docs/ADD-REMOVE-PROPERTIES.md) — typed folder and multi-note batches, previews, and undo.
 - [User guide](docs/USER-GUIDE.md) — browsing, search, saved views, exclusions, keyboard controls, and troubleshooting.
 - [Change selected notes](docs/NOTE-VALUE-EDITING.md) — typed values, list additions/removals, whole-property removal, desktop and mobile selection, and undo.
 - [Bulk value editing](docs/BULK-EDITING.md) — rename, delete, merge, link conversion, splitting, and undo.

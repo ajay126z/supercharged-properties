@@ -342,3 +342,17 @@ Run this checklist against a build candidate before publishing. Automated checks
 - [ ] Check a 360px sidebar, 36px touch grips, ordinary scrolling outside grips, reduced-motion mode, and a large property list.
 
 - [ ] Done hides grips and retains Manual; Cancel restores each of the four automatic sorts and the pre-session layer order. Reopen arranging after Done and reload; check saved-view inheritance is restored on Cancel.
+
+## File explorer counts
+
+- [ ] Confirm the disabled default adds no badges; enable it before and after opening Files, then toggle off/on during startup.
+- [ ] Verify direct/total/both modes, zero hiding, root folders, notes without metadata, attachments, and optional folder exclusions.
+- [ ] Create, delete, and move files/folders; edit exclusions and confirm live counts. Verify closed/new Explorer panes and popouts where supported.
+- [ ] Disable or unload the plugin: only its badges disappear. Confirm Show tooltips and accessible count descriptions.
+
+## Search and view-count regressions
+
+- [ ] Switch among folder-scoped profiles: All properties and unrelated dropdown counts remain stable. Repeat for Inline profiles, hidden keys, and temporary Value filters.
+- [ ] Search a large vault by note/path and Search everything. Type rapidly, press Enter, scroll late results, and check keyboard/range selection.
+- [ ] Search a folder path, then preview Delete property and tree Add/Remove actions. Counts and changed-note paths match; notes outside the searched subset remain unchanged after apply and undo.
+- [ ] Check Add/Remove preview contrast in light and dark themes. Exclude an edited folder before undo, then remove the exclusion and retry its pending undo.

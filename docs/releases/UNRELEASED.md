@@ -1,39 +1,33 @@
 # Upcoming release
 
-Add typed frontmatter properties or remove whole keys across folders, explorer multi-selections, and the notes behind YAML property/value rows.
+Changes since **1.5.1**. These features are in the development version and have not yet been published.
 
-- Reuse existing names with native suggestions or the multi-select property picker.
-- Choose Text, List, Number, Checkbox, Date, or Date and time; preview up to 20 property additions together.
-- Choose Skip, Merge into list, or Overwrite. Set defaults for recursion, conflicts, and list delimiters.
-- Review per-note changes before confirming. Apply checks live data and exclusions, reports progress, and skips conflicting keys.
-- Undo through the existing shared command or completion screen; conflicting entries remain retryable. YAML comments and quoting may change.
+## Add or remove properties across notes
 
-Explorer actions ignore view filters; tree actions retain their scoped paths. No new actions appear in Inline views. Existing single-property editing and inline conversion remain available.
+Add up to 20 typed frontmatter properties or remove several whole keys in one batch. Start from an Explorer folder or multi-selection, or a YAML property/value row. Choose existing property names and values, include subfolders, and decide whether existing values should be skipped, merged, or overwritten.
 
-Read the [Add and Remove guide](../ADD-REMOVE-PROPERTIES.md). This feature has not been released; version metadata remains unchanged until release preparation.
+Review per-note changes before confirming. Apply skips conflicting keys and reports failures; the shared **Undo last property edit** command restores eligible changes. Conflicting or excluded entries in these batches can be retried. No new batch actions appear in Inline views.
 
-Delete property and tree Add/Remove properties now honor active tree search. Their preview scope matches the displayed row count, including matches beyond pagination or inside collapsed branches. Explorer batches and other row-edit scopes retain their existing behavior.
-
-Search everything and Note names / paths now reuse match results during rendering, filter before sorting, and share a natural-sort comparator. Large trees combine typing bursts into one refresh; Enter refreshes immediately. Search matching and deletion scope remain unchanged.
-
-Search results now build offscreen value and note rows as you scroll, yielding between small rendering chunks. Counts and removal previews include the full matching subset; keyboard navigation and range selection load their property branch when needed.
-
-## File explorer folder counts
-
-Enable **Show note counts in the File explorer** to see how many notes each folder contains. Choose direct counts, counts including subfolders, or both. Empty-folder badges are hidden by default; optional settings include attachments and skip globally excluded folders.
-
-The feature is off by default, includes notes without properties, and works independently of property views and filters. Counts update after files and folders change. The command **Toggle folder counts** switches badges on or off. No note content is read or edited by this feature.
-
-[Setup, examples, and troubleshooting](../USER-GUIDE.md#file-explorer-folder-counts).
+Explorer selections ignore view filters. YAML row actions honor Folder and Value filters and the active tree search. Global exclusions always apply. [Add/Remove guide](../ADD-REMOVE-PROPERTIES.md).
 
 ## Manual property order
 
-Choose **Sort properties → Manual** to restore the saved order without editing controls. Choose **Reorder properties…** separately to arrange rows with drag handles, menu moves, or the keyboard. Orders persist independently for YAML and Inline views, including saved views and custom selections. Pins stay first; filters preserve hidden keys’ relative order. Values and notes sort A–Z. Reset clears only the current view’s order, and switching sort modes keeps it. No notes are edited.
+Choose **Sort properties → Manual** to restore a view’s saved order without entering edit mode. With no saved order, the view inherits its source’s base order or falls back to A–Z. Choose **Reorder properties…** separately to show drag handles, menu moves, and keyboard controls.
 
-[Manual ordering guide](../USER-GUIDE.md#reorder-properties-manually).
+**Done** keeps the arrangement and hides controls. **Cancel** discards the session’s moves and restores the last automatic sort. **Reset manual order** clears only the current view’s explicit order. Switching sort options preserves saved manual orders.
 
-Manual ordering includes **Done** to finish arranging and **Cancel** to restore the last automatic sort and discard the session’s moves. **Reorder properties…** in the sort menu opens the controls again.
+Orders are independent for YAML and Inline sources, custom selections, and saved views. Pins stay first; moves remain within the pinned or unpinned group. Filtered-out keys retain their relative order. Values and notes use A–Z. Reordering never edits notes. [Manual ordering guide](../USER-GUIDE.md#reorder-properties-manually).
 
-Property dragging now defers background tree refreshes until the gesture finishes and accepts the empty area below the final property as a drop target. Pinned boundaries and cancellation remain enforced.
+## File explorer folder counts
 
-View-dropdown counts now use each entry’s own scope. Switching to a folder-scoped profile no longer shrinks All properties or unrelated profile counts. This applies to YAML and Inline sources, while tree counts and editing scopes remain unchanged.
+Enable **Show note counts in the File explorer** to see folder counts. Choose direct counts, counts including subfolders, or both. Optional settings include attachments and skip globally excluded folders. Empty badges are hidden by default.
+
+The feature is off by default, includes notes without properties, and is independent of property views and filters. **Toggle folder counts** switches it on or off. No note content is read or edited by this feature. [Setup and options](../USER-GUIDE.md#file-explorer-folder-counts).
+
+## Search and display fixes
+
+- **Safer searched removal:** Delete property and tree Add/Remove actions now use the same matching-note scope as their displayed counts, including collapsed and offscreen results. Other row edits retain their existing Folder/Value-filtered scope.
+- **More responsive search:** large note/path searches combine rapid keystrokes into one refresh and load offscreen branches as you scroll. Enter refreshes immediately. Full counts, selection, and removal scope remain available.
+- **Stable view counts:** each dropdown entry counts its own keys and folders. Selecting a folder-scoped profile no longer shrinks All properties or unrelated profiles.
+- **Reliable dragging:** background refreshes wait until a gesture finishes, and empty space below the last property accepts a drop. Pinned boundaries and cancellation remain enforced.
+- **Readable previews:** Add/Remove previews use theme text and neutral backgrounds, with colored edges and plus/minus signs distinguishing changes.

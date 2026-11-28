@@ -10,7 +10,7 @@ Add several frontmatter properties to a folder or group of notes, or remove whol
 - **Multiple files or folders:** select them in the explorer, then choose **Add properties to selected notes…** or **Remove properties from selected notes…**.
 - **YAML property or value:** right-click its row, or long-press on mobile, and choose **Add properties to these notes…** or **Remove properties from these notes…**. A property row targets notes with that property; a value row targets notes with that value.
 
-The header shows the scope and exact eligible note count. **Include subfolders** applies to folders, including folders in a multi-selection. Excluded folders always win; their notes and non-Markdown files are omitted and counted separately. Overlapping selections count a note only once. A note without frontmatter can receive new properties.
+The header shows the scope and exact eligible note count. **Include subfolders** applies to folders, including folders in a multi-selection. Excluded folders always win; their notes and non-Markdown files are omitted and counted separately. Overlapping selections count a note only once. A note without frontmatter can receive new properties. These Explorer menu entries are offered for a folder or a multi-selection, not for a single note.
 
 Explorer selections ignore the plugin's view filters. YAML row actions use the row's already-filtered paths, including active Folder and Value filters. The active tree search also narrows these row actions to the notes represented by the displayed row count, regardless of collapsed branches or pagination. For example, searching `Calendar/Compass` before removing a property limits the batch to matching notes. Clear the search to restore the full row scope. These actions do not appear in Inline views; existing inline-field editing and conversion remain available separately.
 
@@ -58,7 +58,7 @@ Apply processes notes sequentially, reports progress for batches over 50 notes, 
 
 Choose **Undo** on the completion screen or run **Supercharged Properties: Undo last property edit**. Both use the same session undo snapshot shared with other YAML edits and inline-to-YAML conversion. No additional undo command is added.
 
-A successful batch replaces the previous snapshot. A batch with no successful writes preserves it. Reloading clears the snapshot. Undo restores only keys whose values still match what the batch wrote, leaving unrelated edits alone. Conflicting or failed entries remain retryable: restore the expected value, then run Undo again. Notes outside the chosen scope are never written.
+A successful batch replaces the previous snapshot. A batch with no successful writes preserves it. Reloading clears the snapshot. Undo restores only keys whose values still match what the batch wrote, leaving unrelated edits alone. Conflicting, failed, or currently excluded entries remain retryable: restore the expected value or remove the exclusion, then run Undo again. The note must still exist and be eligible. Notes outside the chosen scope are never written.
 
 Undo restores values; YAML formatting such as comments and quoting may differ from the original. Closing the dialog after Apply starts does not cancel the running batch.
 

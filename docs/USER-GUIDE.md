@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. YAML edits write frontmatter; inline edits write note-body fields. Both require preview and confirmation.
 
-This guide describes **1.5.0**, with Value filter and its expandable note list, including property/value deletion and selected-note editing. It includes inline editing, inline-to-YAML conversion, and saved folder filters. It covers property-name renaming, excluded folders, and text-property-only Split eligibility. The shared undo command is **Undo last property edit**; in 1.1.0 it was called **Undo last value edit**.
+This guide covers release **1.5.1** and the upcoming development version. Upcoming features include Add/Remove property batches, File explorer folder counts, and Manual property order. The development version also improves tree search and fixes search-scoped removal and view-dropdown counts. See the [upcoming release notes](releases/UNRELEASED.md) for changes since 1.5.1. The shared YAML undo command is **Undo last property edit**; inline-field edits use **Undo last inline property edit**.
 
 ## Contents
 
@@ -20,10 +20,13 @@ This guide describes **1.5.0**, with Value filter and its expandable note list, 
 - [How display controls affect scope](#how-display-controls-affect-scope)
 - [Save and manage views](#save-and-manage-views)
 - [Sort, pin, and hide](#sort-pin-and-hide)
+- [Reorder properties manually](#reorder-properties-manually)
+- [File explorer folder counts](#file-explorer-folder-counts)
 - [Use Obsidian Search and copy links](#use-obsidian-search-and-copy-links)
 - [Rename property names](#rename-property-names)
 - [Delete properties or values](#delete-properties-or-values)
 - [Change a property on selected notes](#change-a-property-on-selected-notes)
+- [Add or remove properties across folders or notes](#add-or-remove-properties-across-folders-or-notes)
 - [Edit values across notes](#edit-values-across-notes)
 - [Data access and privacy](#data-access-and-privacy)
 - [Settings and commands](#settings-and-commands)
@@ -236,7 +239,7 @@ Archive/Drafts
 
 Each entry excludes that folder and all descendants. `Templates` excludes `Templates/Daily/Example.md`, but not `Templates Archive/Example.md` or a root note named `Templates.md`. Paths are case-sensitive and are literal paths, not wildcard patterns. Leading/trailing slashes and pasted backslash separators are normalized; blank lines are ignored. Use paths relative to the vault, not absolute filesystem paths. Entries containing `..` are ignored.
 
-Changes apply immediately and are saved for the next session. Clear an entry to restore its notes. Excluded notes do not contribute properties, values, counts, local tree-search results, copied note links, or bulk-edit previews. A bulk edit opened before the setting changed also skips newly excluded notes. Existing undo remains available for earlier edits, even if their folders are now excluded.
+Changes apply immediately and are saved for the next session. Clear an entry to restore its notes. Excluded notes do not contribute properties, values, counts, local tree-search results, copied note links, or bulk-edit previews. A bulk edit opened before the setting changed also skips newly excluded notes. Undo for ordinary YAML value, selected-note, and property-name edits remains available if their folders are later excluded. Add/Remove batches, inline edits, and inline-to-YAML conversion skip currently excluded notes during undo; remove the exclusion before retrying an Add/Remove batch’s pending undo.
 
 This setting does not change your notes or Obsidian's global Search settings. **Open in Search** and copied search queries use Obsidian Search and can still return excluded notes. Saved profiles retain their property keys; properties used only by excluded notes disappear until an included note uses them again.
 
@@ -253,11 +256,11 @@ This setting does not change your notes or Obsidian's global Search settings. **
 
 The table describes property/value-row bulk actions. “Full indexed note set” means the row's subset after folder and Value filters. **Change status…** from a note row edits only the explicitly selected notes. Selection checkboxes do not narrow a value-row Rename, Merge, or Delete batch. Changing the search, property scope, folder filter, or Value filter clears note selection.
 
-**Open in Search** and **Copy search query** generate queries for Obsidian's core Search. They do not add folder-exclusion, folder-filter, or Value filter conditions. Earlier edits can still be undone after their folders are excluded.
+**Open in Search** and **Copy search query** generate queries for Obsidian's core Search. They do not add folder-exclusion, folder-filter, or Value filter conditions. Undo exclusion rules depend on the editing action, as described above.
 
 ## Save and manage views
 
-Saved views, also called profiles, store a **property selection**. YAML saved views also store local pin/unpin choices. Both sources can store their own manual property order. They do not save search text, sorting, or hidden-property settings as separate per-view preferences.
+Saved views, also called profiles, store a **property selection**, optional **folder filters**, and local pin/unpin choices. YAML and Inline sources can each store their own manual property order. The selected sort mode is global; the manual arrangement belongs to the view. Search text and hidden-property settings are not saved separately per profile.
 
 ### Create a view
 
@@ -390,6 +393,14 @@ Right-click a note on desktop or long-press it on mobile, then choose **Change s
 
 This action supports Text, Number, Checkbox, Date, and Date & time properties, plus add/remove operations for flat List properties. Aliases and cssclasses support text-list items; tags remain unsupported. **Set empty (keep property)** retains a scalar key with `null`. List **Remove values** retains the key with `[]` when the last item is removed; **Remove property** deletes the entire key for lists of any size, including empty lists. It previews only the selected notes and shares **Undo last property edit** with other edits. See [changing selected notes](NOTE-VALUE-EDITING.md) for the complete workflow, eligibility, and safeguards.
 
+## Add or remove properties across folders or notes
+
+Available in the upcoming release. Right-click a folder or an Explorer multi-selection to open **Add properties to folder’s notes…** / **Remove properties from folder’s notes…**, or their **selected notes…** equivalents. A single note’s Explorer menu does not offer these batch actions. In the YAML tree, property/value menus offer **Add properties to these notes…** and **Remove properties from these notes…**.
+
+Add up to 20 typed properties together, or select whole properties to remove. The dialog shows eligible notes, supports subfolder inclusion, and previews changes before confirmation. Explorer selections ignore view filters; tree actions honor Folder and Value filters plus the active tree search. Global folder exclusions always apply. These actions are not available in the Inline tree.
+
+Read the [Add/Remove guide](ADD-REMOVE-PROPERTIES.md) for supported types, existing-value choices, selection controls, previews, and retryable session undo.
+
 ## Edit values across notes
 
 Value-row menus offer **Rename value…**, **Delete value…**, **Merge value…**, **Convert to wikilink…**, and **Split into list…** when applicable. These actions change values, not property names. **Delete value…** removes a matching scalar property or matching list entries; removing the entire value also removes the key from that note. Empty and object rows do not offer deletion. **Split into list…** requires a Text property and a text value. It is hidden for List, Number, Checkbox, Date, Date & Time, tags, aliases, and cssclasses. Strings already stored inside lists are not split.
@@ -441,6 +452,9 @@ Open **Settings → Supercharged Properties**.
 | Show inline properties | Add a separate tree of inline fields from note bodies. Off by default. |
 | Show note counts | Shows or hides distinct-note counts beside rows. |
 | Sort by | Selects automatic sorting or Manual property ordering. |
+| Include subfolders by default | Default folder recursion for Add/Remove batches; on by default. |
+| Default when a note already has the property | Skip, Merge into list, or Overwrite in Add properties; defaults to Skip. |
+| List delimiter | One character separating items in Add properties; defaults to a comma. |
 | Excluded folders | One vault-relative folder per line, including subfolders; omitted from the index and new bulk edits. |
 | Hidden properties | One property name per line; remove a name to restore it. Leave empty to hide none. |
 | Show note counts in the File explorer | Optional folder badges; off by default. |
@@ -460,7 +474,7 @@ Available command-palette commands use the prefix **Supercharged Properties:**.
 | Refresh property index | Rebuilds metadata and type-icon information. |
 | Toggle folder counts | Turn File explorer folder badges on or off. |
 | Undo last inline property edit | Restore the last successful inline batch, skipping notes changed afterward. Separate from YAML undo. |
-| Undo last property edit | Restores the last eligible property-name or value edit batch; available only while an undo batch exists and no edit is running. |
+| Undo last property edit | Restores the last eligible YAML or inline-to-YAML batch, including Add/Remove properties; available while an undo snapshot exists and no edit is running. |
 
 ## Keyboard and mobile use
 
