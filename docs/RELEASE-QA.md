@@ -329,3 +329,16 @@ Run this checklist against a build candidate before publishing. Automated checks
 - At 360 px with the keyboard open, verify row controls and fixed-footer actions remain reachable. Test Ctrl/Cmd+Enter and Enter-to-add-row without accepting a suggestion twice.
 - Preview more than 200 notes, reveal additional pages, apply with progress, then undo. Edit one targeted key between preview/apply and between apply/undo; verify skips and a successful retry after resolving the undo conflict.
 - Keep a note outside the scope open and confirm its bytes remain untouched. Confirm ordinary selected-note edits and inline-to-YAML conversion still share the correct undo behavior.
+
+## Manual property order
+
+- [ ] Select Manual after each automatic sort: rows stay in place on first use, and previous orders return on later use.
+- [ ] Drag with mouse and touch; check insertion line, edge autoscroll, pointer cancellation, Escape, and no accidental click after a drop.
+- [ ] Tab to a grip, use arrows/Home/End, and check focus plus screen-reader position announcements. Test Alt+arrows on a property name.
+- [ ] Confirm pinned-group boundaries, disabled menu moves, and long-press menus on mobile.
+- [ ] Reorder under search, hidden properties, Folder filters and Value filters; clear them and verify hidden keys retain relative order.
+- [ ] Check base/custom/saved order inheritance, Save new/Update/Delete, source switches, reset, and persistence after reload.
+- [ ] Verify values/notes remain A–Z in Manual and all automatic sorts retain their existing behavior.
+- [ ] Check a 360px sidebar, 36px touch grips, ordinary scrolling outside grips, reduced-motion mode, and a large property list.
+
+- [ ] Done hides grips and retains Manual; Cancel restores each of the four automatic sorts and the pre-session layer order. Reopen arranging after Done and reload; check saved-view inheritance is restored on Cancel.

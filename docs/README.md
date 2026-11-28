@@ -16,6 +16,8 @@ The development branch also includes [File explorer folder counts](USER-GUIDE.md
 
 ### Common tasks
 
+- [Reorder properties manually](USER-GUIDE.md#reorder-properties-manually) (unreleased)
+
 - [Add or remove several properties across folders or notes](ADD-REMOVE-PROPERTIES.md)
 
 - [Browse and edit inline properties](USER-GUIDE.md#inline-properties)

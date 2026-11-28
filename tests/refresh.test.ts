@@ -262,3 +262,14 @@ it('loads Explorer count preferences safely and saves updates through the shared
  expect(snapshots[0].explorerCounts.mode).toBe('direct');expect(snapshots[0].explorerCounts.hideZero).toBe(true);expect(snapshots[1].explorerCounts.hideZero).toBe(false);
  const changed=vi.spyOn(plugin.explorerCounts,'exclusionsChanged');await plugin.setExcludedFolders('Templates');expect(changed).toHaveBeenCalledOnce();
 });
+it('loads and serializes optional manual orders independently for YAML, Inline, and profiles',async()=>{
+ const {plugin}=await setup({sort:'manual',manualOrder:[' Status ',null,'STATUS','tags'],customOrder:'invalid',profiles:[{id:'v',name:'V',keys:['status'],order:[' STATUS ']}],inlineViews:{manualOrder:['Author'],customOrder:['Topic']}});
+ expect(plugin.prefs.sort).toBe('manual');expect(plugin.prefs.manualOrder).toEqual(['status','tags']);expect(plugin.prefs.customOrder).toBeUndefined();expect(plugin.prefs.profiles[0].order).toEqual(['status']);expect(plugin.prefs.inlineViews.manualOrder).toEqual(['author']);expect(plugin.prefs.inlineViews.customOrder).toEqual(['topic']);
+ const saveData=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saveData;await plugin.save();const {plugin:restored}=await setup(saveData.mock.calls[0][0]);expect(restored.prefs.manualOrder).toEqual(['status','tags']);
+ const {plugin:legacy}=await setup();expect(legacy.prefs).not.toHaveProperty('manualOrder');expect(legacy.prefs).not.toHaveProperty('customOrder');
+});
+it('persists and validates the last automatic sort used by reorder Cancel',async()=>{
+ const {plugin}=await setup({sort:'manual',lastAutomaticSort:'count-asc'});expect(plugin.prefs.sort).toBe('manual');expect(plugin.prefs.lastAutomaticSort).toBe('count-asc');
+ const saved=vi.fn().mockResolvedValue(undefined);(plugin as any).saveData=saved;await plugin.save();const restored=await setup(saved.mock.calls[0][0]);expect(restored.plugin.prefs.lastAutomaticSort).toBe('count-asc');
+ expect((await setup({lastAutomaticSort:'manual'})).plugin.prefs.lastAutomaticSort).toBe('name');
+});

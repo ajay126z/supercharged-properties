@@ -30,3 +30,9 @@ it('normalizes optional folders for profiles and source selections without chang
  expect(loadViewState({folders:['Other','Books/Sub','Books']})).toMatchObject({folders:['Books','Other'],scope:null});
  expect(loadViewState({folders:null}).folders).toEqual([]);
 });
+it('loads optional manual orders without adding fields to legacy profiles and states',()=>{
+ expect(loadProfiles([{id:'a',name:'A',keys:['status']}])[0]).not.toHaveProperty('order');
+ expect(loadProfiles([{id:'a',name:'A',keys:['status'],order:[' STATUS ',false,'status','a']}])[0].order).toEqual(['status','a']);
+ expect(loadViewState({manualOrder:[' STATUS ','status'],customOrder:['Author'],profiles:[]})).toMatchObject({manualOrder:['status'],customOrder:['author']});
+ expect(loadViewState({manualOrder:'bad'})).not.toHaveProperty('manualOrder');expect(loadViewState(null)).not.toHaveProperty('customOrder');
+});

@@ -26,84 +26,6 @@ __export(main_exports, {
 });
 module.exports = __toCommonJS(main_exports);
 
-// src/search-tree-renderer.ts
-var SearchTreeRenderer = class {
-  constructor(root) {
-    this.root = root;
-    this.pending = /* @__PURE__ */ new Map();
-    this.ready = [];
-    this.generation = 0;
-    this.win = root.ownerDocument.defaultView;
-  }
-  reset() {
-    this.generation++;
-    this.observer?.disconnect();
-    this.observer = void 0;
-    this.pending.clear();
-    this.ready = [];
-    if (this.frame !== void 0) this.win.cancelAnimationFrame(this.frame);
-    this.frame = void 0;
-  }
-  add(parent, height, render, eager = false) {
-    if (eager || !this.win.IntersectionObserver) {
-      render();
-      return;
-    }
-    if (!this.observer) {
-      const generation = this.generation;
-      this.observer = new this.win.IntersectionObserver((entries) => {
-        if (generation !== this.generation) return;
-        for (const entry of entries) if (entry.isIntersecting && this.pending.has(entry.target)) {
-          this.observer?.unobserve(entry.target);
-          this.ready.push(entry.target);
-        }
-        this.schedule();
-      }, { root: this.root, rootMargin: "300px 0px" });
-    }
-    parent.style.minHeight = `${Math.max(28, height)}px`;
-    parent.setAttribute("aria-busy", "true");
-    parent.classList.add("pv-search-pending");
-    this.pending.set(parent, render);
-    this.observer.observe(parent);
-  }
-  /** Keyboard navigation and range selection need the complete branch in DOM order. */
-  flush(root) {
-    for (const [parent, render] of this.pending) {
-      if (root === parent || root.contains(parent)) {
-        this.pending.delete(parent);
-        this.observer?.unobserve(parent);
-        parent.style.removeProperty("min-height");
-        parent.removeAttribute("aria-busy");
-        parent.classList.remove("pv-search-pending");
-        render();
-      }
-    }
-  }
-  schedule() {
-    if (this.frame !== void 0 || !this.ready.length) return;
-    const generation = this.generation;
-    this.frame = this.win.requestAnimationFrame(() => {
-      this.frame = void 0;
-      if (generation !== this.generation) return;
-      const start = this.win.performance.now();
-      this.ready.sort((a, b) => a.compareDocumentPosition(b) & this.win.Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
-      while (this.ready.length) {
-        const parent = this.ready.shift(), render = this.pending.get(parent);
-        this.pending.delete(parent);
-        if (render && parent.isConnected) {
-          parent.style.removeProperty("min-height");
-          parent.removeAttribute("aria-busy");
-          parent.classList.remove("pv-search-pending");
-          render();
-          if (generation !== this.generation) return;
-        }
-        if (this.win.performance.now() - start >= 6) break;
-      }
-      this.schedule();
-    });
-  }
-};
-
 // src/frontmatter-values.ts
 var EMPTY = Object.freeze({ kind: "empty", text: "" });
 var TRUE = Object.freeze({ kind: "boolean", text: "true" });
@@ -251,6 +173,261 @@ var PropertyIndex = class _PropertyIndex {
   }
 };
 
+// src/manual-order.ts
+function normalizeOrder(raw, fold2) {
+  return Array.isArray(raw) ? [...new Set(raw.filter((value) => typeof value === "string").map(fold2).filter(Boolean))] : void 0;
+}
+function sortByOrder(nodes, order) {
+  const positions = new Map(order.map((key, index) => [key, index]));
+  return [...nodes].sort((a, b) => {
+    const left = positions.get(a.id), right = positions.get(b.id);
+    if (left !== void 0 || right !== void 0) return (left ?? Infinity) - (right ?? Infinity);
+    return natural(a.label, b.label);
+  });
+}
+function materializeOrder(stored, keysInDisplayOrder) {
+  return [.../* @__PURE__ */ new Set([...stored, ...keysInDisplayOrder])];
+}
+function insert(order, key, target, after) {
+  const result = order.filter((item) => item !== key);
+  result.splice(result.indexOf(target) + Number(after), 0, key);
+  return result;
+}
+function moveWithinGroup(order, key, group, action) {
+  const result = materializeOrder(order, group), index = group.indexOf(key);
+  if (index < 0) return result;
+  const target = action === "up" ? index - 1 : action === "down" ? index + 1 : action === "top" ? 0 : group.length - 1;
+  if (target < 0 || target >= group.length || target === index) return result;
+  return insert(result, key, group[target], action === "down" || action === "bottom");
+}
+function placeInGroup(order, key, group, before) {
+  const result = materializeOrder(order, group), index = group.indexOf(key);
+  if (index < 0 || before === key || before !== null && !group.includes(before)) return result;
+  if (before === (group[index + 1] ?? null)) return result;
+  if (before !== null) return insert(result, key, before, false);
+  return group.length > 1 ? insert(result, key, group[group.length - 1], true) : result;
+}
+
+// src/manual-order-drag.ts
+function attachManualOrderDrag({ rows, keys, scrollEl, onDrop, onStart, onEnd }) {
+  const doc = scrollEl.ownerDocument, win = doc.defaultView;
+  let state;
+  let indicator, frame;
+  let before;
+  const header = (row) => row.querySelector(".pv-property-row") ?? row;
+  const clear = (notify = true) => {
+    const previous = state;
+    state = void 0;
+    before = void 0;
+    if (frame !== void 0) win.cancelAnimationFrame(frame);
+    frame = void 0;
+    indicator?.remove();
+    indicator = void 0;
+    scrollEl.classList.remove("pv-dragging");
+    scrollEl.querySelectorAll(".pv-drag-other-group").forEach((row) => row.classList.remove("pv-drag-other-group"));
+    try {
+      if (previous?.grip.hasPointerCapture?.(previous.id)) previous.grip.releasePointerCapture(previous.id);
+    } catch {
+    }
+    if (previous && notify) onEnd?.();
+  };
+  const update = () => {
+    if (!state?.active || !indicator) return;
+    const y = state.currentY, viewport = scrollEl.getBoundingClientRect();
+    const allRows = Array.from(scrollEl.querySelectorAll(":scope > .pv-group"));
+    const firstIndex = allRows.indexOf(rows[0]), lastIndex = allRows.indexOf(rows[rows.length - 1]);
+    const first = header(rows[0]).getBoundingClientRect(), last = rows[rows.length - 1].getBoundingClientRect();
+    const top = firstIndex > 0 ? first.top : viewport.top;
+    const bottom = lastIndex < allRows.length - 1 ? allRows[lastIndex + 1].getBoundingClientRect().top : viewport.bottom;
+    if (state.currentX < viewport.left || state.currentX > viewport.right || y < Math.max(top, viewport.top) || y >= Math.min(bottom, viewport.bottom)) {
+      before = void 0;
+      indicator.hidden = true;
+      return;
+    }
+    const target = rows.findIndex((row) => {
+      const rect = header(row).getBoundingClientRect();
+      return y < rect.top + rect.height / 2;
+    });
+    before = target < 0 ? null : keys[target];
+    indicator.hidden = false;
+    const indicatorTop = target < 0 ? last.bottom : header(rows[target]).getBoundingClientRect().top;
+    indicator.style.top = `${indicatorTop - viewport.top + scrollEl.scrollTop}px`;
+  };
+  const tick = () => {
+    if (!state?.active) return;
+    const rect = scrollEl.getBoundingClientRect(), y = state.currentY;
+    const delta = y < rect.top + 40 ? -Math.min(12, (rect.top + 40 - y) / 3) : y > rect.bottom - 40 ? Math.min(12, (y - rect.bottom + 40) / 3) : 0;
+    if (delta) scrollEl.scrollTop += delta;
+    update();
+    frame = win.requestAnimationFrame(tick);
+  };
+  const down = (event) => {
+    if (event.button !== 0 || event.isPrimary === false || state) return;
+    const grip = event.target.closest(".pv-grip");
+    const row = grip?.closest(".pv-group"), index = row ? rows.indexOf(row) : -1;
+    if (!grip || index < 0 || rows.length < 2) return;
+    grip.focus({ preventScroll: true });
+    state = { id: event.pointerId, key: keys[index], grip, x: event.clientX, y: event.clientY, currentY: event.clientY, currentX: event.clientX, active: false };
+    onStart?.();
+    try {
+      grip.setPointerCapture(event.pointerId);
+    } catch {
+    }
+  };
+  const move = (event) => {
+    if (!state || state.id !== event.pointerId) return;
+    state.currentY = event.clientY;
+    state.currentX = event.clientX;
+    if (!state.active && Math.hypot(event.clientX - state.x, event.clientY - state.y) >= 4) {
+      state.active = true;
+      scrollEl.classList.add("pv-dragging");
+      scrollEl.querySelectorAll(":scope > .pv-group").forEach((row) => row.classList.toggle("pv-drag-other-group", !rows.includes(row)));
+      indicator = scrollEl.createDiv({ cls: "pv-drop-indicator" });
+      indicator.setAttribute("aria-hidden", "true");
+      frame = win.requestAnimationFrame(tick);
+    }
+    if (state.active) {
+      event.preventDefault();
+      update();
+    }
+  };
+  const up = (event) => {
+    if (!state || state.id !== event.pointerId) return;
+    const { key, active } = state;
+    state.currentY = event.clientY;
+    state.currentX = event.clientX;
+    update();
+    const target = before;
+    clear(false);
+    if (!active) {
+      onEnd?.();
+      return;
+    }
+    event.preventDefault();
+    const suppress = (click) => {
+      click.preventDefault();
+      click.stopImmediatePropagation();
+      remove();
+    };
+    const remove = () => {
+      doc.removeEventListener("click", suppress, true);
+      doc.removeEventListener("pointerdown", remove, true);
+      win.clearTimeout(timer);
+    };
+    const timer = win.setTimeout(remove, 500);
+    doc.addEventListener("click", suppress, true);
+    doc.addEventListener("pointerdown", remove, true);
+    try {
+      if (target !== void 0) onDrop(key, target);
+    } finally {
+      onEnd?.();
+    }
+  };
+  const cancel = (event) => {
+    if (state?.id === event.pointerId) clear();
+  };
+  const keydown = (event) => {
+    if (state && event.key === "Escape") {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      clear();
+    }
+  };
+  scrollEl.addEventListener("pointerdown", down);
+  doc.addEventListener("pointermove", move, { passive: false });
+  doc.addEventListener("pointerup", up);
+  doc.addEventListener("pointercancel", cancel);
+  doc.addEventListener("lostpointercapture", cancel);
+  doc.addEventListener("keydown", keydown, true);
+  return () => {
+    clear();
+    scrollEl.removeEventListener("pointerdown", down);
+    doc.removeEventListener("pointermove", move);
+    doc.removeEventListener("pointerup", up);
+    doc.removeEventListener("pointercancel", cancel);
+    doc.removeEventListener("lostpointercapture", cancel);
+    doc.removeEventListener("keydown", keydown, true);
+  };
+}
+
+// src/search-tree-renderer.ts
+var SearchTreeRenderer = class {
+  constructor(root) {
+    this.root = root;
+    this.pending = /* @__PURE__ */ new Map();
+    this.ready = [];
+    this.generation = 0;
+    this.win = root.ownerDocument.defaultView;
+  }
+  reset() {
+    this.generation++;
+    this.observer?.disconnect();
+    this.observer = void 0;
+    this.pending.clear();
+    this.ready = [];
+    if (this.frame !== void 0) this.win.cancelAnimationFrame(this.frame);
+    this.frame = void 0;
+  }
+  add(parent, height, render, eager = false) {
+    if (eager || !this.win.IntersectionObserver) {
+      render();
+      return;
+    }
+    if (!this.observer) {
+      const generation = this.generation;
+      this.observer = new this.win.IntersectionObserver((entries) => {
+        if (generation !== this.generation) return;
+        for (const entry of entries) if (entry.isIntersecting && this.pending.has(entry.target)) {
+          this.observer?.unobserve(entry.target);
+          this.ready.push(entry.target);
+        }
+        this.schedule();
+      }, { root: this.root, rootMargin: "300px 0px" });
+    }
+    parent.style.minHeight = `${Math.max(28, height)}px`;
+    parent.setAttribute("aria-busy", "true");
+    parent.classList.add("pv-search-pending");
+    this.pending.set(parent, render);
+    this.observer.observe(parent);
+  }
+  /** Keyboard navigation and range selection need the complete branch in DOM order. */
+  flush(root) {
+    for (const [parent, render] of this.pending) {
+      if (root === parent || root.contains(parent)) {
+        this.pending.delete(parent);
+        this.observer?.unobserve(parent);
+        parent.style.removeProperty("min-height");
+        parent.removeAttribute("aria-busy");
+        parent.classList.remove("pv-search-pending");
+        render();
+      }
+    }
+  }
+  schedule() {
+    if (this.frame !== void 0 || !this.ready.length) return;
+    const generation = this.generation;
+    this.frame = this.win.requestAnimationFrame(() => {
+      this.frame = void 0;
+      if (generation !== this.generation) return;
+      const start = this.win.performance.now();
+      this.ready.sort((a, b) => a.compareDocumentPosition(b) & this.win.Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+      while (this.ready.length) {
+        const parent = this.ready.shift(), render = this.pending.get(parent);
+        this.pending.delete(parent);
+        if (render && parent.isConnected) {
+          parent.style.removeProperty("min-height");
+          parent.removeAttribute("aria-busy");
+          parent.classList.remove("pv-search-pending");
+          render();
+          if (generation !== this.generation) return;
+        }
+        if (this.win.performance.now() - start >= 6) break;
+      }
+      this.schedule();
+    });
+  }
+};
+
 // src/property-rename.ts
 function propertyNameError(name) {
   if (!name.trim()) return "Enter a property name.";
@@ -279,10 +456,18 @@ function includeRenamedProperty(prefs, source, target) {
   const carryPins = (overrides) => {
     if (overrides && Object.prototype.hasOwnProperty.call(overrides, from) && !Object.prototype.hasOwnProperty.call(overrides, to)) Object.defineProperty(overrides, to, { value: overrides[from], enumerable: true, configurable: true, writable: true });
   };
+  const carryOrder = (order) => {
+    if (!order || order.includes(to)) return;
+    const index = order.indexOf(from);
+    if (index >= 0) order.splice(index + 1, 0, to);
+  };
+  carryOrder(prefs.manualOrder);
+  carryOrder(prefs.customOrder);
   carryPins(prefs.customPinOverrides);
   for (const profile of prefs.profiles) {
     profile.keys = include(profile.keys);
     carryPins(profile.pinOverrides);
+    carryOrder(profile.order);
   }
 }
 
@@ -2290,7 +2475,8 @@ var sortOptions = {
   name: "Property name (A to Z)",
   "name-desc": "Property name (Z to A)",
   count: "Frequency (high to low)",
-  "count-asc": "Frequency (low to high)"
+  "count-asc": "Frequency (low to high)",
+  manual: "Manual"
 };
 function sortOrder(value) {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(sortOptions, value) ? value : "name";
@@ -2298,7 +2484,7 @@ function sortOrder(value) {
 function sortNodes(nodes, order, name = (node) => node.label) {
   const keys = /* @__PURE__ */ new Map();
   const list = Array.from(nodes);
-  for (const node of list) keys.set(node, order === "name" || order === "name-desc" ? name(node) : node.label);
+  for (const node of list) keys.set(node, order === "name" || order === "name-desc" || order === "manual" ? name(node) : node.label);
   return list.sort((a, b) => {
     const alphabetical = natural(keys.get(a), keys.get(b)) || a.id.localeCompare(b.id);
     if (order === "name-desc") return -alphabetical;
@@ -2336,7 +2522,7 @@ function loadProfiles(raw) {
     ids.add(value.id);
     names.add(fold(value.name));
     const pinOverrides = loadPinOverrides(value.pinOverrides);
-    return [{ ...value.folders !== void 0 ? { folders: normalizeFolders(value.folders) } : {}, ...pinOverrides ? { pinOverrides } : {}, id: value.id, name: value.name.trim(), keys: [...new Set(value.keys.filter((key) => typeof key === "string").map(fold).filter(Boolean))] }];
+    return [{ ...normalizeOrder(value.order, fold) ? { order: normalizeOrder(value.order, fold) } : {}, ...value.folders !== void 0 ? { folders: normalizeFolders(value.folders) } : {}, ...pinOverrides ? { pinOverrides } : {}, id: value.id, name: value.name.trim(), keys: [...new Set(value.keys.filter((key) => typeof key === "string").map(fold).filter(Boolean))] }];
   });
 }
 function sameKeys(a, b) {
@@ -2349,6 +2535,8 @@ function loadViewState(raw) {
   const profiles = loadProfiles(value.profiles);
   return {
     profiles,
+    ...normalizeOrder(value.manualOrder, fold) ? { manualOrder: normalizeOrder(value.manualOrder, fold) } : {},
+    ...normalizeOrder(value.customOrder, fold) ? { customOrder: normalizeOrder(value.customOrder, fold) } : {},
     ...value.folders !== void 0 ? { folders: normalizeFolders(value.folders) } : {},
     ...value.pinned !== void 0 ? { pinned: Array.isArray(value.pinned) ? value.pinned.filter((v) => typeof v === "string").map(fold) : [] } : {},
     ...typeof value.hidden === "string" ? { hidden: value.hidden } : {},
@@ -4010,11 +4198,14 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian17.Plugin {
       ...saved.folders !== void 0 ? { folders: normalizeFolders(saved.folders) } : {},
       ...saved.explorerCounts !== void 0 ? { explorerCounts: normalizeExplorerCounts(saved.explorerCounts) } : {},
       customPinOverrides: loadPinOverrides(saved.customPinOverrides),
+      ...normalizeOrder(saved.manualOrder, fold) ? { manualOrder: normalizeOrder(saved.manualOrder, fold) } : {},
+      ...normalizeOrder(saved.customOrder, fold) ? { customOrder: normalizeOrder(saved.customOrder, fold) } : {},
       activeProfile: typeof saved.activeProfile === "string" && profiles.some((profile) => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v) => typeof v === "string") : null,
       pinned: Array.isArray(saved?.pinned) ? saved.pinned.filter((v) => typeof v === "string") : [],
       counts: typeof saved?.counts === "boolean" ? saved.counts : true,
       sort: sortOrder(saved?.sort),
+      ...saved.lastAutomaticSort !== void 0 ? { lastAutomaticSort: sortOrder(saved.lastAutomaticSort) === "manual" ? "name" : sortOrder(saved.lastAutomaticSort) } : {},
       excludedFolders: typeof saved.excludedFolders === "string" ? saved.excludedFolders : "",
       hidden: typeof saved?.hidden === "string" ? saved.hidden : "",
       expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((v) => typeof v === "string") : []
@@ -4235,7 +4426,7 @@ var SuperchargedPropertiesPlugin = class extends import_obsidian17.Plugin {
         const result = await this.inlineEditor.apply(plan);
         if (result.updated && mode === "rename-property") {
           const state = this.prefs.inlineViews;
-          const prefs = { scope: state.scope, profiles: state.profiles, pinned: state.pinned ?? [], hidden: state.hidden ?? "", expanded: [], customPinOverrides: state.customPinOverrides };
+          const prefs = { scope: state.scope, profiles: state.profiles, pinned: state.pinned ?? [], hidden: state.hidden ?? "", expanded: [], manualOrder: state.manualOrder, customOrder: state.customOrder, customPinOverrides: state.customPinOverrides };
           includeRenamedProperty(prefs, property.id, plan.edit.replacement);
           Object.assign(state, { scope: prefs.scope, pinned: prefs.pinned, hidden: prefs.hidden });
           await this.save();
@@ -4355,6 +4546,10 @@ var PropertiesView = class extends import_obsidian17.ItemView {
     this.filter = null;
     this.inlineView = false;
     this.inlineExpanded = [];
+    this.orderDisposers = [];
+    this.orderDragging = false;
+    this.orderRenderPending = false;
+    this.manualHintShown = false;
     this.scopeQuery = "";
     this.visibleKeys = [];
     this.allExpanded = false;
@@ -4490,15 +4685,28 @@ var PropertiesView = class extends import_obsidian17.ItemView {
     this.summary.setAttribute("aria-live", "polite");
     this.selectionBar = el2(this.contentEl, "div", "pv-note-selection");
     this.selectionBar.hidden = true;
+    this.orderActions = el2(this.contentEl, "div", "pv-order-actions");
+    this.orderActions.hidden = true;
+    el2(this.orderActions, "span", "", "Reorder properties");
+    this.button(this.orderActions, "Done", "Done reordering properties", () => this.finishOrder(true));
+    this.button(this.orderActions, "Cancel", "Cancel property reordering", () => this.finishOrder(false));
     this.body = el2(this.contentEl, "div", "pv-tree");
     this.searchTree = new SearchTreeRenderer(this.body);
+    this.orderLive = el2(this.contentEl, "div", "pv-sr-only");
+    this.orderLive.setAttribute("aria-live", "polite");
+    this.orderLive.setAttribute("aria-atomic", "true");
     this.body.setAttribute("aria-label", "Properties, values and notes");
     this.contentEl.appendChild(this.summary);
     this.render();
   }
   async onClose() {
+    this.orderSession = void 0;
+    this.orderRenderPending = false;
+    this.orderDragging = false;
     this.cancelSearchRender();
     this.searchTree?.reset();
+    this.orderRenderPending = false;
+    this.disposeOrderControls();
     this.profilePicker?.close(false);
     this.contentEl.removeEventListener("keydown", this.onSelectionKeydown);
     this.disposeNoteMenus();
@@ -4519,6 +4727,8 @@ var PropertiesView = class extends import_obsidian17.ItemView {
   scheduleSearchRender() {
     this.cancelSearchRender();
     this.searchTree?.reset();
+    this.orderRenderPending = false;
+    this.disposeOrderControls();
     let assignments = 0;
     if (this.query && (this.searchScope === "any" || this.searchScope === "note")) {
       for (const property of this.sourceIndex().properties.values()) {
@@ -4580,9 +4790,24 @@ var PropertiesView = class extends import_obsidian17.ItemView {
     const menu = new import_obsidian17.Menu();
     for (const [value, label] of Object.entries(sortOptions)) {
       menu.addItem((item) => item.setTitle(label).setChecked(this.plugin.prefs.sort === value).onClick(() => {
+        if (value === "manual") {
+          this.beginOrder();
+          return;
+        }
+        this.orderSession = void 0;
         this.plugin.prefs.sort = sortOrder(value);
+        this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
         void this.plugin.save();
         this.plugin.refresh();
+        this.render();
+      }));
+    }
+    if (this.plugin.prefs.sort === "manual") {
+      menu.addSeparator();
+      if (!this.orderSession) menu.addItem((item) => item.setTitle("Reorder properties").setIcon("grip-vertical").onClick(() => this.beginOrder()));
+      menu.addItem((item) => item.setTitle("Reset manual order").setDisabled(this.layerOrder === void 0).onClick(() => {
+        this.writeOrder(void 0);
+        void this.plugin.save();
         this.render();
       }));
     }
@@ -4590,7 +4815,7 @@ var PropertiesView = class extends import_obsidian17.ItemView {
     menu.showAtPosition({ x: rect.left, y: rect.bottom });
   }
   sorted(nodes) {
-    return sortNodes(nodes, this.plugin.prefs.sort);
+    return this.plugin.prefs.sort === "manual" ? sortByOrder(nodes, this.effectiveOrder()) : sortNodes(nodes, this.plugin.prefs.sort);
   }
   get inlinePrefs() {
     var _a;
@@ -4598,6 +4823,134 @@ var PropertiesView = class extends import_obsidian17.ItemView {
   }
   get viewPrefs() {
     return this.inlineView ? this.inlinePrefs : this.plugin.prefs;
+  }
+  get orderLayer() {
+    const prefs = this.viewPrefs, profile = prefs.profiles.find((item) => item.id === prefs.activeProfile);
+    return profile ? { target: profile, field: "order" } : { target: prefs, field: prefs.scope !== null || normalizeFolders(prefs.folders).length ? "customOrder" : "manualOrder" };
+  }
+  get layerOrder() {
+    const { target, field } = this.orderLayer;
+    return target[field];
+  }
+  effectiveOrder() {
+    return this.layerOrder ?? this.viewPrefs.manualOrder ?? [];
+  }
+  writeOrder(order) {
+    const { target, field } = this.orderLayer;
+    target[field] = order;
+  }
+  beginOrder() {
+    if (this.orderSession) return;
+    const { target, field } = this.orderLayer;
+    const automatic = this.plugin.prefs.sort === "manual" ? this.plugin.prefs.lastAutomaticSort ?? "name" : this.plugin.prefs.sort;
+    this.plugin.prefs.lastAutomaticSort = automatic === "manual" ? "name" : automatic;
+    this.orderSession = { target, field, original: target[field] ? [...target[field]] : void 0, previousSort: this.plugin.prefs.lastAutomaticSort };
+    this.seedManualOrder();
+    this.plugin.prefs.sort = "manual";
+    void this.plugin.save();
+    this.plugin.refresh();
+    this.render();
+  }
+  restoreOrder() {
+    const session = this.orderSession;
+    if (!session) return;
+    session.target[session.field] = session.original ? [...session.original] : void 0;
+    this.plugin.prefs.sort = session.previousSort;
+    this.orderSession = void 0;
+  }
+  finishOrder(keep) {
+    if (!this.orderSession) return;
+    if (keep) this.orderSession = void 0;
+    else this.restoreOrder();
+    void this.plugin.save();
+    this.plugin.refresh();
+    this.render();
+    this.sortButton.focus();
+    this.orderLive.textContent = keep ? "Property order saved." : "Reordering cancelled. Previous sort restored.";
+  }
+  seedManualOrder() {
+    if (this.plugin.prefs.sort === "manual") return;
+    if (this.layerOrder === void 0) this.writeOrder(this.sorted(this.sourceIndex().properties.values()).map((property) => property.id));
+    if (!this.manualHintShown) {
+      new import_obsidian17.Notice("Drag the handle or use the property menu to reorder.");
+      this.manualHintShown = true;
+    }
+  }
+  orderGroup(key) {
+    const pins = this.effectivePins();
+    return this.visibleKeys.filter((item) => pins.has(item) === pins.has(key));
+  }
+  reorderProperty(key, action) {
+    if (this.plugin.prefs.sort !== "manual" || !this.orderSession) return;
+    const group = this.orderGroup(key);
+    if (!group.includes(key) || group.length < 2) return;
+    const source = this.sourceIndex().properties;
+    if (!source.has(key)) return;
+    const full = materializeOrder(this.effectiveOrder(), this.sorted(source.values()).map((property) => property.id));
+    const moved = typeof action === "string" ? moveWithinGroup(full, key, group, action) : placeInGroup(full, key, group, action.before);
+    if (moved.every((item, index) => item === full[index])) return;
+    this.writeOrder(moved.filter((item) => source.has(item)));
+    void this.plugin.save();
+    this.render();
+    this.orderLive.textContent = `${source.get(key)?.label ?? key} moved to position ${this.orderGroup(key).indexOf(key) + 1} of ${group.length}`;
+  }
+  disposeOrderControls() {
+    const disposers = this.orderDisposers;
+    this.orderDisposers = [];
+    for (const dispose of disposers) dispose();
+  }
+  renderOrderControls() {
+    if (this.plugin.prefs.sort !== "manual" || !this.orderSession) return;
+    const rows = Array.from(this.body.querySelectorAll(":scope > .pv-group"));
+    for (const row of rows) {
+      const key = row.dataset.pvProperty, property = this.sourceIndex().properties.get(key);
+      const group = this.orderGroup(key), position = group.indexOf(key) + 1;
+      const header = row.querySelector(".pv-property-row");
+      const grip = this.iconButton(header, `Reorder ${property.label}, position ${position} of ${group.length}`, "grip-vertical", () => {
+      });
+      grip.className = "pv-grip";
+      grip.dataset.pvFocus = JSON.stringify(["grip", key]);
+      grip.setAttribute("aria-description", "Use the arrow keys to move");
+      header.prepend(grip);
+      const moveKey = (event, requireAlt) => {
+        if (requireAlt && !event.altKey) return;
+        const action = event.key === "ArrowUp" ? "up" : event.key === "ArrowDown" ? "down" : !requireAlt && event.key === "Home" ? "top" : !requireAlt && event.key === "End" ? "bottom" : void 0;
+        if (action) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.reorderProperty(key, action);
+        }
+      };
+      grip.addEventListener("keydown", (event) => moveKey(event, false));
+      header.querySelector(".pv-node").addEventListener("keydown", (event) => moveKey(event, true));
+    }
+    const pins = this.effectivePins();
+    for (const pinned of [true, false]) {
+      const groupRows = rows.filter((row) => pins.has(row.dataset.pvProperty) === pinned);
+      if (groupRows.length > 1) this.orderDisposers.push(attachManualOrderDrag({
+        rows: groupRows,
+        keys: groupRows.map((row) => row.dataset.pvProperty),
+        scrollEl: this.body,
+        onStart: () => {
+          this.orderDragging = true;
+          if (this.query) {
+            this.searchTree?.reset();
+            this.orderRenderPending = true;
+          }
+        },
+        onEnd: () => {
+          this.orderDragging = false;
+          if (this.orderRenderPending) {
+            this.orderRenderPending = false;
+            this.render();
+          }
+        },
+        onDrop: (key, before) => {
+          this.orderDragging = false;
+          this.reorderProperty(key, { before });
+        }
+      }));
+    }
   }
   get pinOverrides() {
     const prefs = this.viewPrefs;
@@ -4764,7 +5117,7 @@ var PropertiesView = class extends import_obsidian17.ItemView {
     }
     if (action === "new") {
       const id = this.contentEl.ownerDocument.defaultView.crypto.randomUUID();
-      prefs.profiles.push({ id, name, keys, ...folders.length ? { folders } : {}, ...this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {} });
+      prefs.profiles.push({ id, name, keys, ...folders.length ? { folders } : {}, ...this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {}, ...this.layerOrder !== void 0 ? { order: [...this.layerOrder] } : {} });
       prefs.activeProfile = id;
       prefs.scope = [...keys];
     } else if (!active) return;
@@ -4774,6 +5127,7 @@ var PropertiesView = class extends import_obsidian17.ItemView {
       prefs.scope = [...keys];
     } else if (action === "rename") active.name = name;
     else {
+      prefs.customOrder = active.order ? [...active.order] : void 0;
       prefs.customPinOverrides = active.pinOverrides ? { ...active.pinOverrides } : void 0;
       prefs.profiles = prefs.profiles.filter((profile) => profile !== active);
       prefs.activeProfile = null;
@@ -4927,8 +5281,14 @@ var PropertiesView = class extends import_obsidian17.ItemView {
   }
   render() {
     if (!this.body) return;
+    if (this.orderDragging) {
+      this.orderRenderPending = true;
+      return;
+    }
     this.cancelSearchRender();
     this.searchTree?.reset();
+    this.orderRenderPending = false;
+    this.disposeOrderControls();
     this.renderTextMatches = /* @__PURE__ */ new Map();
     this.renderPathMatches = /* @__PURE__ */ new Map();
     if (this.inlineView && !this.plugin.prefs.showInlineProperties) {
@@ -4942,6 +5302,9 @@ var PropertiesView = class extends import_obsidian17.ItemView {
       this.plugin.prefs.folders = [];
       void this.plugin.save();
     }
+    const layer = this.orderLayer;
+    if (this.orderSession && (this.plugin.prefs.sort !== "manual" || layer.target !== this.orderSession.target || layer.field !== this.orderSession.field)) this.orderSession = void 0;
+    this.orderActions.hidden = !this.orderSession;
     const expansionContext = JSON.stringify([this.inlineView, this.query, this.searchScope, this.viewPrefs.scope, this.viewPrefs.activeProfile, this.viewPrefs.folders, this.filter]);
     if (expansionContext !== this.expansionContext) {
       this.expansionContext = expansionContext;
@@ -4982,6 +5345,7 @@ var PropertiesView = class extends import_obsidian17.ItemView {
       if ((this.filter || this.folders.length) && this.query) for (const path of matchingPaths) searchPaths.add(path);
       this.visibleKeys.push(property.id);
       const group = el2(this.body, "div", "pv-group");
+      group.dataset.pvProperty = property.id;
       const row = el2(group, "div", "pv-row pv-property-row");
       const expanded = this.propertyExpanded(property.id);
       const toggle = this.iconButton(row, `${expanded ? "Collapse" : "Expand"} ${property.label}`, expanded ? "chevron-down" : "chevron-right", () => this.toggleProperty(property.id));
@@ -5042,6 +5406,7 @@ var PropertiesView = class extends import_obsidian17.ItemView {
       if (this.query) this.searchTree.add(children, estimatedHeight, renderChildren, eagerProperty);
       else renderChildren();
     }
+    this.renderOrderControls();
     this.allExpanded = this.visibleKeys.length > 0 && this.visibleKeys.every((key) => this.propertyExpanded(key));
     const toggleLabel = this.allExpanded ? "Collapse all properties" : "Expand all properties";
     this.expandToggle.title = toggleLabel;
@@ -5331,6 +5696,13 @@ var PropertiesView = class extends import_obsidian17.ItemView {
       this.plugin.openBulkProperties(mode, () => resolveTreeScope(this.app.vault, paths, label, (path) => this.plugin.includesPath(path), node === property));
     }));
     if (node === property) {
+      if (this.plugin.prefs.sort === "manual" && this.orderSession) {
+        const group = this.orderGroup(property.id), index = group.indexOf(property.id);
+        for (const [action, title, icon] of [["up", "Move up", "arrow-up"], ["down", "Move down", "arrow-down"], ["top", "Move to top", "arrow-up-to-line"], ["bottom", "Move to bottom", "arrow-down-to-line"]]) {
+          const disabled = index < 0 || (action === "up" || action === "top" ? index === 0 : index === group.length - 1);
+          menu.addItem((item) => item.setTitle(title).setIcon(icon).setDisabled(disabled).onClick(() => this.reorderProperty(property.id, action)));
+        }
+      }
       menu.addItem((item) => item.setTitle("Rename property\u2026").setIcon("pencil").onClick(() => this.inlineView ? this.plugin.editInline(property, "rename-property") : this.plugin.renameProperty(property)));
       menu.addItem((item) => item.setTitle("Delete property\u2026").setIcon("trash-2").onClick(() => this.inlineView ? this.plugin.editInline(property, "delete-property") : this.plugin.deleteProperty({ ...property, paths: this.searchMatchingPaths(property, property) })));
       const pinned = this.effectivePins().has(property.id);
@@ -5417,9 +5789,11 @@ var PreferencesTab = class extends import_obsidian17.PluginSettingTab {
           await this.plugin.save();
         }));
       } },
-      { name: "Sort by", render: (setting) => {
+      { name: "Sort by", desc: "Manual lets you drag properties into your own order.", render: (setting) => {
         setting.addDropdown((dropdown) => dropdown.addOptions(sortOptions).setValue(this.plugin.prefs.sort).onChange(async (value) => {
+          if (this.plugin.prefs.sort !== "manual") this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
           this.plugin.prefs.sort = sortOrder(value);
+          if (this.plugin.prefs.sort !== "manual") this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
           await this.plugin.save();
         }));
       } },

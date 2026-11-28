@@ -25,6 +25,7 @@ export function setOwnValue(frontmatter: Record<string, unknown>, key: string, v
 }
 
 interface PropertyPreferences {
+  manualOrder?: string[]; customOrder?: string[];
   customPinOverrides?: Record<string, boolean>; scope: string[] | null; pinned: string[]; expanded: string[]; hidden: string; profiles: PropertyProfile[];
 }
 
@@ -40,6 +41,11 @@ export function includeRenamedProperty(prefs: PropertyPreferences, source: strin
   const carryPins = (overrides?: Record<string, boolean>) => {
     if (overrides && Object.prototype.hasOwnProperty.call(overrides, from) && !Object.prototype.hasOwnProperty.call(overrides, to)) Object.defineProperty(overrides, to, { value: overrides[from], enumerable: true, configurable: true, writable: true });
   };
+  const carryOrder = (order?: string[]) => {
+    if (!order || order.includes(to)) return;
+    const index = order.indexOf(from); if (index >= 0) order.splice(index + 1, 0, to);
+  };
+  carryOrder(prefs.manualOrder); carryOrder(prefs.customOrder);
   carryPins(prefs.customPinOverrides);
-  for (const profile of prefs.profiles) { profile.keys = include(profile.keys); carryPins(profile.pinOverrides); }
+  for (const profile of prefs.profiles) { profile.keys = include(profile.keys); carryPins(profile.pinOverrides); carryOrder(profile.order); }
 }

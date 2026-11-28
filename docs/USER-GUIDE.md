@@ -257,7 +257,7 @@ The table describes property/value-row bulk actions. “Full indexed note set”
 
 ## Save and manage views
 
-Saved views, also called profiles, store a **property selection**. YAML saved views also store local pin/unpin choices. They do not save search text, sorting, or hidden-property settings as separate per-view preferences.
+Saved views, also called profiles, store a **property selection**. YAML saved views also store local pin/unpin choices. Both sources can store their own manual property order. They do not save search text, sorting, or hidden-property settings as separate per-view preferences.
 
 ### Create a view
 
@@ -326,8 +326,9 @@ Click **Sort properties** to choose:
 - **Property name (Z to A)**
 - **Frequency (high to low)**
 - **Frequency (low to high)**
+- **Manual** (unreleased)
 
-The selected ordering applies to property and value rows. A–Z and Z–A sort wikilink values by the target note’s filename, ignoring its folder, alias, and heading/block reference. Resolved links use the actual note basename; unresolved links use the last target segment without `.md`. Expanded notes use filename ordering too, with full paths breaking ties. Numeric ordering puts `2026-W9` before `2026-W21`. Original labels and edit values stay unchanged. Frequency means distinct-note count; ties use alphabetical order. The same preference is available in Settings.
+The automatic ordering options apply to property and value rows. Manual orders properties only; its values and notes use A–Z. A–Z and Z–A sort wikilink values by the target note’s filename, ignoring its folder, alias, and heading/block reference. Resolved links use the actual note basename; unresolved links use the last target segment without `.md`. Expanded notes use filename ordering too, with full paths breaking ties. Numeric ordering puts `2026-W9` before `2026-W21`. Original labels and edit values stay unchanged. Frequency means distinct-note count; ties use alphabetical order. The same preference is available in Settings.
 
 Right-click a **property row** and choose **Pin property** to keep it above unpinned properties. Choose **Unpin property** to restore normal ordering. Pinning does not override the property selection, search, or hiding.
 
@@ -336,6 +337,32 @@ Pins set in **All properties** are inherited by other YAML views. Pinning inside
 Unsaved custom selections have their own local pin choices, which are copied when you save a new view. Deleting a saved view retains its current pin choices in the resulting custom selection. Inline views have separate pin settings and the same inheritance behavior within inline views.
 
 Choose **Hide property** to remove a property from the tree. To restore it, open **Settings → Supercharged Properties → Hidden properties** and remove its name. Hiding changes the display only; it does not delete metadata. Hidden-property names are matched without regard to capitalization or surrounding whitespace.
+
+### Reorder properties manually
+
+Available in the unreleased development version. Choose **Sort properties → Manual**. Reorder controls and **Done** / **Cancel** appear above the tree. On first use from the view’s sort menu, the current order becomes the starting order. Setting **Sort by → Manual** in Settings does not seed an order; views without one start A–Z.
+
+- Drag a property’s grip to a new position. Dragging starts only from the grip, so you can still scroll on the rest of the row on mobile. A line shows where the property will go; release to save or press Escape to cancel. You can drop in the empty area below the last property to move to the end of its group. Background tree refreshes wait until the gesture finishes.
+- Right-click the property name (long-press on mobile) and choose **Move up**, **Move down**, **Move to top**, or **Move to bottom**.
+- Focus the grip with Tab, then use Up/Down to move one place or Home/End to move to the start/end. Alt+Up/Down also works on the property name button. Focus follows the moved property and its position is announced to screen readers.
+
+Pinned properties remain first. Moves stay within the pinned or unpinned group; pin or unpin a property to change groups. Under search, hidden-property settings, or Folder and Value filters, moves use the visible neighbors. Filtered-out keys keep their relative order. New properties appear alphabetically after listed properties. Choose properties to show reflects the manual order, but its rows do not have drag handles.
+
+Orders are stored separately for YAML and Inline sources:
+
+| Current view | Where a move is saved |
+| --- | --- |
+| All properties / Inline Properties | The source’s base order. |
+| Custom selection, including a folder-only selection | A custom order; inherits the base until changed. |
+| Saved view | That saved view’s order; inherits the base until changed. |
+
+Choose **Done** to keep the arranged order, hide the handles, and continue browsing in Manual mode. Choose **Cancel** to discard this session’s moves and restore the last automatic sort (A–Z, Z–A, high-to-low, or low-to-high), while preserving any previously saved manual order. Use **Sort properties → Reorder properties** to arrange again. If no previous automatic sort is known, Cancel returns to A–Z.
+
+Moves save as you arrange; you do not need **Update**, and order changes do not mark a view **(modified)**. Closing the view, changing order layers (for example switching saved views), or choosing an automatic sort ends arranging and retains the moves made so far. Use Cancel before leaving if you want to discard them. **Save new** copies an explicit order from the current view. Deleting a saved view retains its explicit order in the resulting custom selection. Switching to an automatic sort hides the controls but keeps all stored orders.
+
+In Manual mode, **Sort properties → Reset manual order** clears only the current view’s explicit order. Saved and custom views then inherit their source’s base order; resetting a base view returns it to A–Z. Other views’ explicit orders are unchanged. Values and notes always use A–Z in Manual mode, including filename sorting for linked values.
+
+Ordering is display-only: it never edits notes or changes Obsidian’s own property order. It is saved in plugin preferences and is independent of **Undo last property edit**.
 
 ## Use Obsidian Search and copy links
 
@@ -411,7 +438,7 @@ Open **Settings → Supercharged Properties**.
 | Hidden inline properties | One inline property name per line; separate from YAML hiding. |
 | Show inline properties | Add a separate tree of inline fields from note bodies. Off by default. |
 | Show note counts | Shows or hides distinct-note counts beside rows. |
-| Sort by | Selects the shared property/value sort preference. |
+| Sort by | Selects automatic sorting or Manual property ordering. |
 | Excluded folders | One vault-relative folder per line, including subfolders; omitted from the index and new bulk edits. |
 | Hidden properties | One property name per line; remove a name to restore it. Leave empty to hide none. |
 | Show note counts in the File explorer | Optional folder badges; off by default. |

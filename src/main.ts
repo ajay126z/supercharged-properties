@@ -1,3 +1,5 @@
+import { normalizeOrder, sortByOrder, materializeOrder, moveWithinGroup, placeInGroup, type MoveAction } from './manual-order';
+import { attachManualOrderDrag } from './manual-order-drag';
 import { SearchTreeRenderer } from './search-tree-renderer';
 import {bulkSettings,validDelimiter,type BulkSettings} from './bulk-properties';
 import {resolveSelectionScope,resolveTreeScope,type BulkScope} from './bulk-scope';
@@ -40,7 +42,7 @@ import { ExplorerCounts, explorerCountsSettingDefinitions } from './explorer-cou
 import { DEFAULT_EXPLORER_COUNTS, normalizeExplorerCounts, type ExplorerCountsSettings } from './explorer-counts/settings';
 
 const VIEW = 'supercharged-properties';
-interface Preferences extends BulkSettings { explorerCounts?: ExplorerCountsSettings; folders?: string[]; customPinOverrides?: Record<string, boolean>; showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
+interface Preferences extends BulkSettings { lastAutomaticSort?: SortOrder; manualOrder?: string[]; customOrder?: string[]; explorerCounts?: ExplorerCountsSettings; folders?: string[]; customPinOverrides?: Record<string, boolean>; showTooltips: boolean; inlineViews: PropertyViewState; showInlineProperties: boolean; counts: boolean; sort: SortOrder; hidden: string; excludedFolders: string; expanded: string[]; pinned: string[]; scope: string[] | null; profiles: PropertyProfile[]; activeProfile: string | null }
 interface ValueFilter { property: string; value: string; propertyLabel: string; label: string }
 const defaults: Preferences = { ...bulkSettings({}), showTooltips: true, inlineViews: loadViewState(null), showInlineProperties: false, counts: true, sort: 'name', hidden: '', excludedFolders: '', expanded: [], pinned: [], scope: null, profiles: [], activeProfile: null };
 
@@ -70,11 +72,14 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
       ...(saved.folders !== undefined ? { folders: normalizeFolders(saved.folders) } : {}),
       ...(saved.explorerCounts !== undefined ? { explorerCounts: normalizeExplorerCounts(saved.explorerCounts) } : {}),
       customPinOverrides: loadPinOverrides(saved.customPinOverrides),
+      ...(normalizeOrder(saved.manualOrder, fold) ? { manualOrder: normalizeOrder(saved.manualOrder, fold) } : {}),
+      ...(normalizeOrder(saved.customOrder, fold) ? { customOrder: normalizeOrder(saved.customOrder, fold) } : {}),
       activeProfile: typeof saved.activeProfile === 'string' && profiles.some(profile => profile.id === saved.activeProfile) ? saved.activeProfile : null,
       scope: Array.isArray(saved?.scope) ? saved.scope.filter((v: unknown) => typeof v === 'string') : null,
       pinned: Array.isArray(saved?.pinned) ? saved.pinned.filter((v: unknown) => typeof v === 'string') : [],
       counts: typeof saved?.counts === 'boolean' ? saved.counts : true,
       sort: sortOrder(saved?.sort),
+      ...(saved.lastAutomaticSort !== undefined ? { lastAutomaticSort: sortOrder(saved.lastAutomaticSort) === 'manual' ? 'name' : sortOrder(saved.lastAutomaticSort) } : {}),
       excludedFolders: typeof saved.excludedFolders === 'string' ? saved.excludedFolders : '',
       hidden: typeof saved?.hidden === 'string' ? saved.hidden : '',
       expanded: Array.isArray(saved?.expanded) ? saved.expanded.filter((v: unknown) => typeof v === 'string') : []
@@ -270,7 +275,7 @@ export default class SuperchargedPropertiesPlugin extends Plugin {
         const result = await this.inlineEditor.apply(plan);
         if (result.updated && mode === 'rename-property') {
           const state = this.prefs.inlineViews;
-          const prefs = { scope: state.scope, profiles: state.profiles, pinned: state.pinned ?? [], hidden: state.hidden ?? '', expanded: [], customPinOverrides: state.customPinOverrides };
+          const prefs = { scope: state.scope, profiles: state.profiles, pinned: state.pinned ?? [], hidden: state.hidden ?? '', expanded: [], manualOrder: state.manualOrder, customOrder: state.customOrder, customPinOverrides: state.customPinOverrides };
           includeRenamedProperty(prefs, property.id, plan.edit.replacement);
           Object.assign(state, { scope: prefs.scope, pinned: prefs.pinned, hidden: prefs.hidden });
           await this.save();
@@ -416,6 +421,13 @@ export class PropertiesView extends ItemView {
   private filterNoteList!: FilterNoteList;
   private scopeButton!: HTMLButtonElement;
   private scopePanel!: HTMLElement;
+  private orderLive!: HTMLElement;
+  private orderDisposers: Array<() => void> = [];
+  private orderDragging = false;
+  private orderRenderPending = false;
+  private manualHintShown = false;
+  private orderActions!: HTMLElement;
+  private orderSession?: { target: {order?: string[]; manualOrder?: string[]; customOrder?: string[]}; field: 'order' | 'manualOrder' | 'customOrder'; original?: string[]; previousSort: SortOrder };
   private scopeChoices!: HTMLElement;
   private folderRow?: HTMLElement;
   private profilePicker!: ViewPicker;
@@ -522,16 +534,26 @@ export class PropertiesView extends ItemView {
     this.summary = el(this.contentEl, 'div', 'pv-summary'); this.summary.setAttribute('aria-live', 'polite');
     this.selectionBar = el(this.contentEl, 'div', 'pv-note-selection');
     this.selectionBar.hidden = true;
+    this.orderActions = el(this.contentEl, 'div', 'pv-order-actions'); this.orderActions.hidden = true;
+    el(this.orderActions, 'span', '', 'Reorder properties');
+    this.button(this.orderActions, 'Done', 'Done reordering properties', () => this.finishOrder(true));
+    this.button(this.orderActions, 'Cancel', 'Cancel property reordering', () => this.finishOrder(false));
     this.body = el(this.contentEl, 'div', 'pv-tree');
     this.searchTree = new SearchTreeRenderer(this.body);
+    this.orderLive = el(this.contentEl, 'div', 'pv-sr-only');
+    this.orderLive.setAttribute('aria-live', 'polite'); this.orderLive.setAttribute('aria-atomic', 'true');
     this.body.setAttribute('aria-label', 'Properties, values and notes');
     this.contentEl.appendChild(this.summary);
     this.render();
   }
 
   async onClose(): Promise<void> {
+    this.orderSession = undefined;
+    this.orderRenderPending = false; this.orderDragging = false;
     this.cancelSearchRender();
     this.searchTree?.reset();
+    this.orderRenderPending = false;
+    this.disposeOrderControls();
     this.profilePicker?.close(false);
     this.contentEl.removeEventListener('keydown', this.onSelectionKeydown);
     this.disposeNoteMenus();
@@ -550,6 +572,8 @@ export class PropertiesView extends ItemView {
   private scheduleSearchRender(): void {
     this.cancelSearchRender();
     this.searchTree?.reset();
+    this.orderRenderPending = false;
+    this.disposeOrderControls();
     // Small trees remain immediate. Large path searches wait briefly for a typing
     // burst to finish instead of building the same broad intermediate DOM repeatedly.
     let assignments = 0;
@@ -599,18 +623,111 @@ export class PropertiesView extends ItemView {
     const menu = new Menu();
     for (const [value, label] of Object.entries(sortOptions)) {
       menu.addItem(item => item.setTitle(label).setChecked(this.plugin.prefs.sort === value).onClick(() => {
+        if (value === 'manual') { this.beginOrder(); return; }
+        this.orderSession = undefined;
         this.plugin.prefs.sort = sortOrder(value);
+        this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
         void this.plugin.save(); this.plugin.refresh(); this.render();
+      }));
+    }
+    if (this.plugin.prefs.sort === 'manual') {
+      menu.addSeparator();
+      if (!this.orderSession) menu.addItem(item => item.setTitle('Reorder properties').setIcon('grip-vertical').onClick(() => this.beginOrder()));
+      menu.addItem(item => item.setTitle('Reset manual order').setDisabled(this.layerOrder === undefined).onClick(() => {
+        this.writeOrder(undefined); void this.plugin.save(); this.render();
       }));
     }
     const rect = this.sortButton.getBoundingClientRect();
     menu.showAtPosition({ x: rect.left, y: rect.bottom });
   }
   private sorted<T extends ValueNode>(nodes: Iterable<T>): T[] {
-    return sortNodes(nodes, this.plugin.prefs.sort);
+    return this.plugin.prefs.sort === 'manual' ? sortByOrder(nodes, this.effectiveOrder()) : sortNodes(nodes, this.plugin.prefs.sort);
   }
   private get inlinePrefs(): PropertyViewState { return this.plugin.prefs.inlineViews ??= loadViewState(null); }
   private get viewPrefs(): PropertyViewState { return this.inlineView ? this.inlinePrefs : this.plugin.prefs; }
+  private get orderLayer(): { target: {order?: string[]; manualOrder?: string[]; customOrder?: string[]}; field: 'order' | 'manualOrder' | 'customOrder' } {
+    const prefs = this.viewPrefs, profile = prefs.profiles.find(item => item.id === prefs.activeProfile);
+    return profile ? {target: profile, field: 'order'} : {target: prefs, field: prefs.scope !== null || normalizeFolders(prefs.folders).length ? 'customOrder' : 'manualOrder'};
+  }
+  private get layerOrder(): string[] | undefined { const {target, field} = this.orderLayer; return target[field]; }
+  private effectiveOrder(): string[] { return this.layerOrder ?? this.viewPrefs.manualOrder ?? []; }
+  private writeOrder(order: string[] | undefined): void { const {target, field} = this.orderLayer; target[field] = order; }
+  private beginOrder(): void {
+    if (this.orderSession) return;
+    const {target, field} = this.orderLayer;
+    const automatic = this.plugin.prefs.sort === 'manual' ? this.plugin.prefs.lastAutomaticSort ?? 'name' : this.plugin.prefs.sort;
+    this.plugin.prefs.lastAutomaticSort = automatic === 'manual' ? 'name' : automatic;
+    this.orderSession = {target, field, original: target[field] ? [...target[field]] : undefined, previousSort: this.plugin.prefs.lastAutomaticSort};
+    this.seedManualOrder(); this.plugin.prefs.sort = 'manual';
+    void this.plugin.save(); this.plugin.refresh(); this.render();
+  }
+  private restoreOrder(): void {
+    const session = this.orderSession; if (!session) return;
+    session.target[session.field] = session.original ? [...session.original] : undefined;
+    this.plugin.prefs.sort = session.previousSort; this.orderSession = undefined;
+  }
+  private finishOrder(keep: boolean): void {
+    if (!this.orderSession) return;
+    if (keep) this.orderSession = undefined; else this.restoreOrder();
+    void this.plugin.save(); this.plugin.refresh(); this.render(); this.sortButton.focus();
+    this.orderLive.textContent = keep ? 'Property order saved.' : 'Reordering cancelled. Previous sort restored.';
+  }
+  private seedManualOrder(): void {
+    if (this.plugin.prefs.sort === 'manual') return;
+    if (this.layerOrder === undefined) this.writeOrder(this.sorted(this.sourceIndex().properties.values()).map(property => property.id));
+    if (!this.manualHintShown) { new Notice('Drag the handle or use the property menu to reorder.'); this.manualHintShown = true; }
+  }
+  private orderGroup(key: string): string[] {
+    const pins = this.effectivePins();
+    return this.visibleKeys.filter(item => pins.has(item) === pins.has(key));
+  }
+  private reorderProperty(key: string, action: MoveAction | {before: string | null}): void {
+    if (this.plugin.prefs.sort !== 'manual' || !this.orderSession) return;
+    const group = this.orderGroup(key);
+    if (!group.includes(key) || group.length < 2) return;
+    const source = this.sourceIndex().properties;
+    if (!source.has(key)) return;
+    const full = materializeOrder(this.effectiveOrder(), this.sorted(source.values()).map(property => property.id));
+    const moved = typeof action === 'string' ? moveWithinGroup(full, key, group, action) : placeInGroup(full, key, group, action.before);
+    if (moved.every((item,index) => item === full[index])) return;
+    this.writeOrder(moved.filter(item => source.has(item)));
+    void this.plugin.save(); this.render();
+    this.orderLive.textContent = `${source.get(key)?.label ?? key} moved to position ${this.orderGroup(key).indexOf(key) + 1} of ${group.length}`;
+  }
+  private disposeOrderControls(): void { const disposers = this.orderDisposers; this.orderDisposers = []; for (const dispose of disposers) dispose(); }
+  private renderOrderControls(): void {
+    if (this.plugin.prefs.sort !== 'manual' || !this.orderSession) return;
+    const rows = Array.from(this.body.querySelectorAll<HTMLElement>(':scope > .pv-group'));
+    for (const row of rows) {
+      const key = row.dataset.pvProperty!, property = this.sourceIndex().properties.get(key)!;
+      const group = this.orderGroup(key), position = group.indexOf(key) + 1;
+      const header = row.querySelector<HTMLElement>('.pv-property-row')!;
+      const grip = this.iconButton(header, `Reorder ${property.label}, position ${position} of ${group.length}`, 'grip-vertical', () => {});
+      grip.className = 'pv-grip'; grip.dataset.pvFocus = JSON.stringify(['grip', key]);
+      grip.setAttribute('aria-description', 'Use the arrow keys to move'); header.prepend(grip);
+      const moveKey = (event: KeyboardEvent, requireAlt: boolean) => {
+        if (requireAlt && !event.altKey) return;
+        const action: MoveAction | undefined = event.key === 'ArrowUp' ? 'up' : event.key === 'ArrowDown' ? 'down' : !requireAlt && event.key === 'Home' ? 'top' : !requireAlt && event.key === 'End' ? 'bottom' : undefined;
+        if (action) { event.preventDefault(); event.stopPropagation(); this.reorderProperty(key, action); }
+      };
+      grip.addEventListener('keydown', event => moveKey(event, false));
+      header.querySelector<HTMLElement>('.pv-node')!.addEventListener('keydown', event => moveKey(event, true));
+    }
+    const pins = this.effectivePins();
+    for (const pinned of [true, false]) {
+      const groupRows = rows.filter(row => pins.has(row.dataset.pvProperty!) === pinned);
+      if (groupRows.length > 1) this.orderDisposers.push(attachManualOrderDrag({rows: groupRows, keys: groupRows.map(row => row.dataset.pvProperty!), scrollEl: this.body,
+        onStart: () => {
+          this.orderDragging = true;
+          if (this.query) { this.searchTree?.reset(); this.orderRenderPending = true; }
+        },
+        onEnd: () => {
+          this.orderDragging = false;
+          if (this.orderRenderPending) { this.orderRenderPending = false; this.render(); }
+        },
+        onDrop: (key, before) => { this.orderDragging = false; this.reorderProperty(key, {before}); }}));
+    }
+  }
   private get pinOverrides(): Record<string, boolean> | undefined {
     const prefs = this.viewPrefs;
     const profile = prefs.profiles.find(item => item.id === prefs.activeProfile);
@@ -734,11 +851,12 @@ export class PropertiesView extends ItemView {
     }
     if (action === 'new') {
       const id = this.contentEl.ownerDocument.defaultView!.crypto.randomUUID();
-      prefs.profiles.push({ id, name, keys, ...(folders.length ? { folders } : {}), ...(this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {}) }); prefs.activeProfile = id; prefs.scope = [...keys];
+      prefs.profiles.push({ id, name, keys, ...(folders.length ? { folders } : {}), ...(this.pinOverrides ? { pinOverrides: { ...this.pinOverrides } } : {}), ...(this.layerOrder !== undefined ? { order: [...this.layerOrder] } : {}) }); prefs.activeProfile = id; prefs.scope = [...keys];
     } else if (!active) return;
     else if (action === 'update') { active.keys = keys; active.folders = folders; prefs.scope = [...keys]; }
     else if (action === 'rename') active.name = name;
     else {
+      prefs.customOrder = active.order ? [...active.order] : undefined;
       prefs.customPinOverrides = active.pinOverrides ? { ...active.pinOverrides } : undefined;
       prefs.profiles = prefs.profiles.filter(profile => profile !== active); prefs.activeProfile = null;
     }
@@ -869,8 +987,11 @@ export class PropertiesView extends ItemView {
 
   render(): void {
     if (!this.body) return;
+    if (this.orderDragging) { this.orderRenderPending = true; return; }
     this.cancelSearchRender();
     this.searchTree?.reset();
+    this.orderRenderPending = false;
+    this.disposeOrderControls();
     // Per-render caches cannot survive index updates or changes in search scope.
     this.renderTextMatches = new Map();
     this.renderPathMatches = new Map();
@@ -880,6 +1001,9 @@ export class PropertiesView extends ItemView {
       this.plugin.prefs.scope = null; this.plugin.prefs.activeProfile = null; this.plugin.prefs.folders = [];
       void this.plugin.save();
     }
+    const layer = this.orderLayer;
+    if (this.orderSession && (this.plugin.prefs.sort !== 'manual' || layer.target !== this.orderSession.target || layer.field !== this.orderSession.field)) this.orderSession = undefined;
+    this.orderActions.hidden = !this.orderSession;
     const expansionContext = JSON.stringify([this.inlineView, this.query, this.searchScope, this.viewPrefs.scope, this.viewPrefs.activeProfile, this.viewPrefs.folders, this.filter]);
     if (expansionContext !== this.expansionContext) {
       this.expansionContext = expansionContext;
@@ -922,6 +1046,7 @@ export class PropertiesView extends ItemView {
       if ((this.filter || this.folders.length) && this.query) for (const path of matchingPaths) searchPaths.add(path);
       this.visibleKeys.push(property.id);
       const group = el(this.body, 'div', 'pv-group');
+      group.dataset.pvProperty = property.id;
       const row = el(group, 'div', 'pv-row pv-property-row');
       const expanded = this.propertyExpanded(property.id);
       const toggle = this.iconButton(row, `${expanded ? 'Collapse' : 'Expand'} ${property.label}`, expanded ? 'chevron-down' : 'chevron-right', () => this.toggleProperty(property.id));
@@ -976,6 +1101,7 @@ export class PropertiesView extends ItemView {
       }
       if (this.query) this.searchTree!.add(children, estimatedHeight, renderChildren, eagerProperty); else renderChildren();
     }
+    this.renderOrderControls();
     this.allExpanded = this.visibleKeys.length > 0 && this.visibleKeys.every(key => this.propertyExpanded(key));
     const toggleLabel = this.allExpanded ? 'Collapse all properties' : 'Expand all properties';
     this.expandToggle.title = toggleLabel;
@@ -1251,6 +1377,13 @@ export class PropertiesView extends ItemView {
       this.plugin.openBulkProperties(mode,()=>resolveTreeScope(this.app.vault,paths,label,path=>this.plugin.includesPath(path),node===property));
     }));
     if (node === property) {
+      if (this.plugin.prefs.sort === 'manual' && this.orderSession) {
+        const group = this.orderGroup(property.id), index = group.indexOf(property.id);
+        for (const [action, title, icon] of [['up','Move up','arrow-up'],['down','Move down','arrow-down'],['top','Move to top','arrow-up-to-line'],['bottom','Move to bottom','arrow-down-to-line']] as const) {
+          const disabled = index < 0 || (action === 'up' || action === 'top' ? index === 0 : index === group.length - 1);
+          menu.addItem(item => item.setTitle(title).setIcon(icon).setDisabled(disabled).onClick(() => this.reorderProperty(property.id, action)));
+        }
+      }
       menu.addItem(item => item.setTitle('Rename property…').setIcon('pencil').onClick(() => this.inlineView ? this.plugin.editInline(property, 'rename-property') : this.plugin.renameProperty(property)));
       menu.addItem(item => item.setTitle('Delete property…').setIcon('trash-2').onClick(() => this.inlineView ? this.plugin.editInline(property, 'delete-property') : this.plugin.deleteProperty({ ...property, paths: this.searchMatchingPaths(property, property) })));
       const pinned = this.effectivePins().has(property.id);
@@ -1316,9 +1449,12 @@ class PreferencesTab extends PluginSettingTab {
           this.plugin.prefs.counts = value; await this.plugin.save();
         }));
       } },
-      { name: 'Sort by', render: (setting: Setting) => {
+      { name: 'Sort by', desc: 'Manual lets you drag properties into your own order.', render: (setting: Setting) => {
         setting.addDropdown(dropdown => dropdown.addOptions(sortOptions).setValue(this.plugin.prefs.sort).onChange(async value => {
-          this.plugin.prefs.sort = sortOrder(value); await this.plugin.save();
+          if (this.plugin.prefs.sort !== 'manual') this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
+          this.plugin.prefs.sort = sortOrder(value);
+          if (this.plugin.prefs.sort !== 'manual') this.plugin.prefs.lastAutomaticSort = this.plugin.prefs.sort;
+          await this.plugin.save();
         }));
       } },
       { name: 'Excluded folders', desc: 'One vault-relative folder path per line, for example Templates or Resources/Templates. Includes subfolders; paths are case-sensitive, not patterns. Excluded notes are omitted from the tree, counts, copied links, and new bulk edits. Leave empty to include all folders.', render: (setting: Setting) => {

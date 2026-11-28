@@ -25,3 +25,13 @@ Enable **Show note counts in the File explorer** to see how many notes each fold
 The feature is off by default, includes notes without properties, and works independently of property views and filters. Counts update after files and folders change. The command **Toggle folder counts** switches badges on or off. No note content is read or edited by this feature.
 
 [Setup, examples, and troubleshooting](../USER-GUIDE.md#file-explorer-folder-counts).
+
+## Manual property order
+
+Choose **Sort properties → Manual** to arrange property rows with drag handles, menu moves, or the keyboard. Orders persist independently for YAML and Inline views, including saved views and custom selections. Pins stay first; filters preserve hidden keys’ relative order. Values and notes sort A–Z. Reset clears only the current view’s order, and switching sort modes keeps it. No notes are edited.
+
+[Manual ordering guide](../USER-GUIDE.md#reorder-properties-manually).
+
+Manual ordering includes **Done** to finish arranging and **Cancel** to restore the last automatic sort and discard the session’s moves. **Reorder properties** in the sort menu opens the controls again.
+
+Property dragging now defers background tree refreshes until the gesture finishes and accepts the empty area below the final property as a drop target. Pinned boundaries and cancellation remain enforced.

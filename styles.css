@@ -228,3 +228,19 @@
 .nav-folder-title:hover .pv-folder-count {
   color: var(--text-muted);
 }
+
+/* Manual property order: the grip alone captures touch gestures. */
+.pv-grip { flex:0 0 auto; width:28px; height:28px; padding:0; background:transparent; border:0; box-shadow:none; color:var(--text-faint); cursor:grab; touch-action:none; }
+.pv-grip:hover, .pv-grip:focus-visible { color:var(--text-muted); }
+.pv-grip:active { cursor:grabbing; }
+.pv-grip svg { width:16px; height:16px; }
+.pv-tree { position:relative; }
+.pv-drop-indicator { position:absolute; left:0; right:0; height:2px; background:var(--interactive-accent); pointer-events:none; z-index:1; }
+.pv-dragging > .pv-group.pv-drag-other-group { opacity:0.4; }
+.pv-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.is-mobile .pv-grip { width:36px; height:36px; }
+@media (pointer:coarse) { .pv-grip { width:36px; height:36px; } }
+.pv-order-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:8px 12px; flex-shrink:0; border-bottom:1px solid var(--background-modifier-border); }
+.pv-order-actions[hidden] { display:none; }
+.pv-order-actions > span { flex:1; font-size:var(--font-ui-small); }
+.is-mobile .pv-order-actions button { min-height:36px; }

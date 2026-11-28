@@ -9,9 +9,10 @@ vi.mock('obsidian', () => ({
     static items: any[] = [];
     constructor() { (this.constructor as any).items = []; }
     addItem(callback: any) {
-      const item: any = { setTitle(title: string) { this.title = title; return this; }, setIcon() { return this; }, setChecked() { return this; }, onClick(run: any) { this.run = run; return this; } };
+      const item: any = { setTitle(title: string) { this.title = title; return this; }, setIcon() { return this; }, setChecked() { return this; }, setDisabled(disabled: boolean) { this.disabled = disabled; return this; }, onClick(run: any) { this.run = run; return this; } };
       callback(item); (this.constructor as any).items.push(item); return this;
     }
+    addSeparator() { return this; }
     showAtMouseEvent() {}
     showAtPosition() {}
   },
@@ -328,12 +329,12 @@ it('displays available property counts alongside profile labels and updates them
   expect(dropdown.textContent).toBe('Writing (2)');
 });
 
-it('opens the four-option sort menu and applies and saves the chosen order', () => {
+it('opens the five-option sort menu and applies and saves the chosen order', () => {
   const button = document.querySelector('[aria-label="Sort properties"]') as HTMLElement;
   expect(button.dataset.icon).toBe('arrow-up-narrow-wide');
   button.click();
   expect((Menu as any).items.map((item: any) => item.title)).toEqual([
-    'Property name (A to Z)', 'Property name (Z to A)', 'Frequency (high to low)', 'Frequency (low to high)'
+    'Property name (A to Z)', 'Property name (Z to A)', 'Frequency (high to low)', 'Frequency (low to high)', 'Manual'
   ]);
   (Menu as any).items[1].run();
   expect(plugin.prefs.sort).toBe('name-desc');
@@ -1333,4 +1334,108 @@ it('keeps exact counts and deletion scope before offscreen search rows mount, an
   (view as any).noteAnchor={property:property.id,row:notes[0].row,context:(view as any).noteSelectionContext()};
   (view as any).selectNoteRange(property,notes[15].row,notes[15].path);expect((view as any).selectedNotes.paths.size).toBe(16);
  }finally{vi.unstubAllGlobals();}
+});
+
+function orderFixture() {
+ plugin.index=new PropertyIndex();plugin.index.update('One.md',{alpha:'z',beta:'b',gamma:'g',delta:'d'});
+ plugin.prefs.sort='manual';view.render();(view as any).beginOrder();
+}
+function propertyOrder() {return Array.from(view.contentEl.querySelectorAll<HTMLElement>('.pv-tree > .pv-group')).map(row=>row.dataset.pvProperty);}
+function grip(key:string) {return view.contentEl.querySelector<HTMLButtonElement>(`[data-pv-focus='["grip","${key}"]']`)!;}
+function moveGrip(key:string,code:string) {if(!(view as any).orderSession)(view as any).beginOrder();const button=grip(key);button.focus();button.dispatchEvent(new KeyboardEvent('keydown',{key:code,bubbles:true,cancelable:true}));}
+it('seeds Manual from the prior sort, preserves automatic behavior, and resets only on request',()=>{
+ orderFixture();plugin.prefs.sort='name-desc';view.render();const prior=propertyOrder();expect(grip('alpha')).toBeNull();
+ (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title==='Manual').run();expect(propertyOrder()).toEqual(prior);expect(plugin.prefs.manualOrder).toEqual(prior);expect((Notice as any).messages.at(-1)).toBe('Drag the handle or use the property menu to reorder.');
+ (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title==='Property name (A to Z)').run();expect(grip('alpha')).toBeNull();expect(plugin.prefs.manualOrder).toEqual(prior);
+ (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title==='Manual').run();expect(propertyOrder()).toEqual(prior);expect((Notice as any).messages.filter((m:string)=>m.startsWith('Drag the handle'))).toHaveLength(1);
+ (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title==='Reset manual order').run();expect(plugin.prefs.manualOrder).toBeUndefined();expect(propertyOrder()).toEqual(['alpha','beta','delta','gamma']);
+ (view as any).openSortMenu();expect((Menu as any).items.find((item:any)=>item.title==='Reset manual order').disabled).toBe(true);
+});
+it('moves with grip keyboard and Alt arrows, restores focus and announces the position',()=>{
+ orderFixture();moveGrip('gamma','Home');expect(propertyOrder()[0]).toBe('gamma');expect(document.activeElement).toBe(grip('gamma'));expect(view.contentEl.querySelector('.pv-sr-only')?.textContent).toBe('gamma moved to position 1 of 4');
+ moveGrip('gamma','ArrowDown');expect(propertyOrder()[1]).toBe('gamma');moveGrip('gamma','End');expect(propertyOrder().at(-1)).toBe('gamma');
+ const button=view.contentEl.querySelector<HTMLElement>('.pv-node')!;button.focus();button.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',altKey:true,bubbles:true,cancelable:true}));expect(propertyOrder()).toEqual(['beta','alpha','delta','gamma']);
+});
+it('keeps pinned groups separate and disables boundary menu moves',()=>{
+ orderFixture();plugin.prefs.pinned=['beta','gamma'];view.render();expect(propertyOrder()).toEqual(['beta','gamma','alpha','delta']);
+ moveGrip('alpha','Home');expect(propertyOrder()).toEqual(['beta','gamma','alpha','delta']);moveGrip('gamma','Home');expect(propertyOrder()).toEqual(['gamma','beta','alpha','delta']);
+ const property=plugin.index.properties.get('gamma');(view as any).showMenu(new MouseEvent('contextmenu'),property,property);const items=(Menu as any).items;
+ expect(items.find((item:any)=>item.title==='Move up').disabled).toBe(true);expect(items.find((item:any)=>item.title==='Move to top').disabled).toBe(true);items.find((item:any)=>item.title==='Move to bottom').run();expect(propertyOrder()[1]).toBe('gamma');
+ plugin.prefs.sort='name';view.render();(view as any).showMenu(new MouseEvent('contextmenu'),property,property);expect((Menu as any).items.some((item:any)=>item.title==='Move up')).toBe(false);
+});
+it('uses base, custom, saved and Inline order layers without marking a saved view modified',()=>{
+ orderFixture();plugin.prefs.manualOrder=['gamma','beta','alpha','delta'];plugin.prefs.scope=['alpha','beta','gamma'];view.render();moveGrip('alpha','Home');expect(plugin.prefs.customOrder[0]).toBe('alpha');expect(plugin.prefs.manualOrder[0]).toBe('gamma');
+ plugin.prefs.profiles=[{id:'saved',name:'Saved',keys:['alpha','beta','gamma']}];plugin.prefs.activeProfile='saved';view.render();expect(propertyOrder()).toEqual(['gamma','beta','alpha']);moveGrip('alpha','Home');expect(plugin.prefs.profiles[0].order[0]).toBe('alpha');expect(view.contentEl.textContent).not.toContain('(modified)');
+ (view as any).openSortMenu();(Menu as any).items.find((i:any)=>i.title==='Reset manual order').run();expect(plugin.prefs.profiles[0].order).toBeUndefined();expect(propertyOrder()).toEqual(['gamma','beta','alpha']);
+ plugin.prefs.showInlineProperties=true;plugin.inline={index:new PropertyIndex(),pending:0,failures:new Set()};plugin.inline.index.update('Inline.md',{alpha:'a',beta:'b'});(view as any).inlineView=true;view.render();moveGrip('beta','Home');expect(plugin.prefs.inlineViews.manualOrder).toEqual(['beta','alpha']);expect(plugin.prefs.manualOrder[0]).toBe('gamma');
+ const inlineProperty=plugin.inline.index.properties.get('beta');(view as any).showMenu(new MouseEvent('contextmenu'),inlineProperty,inlineProperty);expect((Menu as any).items.some((i:any)=>i.title==='Move down')).toBe(true);
+});
+it('copies order when saving or deleting a view and keeps Update independent',()=>{
+ orderFixture();plugin.prefs.scope=['alpha','beta','gamma'];view.render();moveGrip('gamma','Home');const stored=[...plugin.prefs.customOrder];
+ (view as any).renderScope();(view as any).profileName.value='Ordered';(view as any).manageProfile('new');expect(plugin.prefs.profiles[0].order).toEqual(stored);expect(plugin.prefs.profiles[0].order).not.toBe(plugin.prefs.customOrder);
+ (view as any).manageProfile('update');expect(plugin.prefs.profiles[0].order).toEqual(stored);
+ (view as any).manageProfile('delete');expect(plugin.prefs.customOrder).toEqual(stored);expect(plugin.prefs.activeProfile).toBeNull();
+});
+it('preserves filtered-out keys and prunes only absent source keys on a move',()=>{
+ orderFixture();plugin.prefs.manualOrder=['alpha','stale','beta','delta','gamma'];plugin.prefs.hidden='beta';(view as any).query='a';(view as any).searchScope='key';view.render();
+ moveGrip('gamma','Home');expect(plugin.prefs.manualOrder).toEqual(['gamma','alpha','beta','delta']);expect(plugin.index.properties.size).toBe(4);
+ plugin.prefs.hidden='';(view as any).query='';view.render();expect(propertyOrder()).toEqual(['gamma','alpha','beta','delta']);
+});
+it('keeps picker order aligned and uses A–Z for values and notes in Manual',()=>{
+ orderFixture();plugin.prefs.manualOrder=['gamma','alpha'];plugin.index.update('Folder/Z.md',{alpha:'[[Folder/Beta]]'});plugin.index.update('Other/A.md',{alpha:'[[Folder/Alpha]]'});(view.app as any).metadataCache={getFirstLinkpathDest:()=>null};
+ view.render();(view as any).renderScope();expect(Array.from(view.contentEl.querySelectorAll('.pv-scope-choice')).map(e=>e.textContent?.trim()).slice(0,2).join(' ')).toMatch(/gamma.*alpha/);
+ click('Expand alpha');const labels=Array.from(view.contentEl.querySelectorAll('.pv-values .pv-label')).map(e=>e.textContent);expect(labels).toEqual(['[[Folder/Alpha]]','[[Folder/Beta]]','z']);
+});
+it('keeps Value-filter keys and out-of-folder properties in the full stored order',()=>{
+ plugin.index=new PropertyIndex();plugin.index.update('Projects/A.md',{status:'active',alpha:'a',beta:'b',gamma:'g'});plugin.index.update('Other/B.md',{status:'closed',outside:'o'});
+ plugin.prefs.sort='manual';plugin.prefs.manualOrder=['status','alpha','outside','beta','gamma'];plugin.prefs.folders=['Projects'];
+ const status=plugin.index.properties.get('status'),value=[...status.values.values()].find((v:any)=>v.label==='active');
+ (view as any).setFilter({property:status.id,propertyLabel:status.label,value:value.id,label:value.label});
+ expect(propertyOrder()).toEqual(['alpha','beta','gamma']);moveGrip('gamma','ArrowUp');
+ expect(plugin.prefs.customOrder).toEqual(['status','alpha','outside','gamma','beta']);expect(plugin.prefs.manualOrder).toEqual(['status','alpha','outside','beta','gamma']);
+ (view as any).filter=null;plugin.prefs.folders=[];plugin.prefs.scope=['status','alpha','outside','beta','gamma'];view.render();expect(propertyOrder()).toEqual(['status','alpha','outside','gamma','beta']);
+});
+it('retains individual property and value expansion in searched Manual results after a move',()=>{
+ orderFixture();(view as any).query='one.md';(view as any).searchScope='note';view.render();moveGrip('gamma','Home');expect(propertyOrder()[0]).toBe('gamma');
+ click('Collapse gamma');expect(grip('gamma')).not.toBeNull();click('Expand gamma');expect(view.contentEl.querySelectorAll('.pv-file')).toHaveLength(4);
+});
+it('sorts expanded notes naturally by filename in Manual mode',()=>{
+ plugin.index=new PropertyIndex();plugin.index.update('Z/Note 2.md',{status:'same'});plugin.index.update('A/Note 10.md',{status:'same'});plugin.prefs.sort='manual';view.render();click('Expand status');click('Show notes with status: same (2)');
+ expect(Array.from(view.contentEl.querySelectorAll<HTMLElement>('.pv-file')).map(e=>e.dataset.notePath)).toEqual(['Z/Note 2.md','A/Note 10.md']);
+});
+it.each(['name','name-desc','count','count-asc'])('Cancel restores %s and rolls back the session order',sort=>{
+ orderFixture();plugin.prefs.sort=sort;plugin.prefs.manualOrder=['gamma','beta','alpha','delta'];view.render();const original=[...plugin.prefs.manualOrder],before=propertyOrder();
+ (view as any).beginOrder();moveGrip('delta','Home');expect(plugin.prefs.manualOrder).not.toEqual(original);
+ click('Cancel property reordering');expect(plugin.prefs.sort).toBe(sort);expect(plugin.prefs.manualOrder).toEqual(original);expect(propertyOrder()).toEqual(before);expect(grip('alpha')).toBeNull();expect((view as any).orderActions.hidden).toBe(true);
+});
+it('Done keeps Manual without handles and reopening then cancelling preserves the saved order',()=>{
+ orderFixture();plugin.prefs.sort='name-desc';view.render();(view as any).beginOrder();moveGrip('alpha','Home');const saved=[...plugin.prefs.manualOrder];
+ click('Done reordering properties');expect(plugin.prefs.sort).toBe('manual');expect(plugin.prefs.manualOrder).toEqual(saved);expect(grip('alpha')).toBeNull();expect((view as any).orderActions.hidden).toBe(true);
+ (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title==='Reorder properties').run();moveGrip('alpha','End');click('Cancel property reordering');expect(plugin.prefs.sort).toBe('name-desc');expect(plugin.prefs.manualOrder).toEqual(saved);
+});
+it('Cancel removes first-use seeding and restores inherited saved-view order without touching the base',()=>{
+ orderFixture();plugin.prefs.sort='count';plugin.prefs.manualOrder=['gamma','beta','alpha','delta'];plugin.prefs.scope=['alpha','beta','gamma'];plugin.prefs.profiles=[{id:'v',name:'V',keys:['alpha','beta','gamma']}];plugin.prefs.activeProfile='v';view.render();
+ (view as any).beginOrder();moveGrip('alpha','End');click('Cancel property reordering');expect(plugin.prefs.profiles[0].order).toBeUndefined();expect(plugin.prefs.manualOrder).toEqual(['gamma','beta','alpha','delta']);expect(plugin.prefs.sort).toBe('count');
+});
+it('opens persisted Manual ordering without handles and uses the saved automatic sort on Cancel',()=>{
+ orderFixture();(view as any).orderSession=undefined;plugin.prefs.lastAutomaticSort='count-asc';view.render();expect(grip('alpha')).toBeNull();
+ (view as any).beginOrder();click('Cancel property reordering');expect(plugin.prefs.sort).toBe('count-asc');
+});
+it('defers background renders during a drag and applies the drop before refreshing',()=>{
+ orderFixture();const body=(view as any).body as HTMLElement;
+ const rect=(top:number,height:number)=>({top,bottom:top+height,left:0,right:300,width:300,height});
+ vi.spyOn(body,'getBoundingClientRect').mockReturnValue(rect(0,300) as DOMRect);
+ const rows=Array.from(body.querySelectorAll<HTMLElement>(':scope > .pv-group'));
+ for(const [i,row] of rows.entries()){vi.spyOn(row,'getBoundingClientRect').mockReturnValue(rect(i*40,40) as DOMRect);vi.spyOn(row.querySelector('.pv-property-row')!,'getBoundingClientRect').mockReturnValue(rect(i*40,40) as DOMRect);}
+ const pointer=(target:EventTarget,type:string,y:number)=>{const event=new MouseEvent(type,{bubbles:true,cancelable:true,clientX:10,clientY:y,button:0});Object.assign(event,{pointerId:1,isPrimary:true,pointerType:'mouse'});target.dispatchEvent(event);};
+ const originalGrip=grip('alpha');pointer(originalGrip,'pointerdown',10);pointer(document,'pointermove',145);
+ plugin.index.update('New.md',{epsilon:'new'});view.render();view.render();expect(originalGrip.isConnected).toBe(true);
+ pointer(document,'pointerup',145);expect(propertyOrder().filter(key=>key!=='epsilon')).toEqual(['beta','delta','gamma','alpha']);expect(propertyOrder()).toContain('epsilon');expect((view as any).orderDragging).toBe(false);expect(document.activeElement).toBe(grip('alpha'));
+});
+it.each(['pointercancel','close'])('ends a deferred drag on %s without changing the order',async mode=>{
+ orderFixture();const initial=propertyOrder(),original=plugin.prefs.manualOrder;
+ const event=new MouseEvent('pointerdown',{bubbles:true,button:0});Object.assign(event,{pointerId:1,isPrimary:true,pointerType:'touch'});grip('alpha').dispatchEvent(event);
+ view.render();expect((view as any).orderDragging).toBe(true);
+ if(mode==='close')await view.onClose();else{const cancel=new MouseEvent('pointercancel',{bubbles:true});Object.assign(cancel,{pointerId:1});document.dispatchEvent(cancel);}
+ expect((view as any).orderDragging).toBe(false);expect((view as any).orderRenderPending).toBe(false);expect(plugin.prefs.manualOrder).toEqual(original);expect(propertyOrder()).toEqual(initial);
 });

@@ -88,3 +88,8 @@ it('carries local pin and unpin overrides through property renames without repla
   expect(prefs.profiles[0].pinOverrides).toEqual({author:false,authors:false});
   expect(prefs.profiles[1].pinOverrides).toEqual({author:true,authors:false});
 });
+it('carries manual ordering to a renamed key while retaining the source for undo',()=>{
+ const prefs={scope:null,pinned:[],expanded:[],hidden:'',manualOrder:['before','old','after'],customOrder:['old','before'],profiles:[{id:'p',name:'P',keys:['old'],order:['old','after']}]};
+ includeRenamedProperty(prefs,'old','new');expect(prefs.manualOrder).toEqual(['before','old','new','after']);expect(prefs.customOrder).toEqual(['old','new','before']);expect(prefs.profiles[0].order).toEqual(['old','new','after']);
+ includeRenamedProperty(prefs,'old','new');expect(prefs.manualOrder).toEqual(['before','old','new','after']);
+});

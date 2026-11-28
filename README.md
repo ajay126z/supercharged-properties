@@ -15,7 +15,7 @@ From a folder, multi-selection, or YAML property/value row, choose **Add propert
 - **Browse properties → values → notes.** Expand a property to see its values, then open the notes that use them. Expand/collapse all preserves your search, active view, and Value filter. Individual branch arrows also work within search and filtered results. After Collapse all, expand properties → values → notes one level at a time. Property/value counts and the Value filter’s matching-note list update as you search.
 - **Find what you need.** Search property names, values, note names, or folder paths. Large note/path searches combine rapid keystrokes into one refresh and load offscreen results as you scroll to keep typing responsive. Open matching notes in Obsidian Search or copy their links.
 - **See how properties are used.** Note counts show how common each property or value is. Type icons help distinguish text, lists, numbers, dates, and checkboxes.
-- **Choose your order.** Sort alphabetically or by how many notes use a property or value. A–Z and Z–A order linked values and expanded notes by note filename, with natural numeric ordering.
+- **Choose your order.** Sort alphabetically, by how many notes use a property or value, or choose **Manual** to arrange properties with drag handles, the row menu, or keyboard. Use **Done** to keep the order or **Cancel** to discard the session and restore the previous automatic sort. Manual orders belong to each view; pinned properties stay first. [Manual ordering guide](docs/USER-GUIDE.md#reorder-properties-manually). A–Z and Z–A order linked values and expanded notes by note filename, with natural numeric ordering.
 - **Value filter.** Explore other properties only among notes sharing a value, with counts and note links recalculated for that group.
 - **Stay up to date.** The view refreshes as your notes change.
 
@@ -163,7 +163,7 @@ When choosing properties, **All** and **None** keep the view name you have typed
 | Hidden inline properties | Hide inline property names without affecting YAML. |
 | Show inline properties | Add the separate Inline Properties view; disabled by default. |
 | Show note counts | Show how many distinct notes use each property or value. |
-| Sort by | Choose alphabetical order or note frequency. |
+| Sort by | Choose alphabetical order, note frequency, or Manual property ordering. |
 | Excluded folders | Omit selected folders and their subfolders from the view and new bulk edits. |
 | Hidden properties | Hide named properties; remove a name here to show it again. |
 

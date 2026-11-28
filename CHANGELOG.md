@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Keep reorder gestures stable across background refreshes and progressive search rendering. Accept drops in the empty area below the final property; reject drops outside the pane or across pinned groups.
+
 - Speed up Search everything and Note names/paths by reusing natural collation, caching repeated matches per render, and filtering before sorting. Coalesce typing bursts for large trees without allowing stale tree actions. Render search branches near the viewport in small chunks, preserving full counts, edit scopes, keyboard navigation, and range selection.
 
 - Limit Delete property and tree Add/Remove properties to the active search matches, reusing displayed row-count semantics and preserving notes outside the searched subset.
@@ -15,6 +17,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Improve Add/Remove preview readability with theme-matched text and neutral backgrounds, using colored edge markers and plus/minus signs to distinguish changes.
 
 ### Added
+
+- Manual property sorting with pointer/touch drag handles, context-menu moves, keyboard controls, and position announcements. Done keeps the order and hides controls; Cancel restores the pre-session order and last automatic sort. Order is saved per YAML/Inline base, custom selection, and saved view; pinned groups remain separate and values/notes use A–Z.
 
 - Separate Add and Remove properties workflows for explorer folders, multi-selections, and scoped YAML property/value rows.
 - Compact typed rows, native name/value suggestions, existing-property picker, in-scope counts, and removal selection with filtering.

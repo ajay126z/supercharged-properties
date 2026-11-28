@@ -36,3 +36,8 @@ it('retains locale-aware natural ordering with the reused collator',()=>{
  const labels=['2026-W9','2026-W21','Éclair','eclair','Alpha','alpha','file 002','file 10'];
  for(const a of labels)for(const b of labels)expect(Math.sign(natural(a,b))).toBe(Math.sign(a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})));
 });
+it('accepts Manual and sorts its values exactly like A–Z, including linked names',()=>{
+ expect(sortOrder('manual')).toBe('manual');expect(sortOrder('unknown')).toBe('name');
+ const key=(node:typeof nodes[number])=>node.id==='a'?'Z':node.id;
+ expect(sortNodes(nodes,'manual',key)).toEqual(sortNodes(nodes,'name',key));
+});

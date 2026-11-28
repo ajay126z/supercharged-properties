@@ -3,7 +3,8 @@ export const sortOptions = {
   name: 'Property name (A to Z)',
   'name-desc': 'Property name (Z to A)',
   count: 'Frequency (high to low)',
-  'count-asc': 'Frequency (low to high)'
+  'count-asc': 'Frequency (low to high)',
+  manual: 'Manual'
 };
 export type SortOrder = keyof typeof sortOptions;
 export function sortOrder(value: unknown): SortOrder {
@@ -12,7 +13,7 @@ export function sortOrder(value: unknown): SortOrder {
 export function sortNodes<T extends ValueNode>(nodes: Iterable<T>, order: SortOrder, name: (node: T) => string = node => node.label): T[] {
   const keys = new Map<T, string>();
   const list = Array.from(nodes);
-  for (const node of list) keys.set(node, order === 'name' || order === 'name-desc' ? name(node) : node.label);
+  for (const node of list) keys.set(node, order === 'name' || order === 'name-desc' || order === 'manual' ? name(node) : node.label);
   return list.sort((a, b) => {
     const alphabetical = natural(keys.get(a)!, keys.get(b)!) || a.id.localeCompare(b.id);
     if (order === 'name-desc') return -alphabetical;
