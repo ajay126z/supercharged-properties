@@ -116,7 +116,9 @@ Saved views keep your property and folder selection; the temporary Value filter 
 
 ## Your notes stay in your vault
 
-The plugin does not send vault data to external services or read your clipboard. Copy actions write only the query or note links you choose. Changes to notes require preview and confirmation; browsing and view customization change only plugin preferences.
+The plugin lists Markdown notes in your vault to build its property index. Optional File explorer counts can also include attachment paths when you enable that setting; counting does not read file contents.
+
+The plugin does not send vault data to external services or read your clipboard. Copy actions write only the query or note links you choose. Changes to notes require preview and confirmation; browsing and view customization change only plugin preferences. [Data access and scanner recommendations](docs/USER-GUIDE.md#data-access-and-privacy).
 
 ## Help and support
 

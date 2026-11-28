@@ -6,7 +6,7 @@ export class SearchTreeRenderer {
   private ready: HTMLElement[] = [];
   private frame?: number;
   private generation = 0;
-  private win: Window & typeof globalThis;
+  private win: Window & typeof window;
   constructor(private root: HTMLElement) { this.win = root.ownerDocument.defaultView!; }
   reset(): void {
     this.generation++;

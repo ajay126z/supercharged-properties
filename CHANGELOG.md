@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Documentation
+
+- Explain vault enumeration, exclusions, optional attachment-path counting, and user-triggered write-only clipboard access, including security scanner recommendations.
+
+### Fixed
+
+- Replace clip-path in screen-reader-only announcements with legacy rectangular clipping for compatibility.
+- Remove the globalThis type reference from progressive search rendering while retaining owner-window observers and animation frames for popouts.
+
 ## [1.6.0] - 2026-11-28
 
 ### YAML tags and removal selection

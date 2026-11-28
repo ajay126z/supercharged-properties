@@ -56,3 +56,25 @@ it('renders eagerly without an observer or for a focused branch', () => {
   vi.stubGlobal('IntersectionObserver', undefined); renderer.add(branch(), 100, run);
   expect(run).toHaveBeenCalledTimes(2);
 });
+
+it('uses the owning window for observers and animation frames in a separate document', () => {
+  const iframe = document.createElement('iframe'); document.body.append(iframe);
+  const popout = iframe.contentWindow!, doc = iframe.contentDocument!;
+  const pane = doc.createElement('div'); doc.body.append(pane);
+  const child = doc.createElement('div'); pane.append(child);
+  let callback: IntersectionObserverCallback;
+  const stop = vi.fn(), request = vi.fn(() => 42), cancel = vi.fn();
+  Object.defineProperty(popout, 'IntersectionObserver', {configurable:true, value:class {
+    constructor(fn: IntersectionObserverCallback) { callback = fn; }
+    observe() {} unobserve() {} disconnect = stop;
+  }});
+  Object.defineProperty(popout, 'requestAnimationFrame', {configurable:true, value:request});
+  Object.defineProperty(popout, 'cancelAnimationFrame', {configurable:true, value:cancel});
+  const local = new SearchTreeRenderer(pane), render = vi.fn();
+  try {
+    local.add(child, 50, render);
+    callback!([{target:child,isIntersecting:true}] as IntersectionObserverEntry[], {} as IntersectionObserver);
+    expect(request).toHaveBeenCalledOnce();expect(window.requestAnimationFrame).not.toHaveBeenCalled();
+    local.reset();expect(cancel).toHaveBeenCalledWith(42);expect(stop).toHaveBeenCalledOnce();expect(render).not.toHaveBeenCalled();
+  } finally { local.reset(); iframe.remove(); }
+});

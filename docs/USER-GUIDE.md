@@ -422,11 +422,17 @@ Both actions require an explicit confirmation after reviewing the affected and s
 
 ## Data access and privacy
 
-The plugin enumerates Markdown notes in your current vault to build the property index and reads cached frontmatter. This is necessary for vault-wide browsing and matching-note counts. It does not enumerate non-Markdown attachments. It also reads the vault's configured property types for icons. When Show inline properties is enabled, it additionally reads included Markdown note bodies for the separate inline index; disabling that setting stops new inline reads and clears that index.
+**Vault enumeration.** The plugin lists Markdown notes in the current vault through Obsidian’s API to build its property index, then reads cached frontmatter. This supports vault-wide browsing and matching-note counts. Global excluded folders are applied after the file list is obtained: they prevent property indexing for those notes, but do not prevent their paths from appearing in the initial enumeration. Saved-view Folder and Value filters narrow the view and supported edits; they are not access permissions.
 
-**Copy search query** and **Copy matching note links** write only the generated query or links when you select the action. They replace the current clipboard contents, but never read them. No clipboard monitoring runs in the background. The plugin does not send vault data to external services. Explicit YAML edits write frontmatter, and inline edits write note-body fields, after preview and confirmation.
+**Optional File explorer counts.** This feature is off by default. When enabled, it lists Markdown paths, including notes without properties. If you also enable counting all files, it lists non-Markdown attachment paths as well. Counting uses paths only and does not read file contents. Its separate exclusion setting controls whether globally excluded folders contribute to those counts.
 
-Security scanners may flag vault enumeration and clipboard access as capabilities. These capabilities support the features described above; removing them would remove vault-wide indexing or the Copy actions.
+**Other reads.** The plugin reads the vault’s configured property types for icons. When Show inline properties is enabled, it additionally reads included Markdown note bodies for the separate inline index; disabling that setting stops new inline reads and clears that index.
+
+**Clipboard access.** **Copy search query** and **Copy matching note links** write only the generated query or links when you select the action. They replace the current clipboard contents, but never read them. The plugin does not read content copied from other applications or monitor the clipboard in the background.
+
+The plugin does not send vault data to external services. Explicit YAML edits write frontmatter, and inline edits write note-body fields, after preview and confirmation.
+
+**Security scanner recommendations.** Scanners may flag vault enumeration and clipboard access because the plugin uses those APIs. Enumeration supports indexing and optional folder counts; clipboard usage is write-only and user-triggered. A generic clipboard warning does not mean the plugin reads your clipboard. These notices describe capabilities, and may still appear for optional features that are disabled because static scanners inspect the code.
 
 ## File explorer folder counts
 
