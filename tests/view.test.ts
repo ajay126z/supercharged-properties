@@ -1439,3 +1439,11 @@ it.each(['pointercancel','close'])('ends a deferred drag on %s without changing 
  if(mode==='close')await view.onClose();else{const cancel=new MouseEvent('pointercancel',{bubbles:true});Object.assign(cancel,{pointerId:1});document.dispatchEvent(cancel);}
  expect((view as any).orderDragging).toBe(false);expect((view as any).orderRenderPending).toBe(false);expect(plugin.prefs.manualOrder).toEqual(original);expect(propertyOrder()).toEqual(initial);
 });
+it.each([false,true].flatMap(inline=>['Property name (A to Z)','Property name (Z to A)','Frequency (high to low)','Frequency (low to high)'].map(label=>({inline,label}))))('remembers a profile manual order after $label (inline=$inline)',({inline,label})=>{
+ orderFixture();
+ if(inline){plugin.prefs.showInlineProperties=true;plugin.inline={index:new PropertyIndex(),pending:0,failures:new Set()};plugin.inline.index.update('Inline.md',{alpha:'a',beta:'b',gamma:'g',delta:'d'});(view as any).inlineView=true;}
+ const prefs=(view as any).viewPrefs;prefs.manualOrder=['delta','beta','alpha','gamma'];prefs.profiles=[{id:'remembered',name:'Remembered',keys:['alpha','beta','gamma']}];prefs.scope=['alpha','beta','gamma'];prefs.activeProfile='remembered';view.render();
+ moveGrip('gamma','Home');click('Done reordering properties');const saved=[...prefs.profiles[0].order],display=propertyOrder(),base=[...prefs.manualOrder];
+ (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title===label).run();expect(prefs.profiles[0].order).toEqual(saved);expect(grip('gamma')).toBeNull();
+ (view as any).openSortMenu();(Menu as any).items.find((item:any)=>item.title==='Manual').run();expect(propertyOrder()).toEqual(display);expect(prefs.profiles[0].order).toEqual(saved);expect(prefs.manualOrder).toEqual(base);expect(view.contentEl.textContent).not.toContain('(modified)');
+});
