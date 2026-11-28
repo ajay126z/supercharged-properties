@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. YAML edits write frontmatter; inline edits write note-body fields. Both require preview and confirmation.
 
-This guide covers release **1.5.1** and the upcoming development version. Upcoming features include Add/Remove property batches, File explorer folder counts, and Manual property order. The development version also improves tree search and fixes search-scoped removal and view-dropdown counts. See the [upcoming release notes](releases/UNRELEASED.md) for changes since 1.5.1. The shared YAML undo command is **Undo last property edit**; inline-field edits use **Undo last inline property edit**.
+This guide covers release **1.6.0**, including Add/Remove property batches, File explorer folder counts, and Manual property order. See the [1.6.0 release notes](releases/1.6.0.md) for changes since 1.5.1. The shared YAML undo command is **Undo last property edit**; inline-field edits use **Undo last inline property edit**.
 
 ## Contents
 
@@ -329,7 +329,7 @@ Click **Sort properties** to choose:
 - **Property name (Z to A)**
 - **Frequency (high to low)**
 - **Frequency (low to high)**
-- **Manual** (unreleased)
+- **Manual**
 
 The automatic ordering options apply to property and value rows. Manual orders properties only; its values and notes use A–Z. A–Z and Z–A sort wikilink values by the target note’s filename, ignoring its folder, alias, and heading/block reference. Resolved links use the actual note basename; unresolved links use the last target segment without `.md`. Expanded notes use filename ordering too, with full paths breaking ties. Numeric ordering puts `2026-W9` before `2026-W21`. Original labels and edit values stay unchanged. Frequency means distinct-note count; ties use alphabetical order. The same preference is available in Settings.
 
@@ -343,7 +343,7 @@ Choose **Hide property** to remove a property from the tree. To restore it, open
 
 ### Reorder properties manually
 
-Available in the unreleased development version. Choose **Sort properties → Manual** to restore the current view’s saved order without opening editing controls. If this view has no saved order, it inherits the source’s base order, or uses A–Z when no base order exists. Switching to Manual does not create or overwrite a saved order.
+Available since **1.6.0**. Choose **Sort properties → Manual** to restore the current view’s saved order without opening editing controls. If this view has no saved order, it inherits the source’s base order, or uses A–Z when no base order exists. Switching to Manual does not create or overwrite a saved order.
 
 To change the order, choose **Sort properties → Reorder properties…**. Handles and **Done** / **Cancel** then appear. **Reset manual order** is a separate action that clears the current view’s explicit order.
 
@@ -395,7 +395,7 @@ This action supports Text, Number, Checkbox, Date, and Date & time properties, p
 
 ## Add or remove properties across folders or notes
 
-Available in the upcoming release. Right-click a folder or an Explorer multi-selection to open **Add properties to folder’s notes…** / **Remove properties from folder’s notes…**, or their **selected notes…** equivalents. A single note’s Explorer menu does not offer these batch actions. In the YAML tree, property/value menus offer **Add properties to these notes…** and **Remove properties from these notes…**.
+Available since **1.6.0**. Right-click a folder or an Explorer multi-selection to open **Add properties to folder’s notes…** / **Remove properties from folder’s notes…**, or their **selected notes…** equivalents. A single note’s Explorer menu does not offer these batch actions. In the YAML tree, property/value menus offer **Add properties to these notes…** and **Remove properties from these notes…**.
 
 Add up to 20 typed properties together, or select whole properties to remove. The dialog shows eligible notes, supports subfolder inclusion, and previews changes before confirmation. Explorer selections ignore view filters; tree actions honor Folder and Value filters plus the active tree search. Global folder exclusions always apply. These actions are not available in the Inline tree.
 
@@ -426,7 +426,7 @@ Security scanners may flag vault enumeration and clipboard access as capabilitie
 
 ## File explorer folder counts
 
-Available in the unreleased development version. Turn on **Settings → Supercharged Properties → Show note counts in the File explorer** to add a count beside folders in Obsidian’s built-in File explorer. This feature is off by default. It changes the display only and never edits notes.
+Available since **1.6.0**. Turn on **Settings → Supercharged Properties → Show note counts in the File explorer** to add a count beside folders in Obsidian’s built-in File explorer. This feature is off by default. It changes the display only and never edits notes.
 
 - **Including subfolders** shows all Markdown notes in a folder and its descendants (the default).
 - **Directly in the folder** counts only notes in that folder.
@@ -511,4 +511,4 @@ For development and release information, see the [documentation index](README.md
 
 ## Add or remove properties across notes
 
-In the upcoming release, explorer folder and multi-selection menus offer separate Add and Remove actions. YAML property/value rows offer the same actions for the notes behind that row, respecting active Folder and Value filters. Add typed properties with existing-name/value suggestions, or select whole properties to remove. Preview every batch, review skipped keys, and undo through the shared command or completion screen. See the [Add and Remove guide](ADD-REMOVE-PROPERTIES.md).
+Since **1.6.0**, Explorer folder and multi-selection menus offer separate Add and Remove actions. YAML property/value rows offer the same actions for the notes behind that row, respecting active Folder and Value filters. Add typed properties with existing-name/value suggestions, or select whole properties to remove. Preview every batch, review skipped keys, and undo through the shared command or completion screen. See the [Add and Remove guide](ADD-REMOVE-PROPERTIES.md).

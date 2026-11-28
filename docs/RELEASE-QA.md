@@ -320,7 +320,7 @@ Run this checklist against a build candidate before publishing. Automated checks
 
 - Folder-filter UI follow-up: verify folder paths and Clear appear only inside Choose properties to show in YAML and Inline views; closing the panel keeps filtering, saved-view state, and summary counts active.
 
-## Add and Remove properties (upcoming)
+## Add and Remove properties
 
 - Right-click a folder and a multi-selection containing overlapping folders/files. Confirm scope counts, excluded/non-Markdown counts, and the subfolder toggle.
 - Launch from a YAML property and value with Folder and Value filters active; verify only derived notes are in the preview. Confirm no new Inline menu entries.

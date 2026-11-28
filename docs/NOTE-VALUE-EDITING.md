@@ -1,6 +1,6 @@
 # Change a property on selected notes
 
-For many properties or whole folders, see [Add or remove properties](ADD-REMOVE-PROPERTIES.md) (upcoming release).
+For many properties or whole folders, see [Add or remove properties](ADD-REMOVE-PROPERTIES.md) (available since 1.6.0).
 
 Use note-row actions to edit one property on one or more notes. For example, move selected notes from `status: todo` and `status: active` to `status: closed` without changing every note that uses those values.
 

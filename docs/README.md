@@ -2,7 +2,7 @@
 
 ## For users
 
-These guides describe **1.5.1** and explicitly marked upcoming features, including Inline Properties and saved folder filters, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
+These guides describe **1.6.0**, including Inline Properties and saved folder filters, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
@@ -12,11 +12,11 @@ These guides describe **1.5.1** and explicitly marked upcoming features, includi
 | [Bulk value editing](BULK-EDITING.md) | Rename, delete, merge, wikilink conversion, text-only splitting, eligibility, preview, confirmation, conflicts, and one-step undo. |
 | [Property-name renaming](PROPERTY-RENAMING.md) | Key renaming and deletion, case corrections, collision handling, preserved values, preference updates, and shared undo. |
 
-The development branch adds [Add/Remove batches](ADD-REMOVE-PROPERTIES.md), [File explorer folder counts](USER-GUIDE.md#file-explorer-folder-counts), and [Manual ordering](USER-GUIDE.md#reorder-properties-manually). See [all changes since 1.5.1](releases/UNRELEASED.md).
+Version **1.6.0** adds [Add/Remove batches](ADD-REMOVE-PROPERTIES.md), [File explorer folder counts](USER-GUIDE.md#file-explorer-folder-counts), and [Manual ordering](USER-GUIDE.md#reorder-properties-manually). See [all changes since 1.5.1](releases/1.6.0.md).
 
 ### Common tasks
 
-- [Reorder properties manually](USER-GUIDE.md#reorder-properties-manually) (unreleased)
+- [Reorder properties manually](USER-GUIDE.md#reorder-properties-manually)
 
 - [Add or remove several properties across folders or notes](ADD-REMOVE-PROPERTIES.md)
 
@@ -52,7 +52,7 @@ The development branch adds [Add/Remove batches](ADD-REMOVE-PROPERTIES.md), [Fil
 
 ## Release notes
 
-- [Upcoming: bulk properties, Explorer counts, Manual ordering, and fixes](releases/UNRELEASED.md)
+- [1.6.0: bulk properties, Explorer counts, Manual ordering, and fixes](releases/1.6.0.md)
 - [1.5.1: filename sorting](releases/1.5.1.md)
 - [1.5.0: inline properties, conversion, and folder filters](releases/1.5.0.md)
 

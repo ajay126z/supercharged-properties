@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-28
+
 ### Changed
 
 - Selecting Manual restores the saved or inherited order without opening reorder controls. Use Reorder properties… explicitly to arrange rows; first use falls back to the inherited order or A–Z.

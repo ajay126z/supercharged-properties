@@ -1,6 +1,6 @@
 # Bulk value editing
 
-For many properties or whole folders, see [Add or remove properties](ADD-REMOVE-PROPERTIES.md) (upcoming release).
+For many properties or whole folders, see [Add or remove properties](ADD-REMOVE-PROPERTIES.md) (available since 1.6.0).
 
 Bulk edits let you standardize a property's values across notes. They are explicit write actions; ordinary browsing remains read-only. The original four value operations were introduced in 1.1.0; **Delete value…** was added after 1.2.1. This guide describes the 1.2.0 and later behavior, including folder exclusions, shared undo with property-name renaming, and text-property-only Split eligibility.
 

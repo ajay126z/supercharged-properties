@@ -1,6 +1,6 @@
 ---
 created: 2026-11-27
-updated: 2026-11-27
+updated: 2026-11-28
 ---
 # Supercharged Properties
 
@@ -65,7 +65,7 @@ Small inconsistencies accumulate. Fix them across matching notes with a before/a
 
 Use **Undo last property edit** to restore the last eligible YAML batch during the session. A later successful batch replaces it, and reloading clears it. Undo skips conflicting later edits; YAML comments and quoting may not restore exactly. Split into list is available only for Text properties. [Bulk-editing guide and safeguards](docs/BULK-EDITING.md).
 
-Folder and Value filters narrow row-edit batches. In the upcoming version, tree search also narrows **Delete property** and tree **Add/Remove properties** actions; other row edits keep their full Folder/Value-filtered scope. Always check the preview’s note list.
+Folder and Value filters narrow row-edit batches. Tree search also narrows **Delete property** and tree **Add/Remove properties** actions; other row edits keep their full Folder/Value-filtered scope. Always check the preview’s note list.
 
 ## Update just the notes you choose
 
@@ -89,7 +89,7 @@ Save Inline views, filter by value, and rename, replace, or delete inline fields
 
 ## More control over your workspace
 
-These additions are **upcoming** and are not yet in the published 1.5.1 release. [See all upcoming changes](docs/releases/UNRELEASED.md).
+New in **1.6.0**. [See all changes in this release](docs/releases/1.6.0.md).
 
 - **Add or remove properties across folders.** Add up to 20 typed properties together, or remove whole keys, from an Explorer folder, multi-selection, or YAML row. Reuse existing names and values, preview each note, and choose how to handle existing values. [Batch-property guide](docs/ADD-REMOVE-PROPERTIES.md).
 - **Keep properties in your own order.** Choose **Manual** to restore a view’s saved arrangement. Open **Reorder properties…** to use drag handles, menu moves, or keyboard controls. Done keeps the arrangement; Cancel restores the previous automatic sort and discards the session’s moves. [Manual ordering](docs/USER-GUIDE.md#reorder-properties-manually).

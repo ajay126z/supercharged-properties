@@ -1,6 +1,6 @@
 # Add or remove properties on notes
 
-Add several frontmatter properties to a folder or group of notes, or remove whole properties in one batch. Every batch has a preview, live conflict checks, and shared session undo. This feature is available in the upcoming release.
+Add several frontmatter properties to a folder or group of notes, or remove whole properties in one batch. Every batch has a preview, live conflict checks, and shared session undo. Available since **1.6.0**.
 
 [Back to the user guide](USER-GUIDE.md)
 
