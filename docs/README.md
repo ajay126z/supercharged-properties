@@ -2,7 +2,7 @@
 
 ## For users
 
-These guides describe **1.6.0**, including Inline Properties and saved folder filters, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
+These guides describe **1.6.1**, including Inline Properties and saved folder filters, with Value filter and its expandable note list, including property/value deletion and selected-note editing. They include desktop and mobile selection controls, mobile dialog layout, preview safeguards, and undo. See the release notes below for version-specific behavior.
 
 | Guide | Covers |
 | --- | --- |
@@ -52,6 +52,7 @@ Version **1.6.0** adds [Add/Remove batches](ADD-REMOVE-PROPERTIES.md), [File exp
 
 ## Release notes
 
+- [1.6.1: compatibility and privacy documentation](releases/1.6.1.md)
 - [1.6.0: bulk properties, Explorer counts, Manual ordering, and fixes](releases/1.6.0.md)
 - [1.5.1: filename sorting](releases/1.5.1.md)
 - [1.5.0: inline properties, conversion, and folder filters](releases/1.5.0.md)

@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-28
+
 ### Documentation
 
 - Explain vault enumeration, exclusions, optional attachment-path counting, and user-triggered write-only clipboard access, including security scanner recommendations.

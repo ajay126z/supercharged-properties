@@ -4,7 +4,7 @@ Supercharged Properties displays your vault's YAML frontmatter as a tree of **pr
 
 Browsing, searching, sorting, and saving views do not modify notes. YAML edits write frontmatter; inline edits write note-body fields. Both require preview and confirmation.
 
-This guide covers release **1.6.0**, including Add/Remove property batches, File explorer folder counts, and Manual property order. See the [1.6.0 release notes](releases/1.6.0.md) for changes since 1.5.1. The shared YAML undo command is **Undo last property edit**; inline-field edits use **Undo last inline property edit**.
+This guide covers release **1.6.1**, including Add/Remove property batches, File explorer folder counts, and Manual property order. See the [1.6.1 patch notes](releases/1.6.1.md) and [1.6.0 release notes](releases/1.6.0.md) for changes since 1.5.1. The shared YAML undo command is **Undo last property edit**; inline-field edits use **Undo last inline property edit**.
 
 ## Contents
 
