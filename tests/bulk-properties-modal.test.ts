@@ -11,7 +11,7 @@ import {previewAdd,previewRemove} from '../src/bulk-properties';
 import {BulkNameSuggest,BulkValueSuggest,replaceListToken} from '../src/bulk-property-suggest';
 afterEach(()=>document.body.replaceChildren());
 function setup(mode:'add'|'remove'='add',size=2){
- const choices=[{key:'Status',type:'text',inScope:1,mixed:false},{key:'rating',type:'number',inScope:0,mixed:false},{key:'tags',type:'list',inScope:1,mixed:false,disabledReason:'Unavailable'}] as any;
+ const choices=[{key:'Status',type:'text',inScope:1,mixed:false},{key:'rating',type:'number',inScope:0,mixed:false},{key:'tags',type:'list',inScope:1,mixed:false,disabledReason:undefined}] as any;
  const preview=vi.fn((paths:string[],request:any)=>({mode:'rows'in request?'add':'remove',keys:'rows'in request?request.rows.map((r:any)=>r.key):request.keys,types:new Map(),notes:paths.map(path=>'rows'in request?previewAdd(path,{Status:'todo'},request.rows,request.exists,request.delimiter):previewRemove(path,{Status:'todo'},request.keys))}));
  const apply=vi.fn(async(plan:any)=>plan.notes),undo=vi.fn(async()=>({restored:1,skipped:0,failures:[]}));
  const options:any={mode,settings:{bulkIncludeSubfolders:true,bulkExistsMode:'skip',bulkListDelimiter:','},scope:(recursive:boolean)=>({kind:'folder',label:'Recipes',paths:Array.from({length:recursive?size:1},(_,i)=>`Recipes/${i}.md`),includeSubfolders:recursive,skippedExcluded:1,skippedNonMarkdown:0}),catalog:()=>choices,values:()=>['todo','done'],preview,apply,undo,canUndo:()=>true};
@@ -26,12 +26,12 @@ it('validates rows, resets types, preserves Back state, and supports explicit pr
  set('Property name','rating');set('Value','5');input('Property type: Text').click();(Menu as any).items.find((i:any)=>i.title==='Number').run();expect(input('Value').value).toBe('');expect(input('Value').type).toBe('number');set('Value','4');button('Preview changes').click();expect(modal.titleEl.textContent).toBe('Review changes');expect(apply).not.toHaveBeenCalled();button('Back').click();expect(input('Value').value).toBe('4');button('Preview changes').click();button('Add to 2 notes').click();await vi.waitFor(()=>expect(modal.titleEl.textContent).toBe('Changes complete'));button('Undo').click();await vi.waitFor(()=>expect(undo).toHaveBeenCalledOnce());modal.onClose();
 });
 it('chooses existing properties, blocks reserved keys, enforces the row cap and keeps a final empty row',()=>{
- const {modal,button,input}=setup();button('Choose from existing').click();expect(input('Choose tags').disabled).toBe(true);input('Choose rating').checked=true;input('Choose rating').dispatchEvent(new Event('change'));button('Add 1 property').click();expect(input('Property name').value).toBe('rating');expect(input('Value').type).toBe('number');expect(document.activeElement).toBe(input('Value'));
+ const {modal,button,input}=setup();button('Choose from existing').click();expect(input('Choose tags').disabled).toBe(false);input('Choose rating').checked=true;input('Choose rating').dispatchEvent(new Event('change'));button('Add 1 property').click();expect(input('Property name').value).toBe('rating');expect(input('Value').type).toBe('number');expect(document.activeElement).toBe(input('Value'));
  for(let i=0;i<25;i++)button('Add property').click();expect(modal.contentEl.querySelectorAll('.pv-bulk-row')).toHaveLength(20);expect(button('Choose from existing').disabled).toBe(true);
  for(let i=0;i<20;i++)input('Remove property row').click();expect(modal.contentEl.querySelectorAll('.pv-bulk-row')).toHaveLength(1);expect(input('Property name').value).toBe('');modal.onClose();
 });
 it('removes only present properties, Select shown respects filters, and paginates previews',()=>{
- const {modal,button,input,set}=setup('remove',45);expect(input('Remove rating')).toBeNull();expect(input('Remove tags').disabled).toBe(true);
+ const {modal,button,input,set}=setup('remove',45);expect(input('Remove rating')).toBeNull();expect(input('Remove tags').disabled).toBe(false);
  set('Filter properties','Status');button('Select shown').click();button('Preview changes').click();expect(modal.contentEl.querySelectorAll('.pv-edit-change')).toHaveLength(20);expect(modal.contentEl.textContent).toContain('and 25 more notes');button('Show more').click();expect(modal.contentEl.querySelectorAll('.pv-edit-change')).toHaveLength(40);button('Back').click();expect(input('Filter properties').value).toBe('Status');expect(input('Remove Status').checked).toBe(true);modal.onClose();
 });
 it('updates scope on subfolder change and preserves focused name input while updating info',()=>{
@@ -42,4 +42,11 @@ it('uses native suggestion ranking and replaces only the current list token',()=
  const suggest=new BulkNameSuggest({} as any,input,()=>choices,()=>new Set(['state']),select);expect(suggest.getSuggestions('sta').map(c=>c.key)).toEqual(['Status']);suggest.selectSuggestion(choices[2]);expect(select).not.toHaveBeenCalled();suggest.selectSuggestion(choices[1]);expect(select).toHaveBeenCalledWith(choices[1]);
  expect(replaceListToken('one, tw, three',6,6,'two',',').text).toBe('one, two, three');expect(replaceListToken(',tail',0,0,'first',',').text).toBe('first,tail');
  input.value='one, tw, three';input.setSelectionRange(6,6);const values=new BulkValueSuggest({} as any,input,()=>['two','ten'],()=>',',vi.fn());expect(values.getSuggestions(input.value)).toEqual(['two']);const event=new KeyboardEvent('keydown',{key:'Enter',cancelable:true});values.selectSuggestion('two',event);expect(event.defaultPrevented).toBe(true);expect(input.value).toBe('one, two, three');
+});
+
+it('Select none clears all selections including properties hidden by the filter',()=>{
+ const {modal,button,input,set}=setup('remove');button('Select all').click();
+ expect(input('Remove tags').checked).toBe(true);set('Filter properties','Status');button('Select none').click();
+ expect(modal.contentEl.textContent).toContain('0 selected');button('Preview changes').click();expect(modal.contentEl.textContent).toContain('Select at least one property');
+ set('Filter properties','');expect(input('Remove tags').checked).toBe(false);expect(input('Remove Status').checked).toBe(false);modal.onClose();
 });

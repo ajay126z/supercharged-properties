@@ -554,7 +554,7 @@ function sameBulkValue(a, b) {
   };
   return equal(a, b);
 }
-var isReserved = (key) => ["tags", "position"].includes(fold(key));
+var isReserved = (key) => fold(key) === "position";
 var isEmpty = (value) => value === void 0 || value === null || value === "" || Array.isArray(value) && value.length === 0;
 function parseValue(type, raw, delimiter) {
   const text = raw.trim();
@@ -578,7 +578,7 @@ function validateRows(rows, delimiter) {
   const errors = /* @__PURE__ */ new Map(), used = /* @__PURE__ */ new Set();
   for (const row of rows) {
     const parsed = parseValue(row.type, row.value, delimiter), key = fold(row.key);
-    const error = !key ? "Enter a property name" : isReserved(key) ? `${row.key} is not supported yet` : used.has(key) ? "Already listed above" : propertyNameError(row.key) ?? (textOnlyList(key) && row.type !== "list" ? "Use List for this property" : !parsed.ok ? parsed.error : void 0);
+    const error = !key ? "Enter a property name" : isReserved(key) ? `${row.key} is not supported yet` : used.has(key) ? "Already listed above" : propertyNameError(row.key) ?? ((textOnlyList(key) || fold(key) === "tags") && row.type !== "list" ? "Use List for this property" : !parsed.ok ? parsed.error : void 0);
     if (error)
       errors.set(row.id, error);
     used.add(key);
@@ -610,7 +610,7 @@ function previewAdd(path, fm, rows, mode, delimiter) {
       if (mode === "merge" && (row.type === "text" || row.type === "list")) {
         const flat = Array.isArray(before) && before.every((v) => typeof v === "string" || typeof v === "number" && Number.isFinite(v));
         const text = typeof before === "string" && !validNoteDate(before) && !validNoteDate(before, true);
-        if (!flat && !text || textOnlyList(key) && Array.isArray(before) && before.some((v) => typeof v !== "string")) {
+        if (!flat && !text || (textOnlyList(key) || fold(key) === "tags") && Array.isArray(before) && before.some((v) => typeof v !== "string")) {
           result.skipped.push({ key, reason: "unsupported-existing" });
           continue;
         }
@@ -715,7 +715,7 @@ function propertyCatalog(index, paths, configured, getFrontmatter) {
       return keys.length === 1 ? fm[keys[0]] : void 0;
     });
     const inferred = inferType(samples);
-    return { key: property.label, type: configured(property.label) ?? inferred.type, mixed: inferred.mixed, inScope: scoped.properties.get(property.id)?.paths.size ?? 0, ...isReserved(property.label) ? { disabledReason: "Unavailable" } : {} };
+    return { key: property.label, type: fold(property.label) === "tags" ? "list" : configured(property.label) ?? inferred.type, mixed: inferred.mixed, inScope: scoped.properties.get(property.id)?.paths.size ?? 0, ...isReserved(property.label) ? { disabledReason: "Unavailable" } : {} };
   }).sort((a, b) => natural(a.key, b.key));
 }
 function matchChoices(choices, query, used) {
@@ -1280,6 +1280,10 @@ var BulkPropertiesModal = class extends import_obsidian3.Modal {
           row.key = choice.key;
           name.value = choice.key;
         }
+        if (fold(row.key) === "tags" && row.type !== "list") {
+          row.type = "list";
+          renderValue();
+        }
         updateInfo();
       });
       const suggester = new BulkNameSuggest(this.app, name, () => this.choices, () => new Set(this.rows.filter((r) => r !== row).map((r) => fold(r.key))), (choice) => {
@@ -1421,6 +1425,11 @@ var BulkPropertiesModal = class extends import_obsidian3.Modal {
       for (const c of visible())
         if (!c.disabledReason)
           this.selected.add(fold(c.key));
+      renderList();
+    });
+    this.button(this.body, "Select none", () => {
+      this.selected.clear();
+      error.textContent = "";
       renderList();
     });
     this.body.createEl("p", { text: "Properties found in these notes" });
@@ -5146,7 +5155,7 @@ var PropertiesView = class extends import_obsidian17.ItemView {
     const scroll = this.scopeChoices.scrollTop;
     this.scopeChoices.replaceChildren();
     const choices = new Map([...index.properties.values()].map((property) => [property.id, property]));
-    for (const key of this.viewPrefs.scope ?? []) {
+    for (const key of this.folders.length ? [] : this.viewPrefs.scope ?? []) {
       if (key !== this.filter?.property && !choices.has(key)) choices.set(key, { id: key, label: key, paths: /* @__PURE__ */ new Set(), values: /* @__PURE__ */ new Map() });
     }
     const properties = this.sorted(choices.values()).filter((property) => fold(property.label).includes(fold(this.scopeQuery)));

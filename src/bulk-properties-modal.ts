@@ -227,7 +227,7 @@ export class BulkPropertiesModal extends Modal {
             name.addEventListener('change', () => { const choice = this.choice(name.value); if (choice) {
                 row.key = choice.key;
                 name.value = choice.key;
-            } updateInfo(); });
+            } if (fold(row.key) === 'tags' && row.type !== 'list') { row.type = 'list'; renderValue(); } updateInfo(); });
             const suggester = new BulkNameSuggest(this.app, name, () => this.choices, () => new Set(this.rows.filter(r => r !== row).map(r => fold(r.key))), choice => { row.key = choice.key; row.type = choice.type; row.value = row.type === 'checkbox' ? 'true' : ''; name.value = row.key; renderValue(); updateInfo(); value.focus(); });
             this.suggesters.push(suggester);
             renderValue();
@@ -319,6 +319,7 @@ export class BulkPropertiesModal extends Modal {
         const selectAll = this.button(this.body, 'Select all', () => { for (const c of visible())
             if (!c.disabledReason)
                 this.selected.add(fold(c.key)); renderList(); });
+        this.button(this.body, 'Select none', () => { this.selected.clear(); error.textContent = ''; renderList(); });
         this.body.createEl('p', { text: 'Properties found in these notes' });
         const list = this.body.createDiv({ cls: 'pv-bulk-choice-list' }), error = this.body.createDiv({ cls: 'pv-bulk-error' });
         const count = this.footer.createSpan();

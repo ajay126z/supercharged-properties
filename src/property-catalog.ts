@@ -28,7 +28,7 @@ export function propertyCatalog(index: PropertyIndex, paths: readonly string[], 
     return [...index.properties.values()].map(property => {
         const samples = [...property.paths].sort((a, b) => Number(scope.has(b)) - Number(scope.has(a)) || natural(a, b)).slice(0, 200).map(path => { const fm = getFrontmatter(path) ?? {}; const keys = matchingKeys(fm, property.label); return keys.length === 1 ? fm[keys[0]] : undefined; });
         const inferred = inferType(samples);
-        return { key: property.label, type: configured(property.label) ?? inferred.type, mixed: inferred.mixed, inScope: scoped.properties.get(property.id)?.paths.size ?? 0, ...(isReserved(property.label) ? { disabledReason: 'Unavailable' } : {}) };
+        return { key: property.label, type: fold(property.label) === 'tags' ? 'list' : configured(property.label) ?? inferred.type, mixed: inferred.mixed, inScope: scoped.properties.get(property.id)?.paths.size ?? 0, ...(isReserved(property.label) ? { disabledReason: 'Unavailable' } : {}) };
     }).sort((a, b) => natural(a.key, b.key));
 }
 export function matchChoices(choices: PropertyChoice[], query: string, used: Set<string>): PropertyChoice[] {

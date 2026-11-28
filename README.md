@@ -95,6 +95,8 @@ New in **1.6.0**. [See all changes in this release](docs/releases/1.6.0.md).
 - **Keep properties in your own order.** Choose **Manual** to restore a view’s saved arrangement. Open **Reorder properties…** to use drag handles, menu moves, or keyboard controls. Done keeps the arrangement; Cancel restores the previous automatic sort and discards the session’s moves. [Manual ordering](docs/USER-GUIDE.md#reorder-properties-manually).
 - **See folder sizes at a glance.** Optional File explorer badges show note counts for each folder, including subfolders if you choose. Include attachments or skip excluded folders to suit your workflow. [Folder counts](docs/USER-GUIDE.md#file-explorer-folder-counts).
 
+Add properties supports YAML `tags` as a List; choose **Merge into list** to keep existing tags. Remove properties can delete the entire YAML `tags` property with preview and undo, and **Select none** clears the removal selection. Tags written in the note body remain unchanged.
+
 ## Get started
 
 Works on **desktop and mobile**, with **Obsidian 1.7.2 or later**. Use right-click menus on desktop and long-press menus on mobile. Obsidian’s core Search plugin is needed only for **Open in Search**.

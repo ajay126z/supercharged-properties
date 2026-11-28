@@ -9,7 +9,7 @@ function setup(){
  const disk=new Map(['Recipes/r1.md','Recipes/r2.md','Work/t1.md'].map(path=>[path,'---\nstatus: wip\n---\nBody\n']));
  const parse=(path:string)=>load(disk.get(path)!.split('---\n')[1],{schema:JSON_SCHEMA}) as any;
  const editor=new ValueEditor({} as any);let hook:undefined|((path:string,fm:any)=>void);let excluded='';
- const host={eligible:(path:string)=>disk.has(path)&&path!==excluded,configuredType:()=>undefined,frontmatter:parse,process:vi.fn(async(path:string,update:any)=>{const fm=parse(path);hook?.(path,fm);update(fm);disk.set(path,'---\n'+dump(fm)+'---\nBody\n');})};
+ const host={eligible:(path:string)=>disk.has(path)&&path!==excluded,configuredType:()=>undefined,frontmatter:parse,process:vi.fn(async(path:string,update:any)=>{const fm=parse(path);hook?.(path,fm);update(fm);disk.set(path,'---\n'+dump(fm)+'---\n'+disk.get(path)!.split('---\n').slice(2).join('---\n'));})};
  return {disk,parse,editor,host,service:new BulkPropertiesService(host,editor),hook:(fn:any)=>{hook=fn},exclude:(path:string)=>{excluded=path}};
 }
 it('writes and undoes folder-scoped notes leaving outside bytes unchanged, including whole-key removal',async()=>{
@@ -42,4 +42,26 @@ it('reports progress and yields in larger batches while restoring typed snapshot
 it('skips a changed configured type and a newly ambiguous key without touching other keys',async()=>{
  const {service,host,hook}=setup();const path='Recipes/r1.md';const plan=service.preview([path],request);host.configuredType=()=> 'text' as any;expect((await service.apply(plan))[0].skipped[0].reason).toBe('changed-since-preview');
  host.configuredType=()=>undefined;hook((p,fm)=>{fm.Rating=2;fm.rating=3;});const next=service.preview([path],request);expect((await service.apply(next))[0].skipped[0].reason).toBe('ambiguous-key');
+});
+
+it('removes YAML tags only within scope, preserves body tags, and supports undo and drift checks',async()=>{
+ const {disk,parse,service,editor}=setup(),path='Recipes/r1.md';
+ disk.set(path,'---\ntags:\n  - project\nstatus: wip\n---\nBody #project\n');
+ const original=new Map(disk),plan=service.preview([path],{keys:['tags']});
+ expect((await service.apply(plan))[0].changes).toHaveLength(1);
+ expect(parse(path).tags).toBeUndefined();expect(disk.get(path)).toContain('Body #project');
+ expect(disk.get('Recipes/r2.md')).toBe(original.get('Recipes/r2.md'));expect(disk.get('Work/t1.md')).toBe(original.get('Work/t1.md'));
+ expect((await editor.undo()).restored).toBe(1);expect(parse(path).tags).toEqual(['project']);expect(disk.get(path)).toContain('Body #project');
+ const drift=service.preview([path],{keys:['tags']});disk.set(path,disk.get(path)!.replace('project','changed'));
+ expect((await service.apply(drift))[0].skipped[0].reason).toBe('changed-since-preview');expect(parse(path).tags).toEqual(['changed']);
+});
+
+it('adds and merges YAML tags within scope and restores them with undo',async()=>{
+ const {disk,parse,service,editor}=setup(),path='Recipes/r1.md',outside=disk.get('Work/t1.md');
+ const request={rows:[{id:'tags',key:'tags',type:'list' as const,value:'project'}],exists:'merge' as const,delimiter:','};
+ await service.apply(service.preview([path],request));expect(parse(path).tags).toEqual(['project']);
+ await editor.undo();expect(parse(path).tags).toBeUndefined();
+ disk.set(path,disk.get(path)!.replace('status: wip','status: wip\ntags: [old]'));
+ await service.apply(service.preview([path],request));expect(parse(path).tags).toEqual(['old','project']);
+ await editor.undo();expect(parse(path).tags).toEqual(['old']);expect(disk.get('Work/t1.md')).toBe(outside);
 });

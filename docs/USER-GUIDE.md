@@ -307,6 +307,8 @@ A view is marked **(modified)** when its current selection differs from the save
 
 ## Folder filters
 
+The property picker shows only properties found in the selected folders. Saved selections outside those folders remain stored and become available again when you clear or change the folder filter.
+
 Use **Choose properties to show → Folders → + Add folder** to limit the current view to notes in selected folders. Type part of a folder path in the fuzzy chooser, then select it. The root, already selected folders, their descendants, and globally excluded folders are omitted from suggestions. Desktop and mobile use the same controls.
 
 Selected folders appear as removable chips only inside **Choose properties to show**. Folder paths stay hidden while the panel is closed; the summary still indicates that the view is filtered. Remove a chip with **×**, or choose **Clear** in the panel’s Folders row to remove the folder filter. Multiple folders include notes from any of those folders, including descendants. Paths are case-sensitive and use exact folder boundaries: `Templates` does not match `Templates Archive`. There are no glob patterns. Adding an ancestor absorbs its selected descendants.
@@ -400,6 +402,8 @@ Available since **1.6.0**. Right-click a folder or an Explorer multi-selection t
 Add up to 20 typed properties together, or select whole properties to remove. The dialog shows eligible notes, supports subfolder inclusion, and previews changes before confirmation. Explorer selections ignore view filters; tree actions honor Folder and Value filters plus the active tree search. Global folder exclusions always apply. These actions are not available in the Inline tree.
 
 Read the [Add/Remove guide](ADD-REMOVE-PROPERTIES.md) for supported types, existing-value choices, selection controls, previews, and retryable session undo.
+
+Add properties supports YAML `tags` as a List; choose **Merge into list** to keep existing tags. Remove properties can delete the entire YAML `tags` property with preview and undo, and **Select none** clears the removal selection. Tags written in the note body remain unchanged.
 
 ## Edit values across notes
 

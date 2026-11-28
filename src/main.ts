@@ -877,7 +877,9 @@ export class PropertiesView extends ItemView {
     const scroll = this.scopeChoices.scrollTop;
     this.scopeChoices.replaceChildren();
     const choices = new Map([...index.properties.values()].map(property => [property.id, property]));
-    for (const key of this.viewPrefs.scope ?? []) {
+    // Keep absent saved keys editable only without a folder filter. Folder-scoped
+    // pickers must not reintroduce properties that have no notes in those folders.
+    for (const key of this.folders.length ? [] : this.viewPrefs.scope ?? []) {
       if (key !== this.filter?.property && !choices.has(key)) choices.set(key, { id: key, label: key, paths: new Set(), values: new Map() });
     }
     const properties = this.sorted(choices.values()).filter(property => fold(property.label).includes(fold(this.scopeQuery)));

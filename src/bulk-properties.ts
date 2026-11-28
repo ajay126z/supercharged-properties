@@ -44,7 +44,7 @@ export interface NoteResult {
     }[];
     error?: string;
 }
-export const isReserved = (key: string): boolean => ['tags', 'position'].includes(fold(key));
+export const isReserved = (key: string): boolean => fold(key) === 'position';
 export const isEmpty = (value: unknown): boolean => value === undefined || value === null || value === '' || Array.isArray(value) && value.length === 0;
 export function parseValue(type: DialogType, raw: string, delimiter: string): {
     ok: true;
@@ -74,7 +74,7 @@ export function validateRows(rows: AddRow[], delimiter: string): Map<string, str
     const errors = new Map<string, string>(), used = new Set<string>();
     for (const row of rows) {
         const parsed = parseValue(row.type, row.value, delimiter), key = fold(row.key);
-        const error = !key ? 'Enter a property name' : isReserved(key) ? `${row.key} is not supported yet` : used.has(key) ? 'Already listed above' : propertyNameError(row.key) ?? (textOnlyList(key) && row.type !== 'list' ? 'Use List for this property' : !parsed.ok ? parsed.error : undefined);
+        const error = !key ? 'Enter a property name' : isReserved(key) ? `${row.key} is not supported yet` : used.has(key) ? 'Already listed above' : propertyNameError(row.key) ?? ((textOnlyList(key) || fold(key) === 'tags') && row.type !== 'list' ? 'Use List for this property' : !parsed.ok ? parsed.error : undefined);
         if (error)
             errors.set(row.id, error);
         used.add(key);
@@ -106,7 +106,7 @@ export function previewAdd(path: string, fm: Record<string, unknown>, rows: AddR
             if (mode === 'merge' && (row.type === 'text' || row.type === 'list')) {
                 const flat = Array.isArray(before) && before.every(v => typeof v === 'string' || typeof v === 'number' && Number.isFinite(v));
                 const text = typeof before === 'string' && !validNoteDate(before) && !validNoteDate(before, true);
-                if (!flat && !text || textOnlyList(key) && Array.isArray(before) && before.some(v => typeof v !== 'string')) {
+                if (!flat && !text || (textOnlyList(key) || fold(key) === 'tags') && Array.isArray(before) && before.some(v => typeof v !== 'string')) {
                     result.skipped.push({ key, reason: 'unsupported-existing' });
                     continue;
                 }

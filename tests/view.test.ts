@@ -1481,3 +1481,22 @@ it('keeps modified and custom folder-selection counts local to their dropdown en
  expect(document.querySelector('[aria-label="Property view"]')?.textContent).toBe('Books (modified) (0)');
  plugin.prefs.activeProfile=null;plugin.prefs.scope=null;plugin.prefs.folders=['Other'];view.render();click('Property view');expect(Array.from(document.querySelectorAll('.pv-view-option')).map(e=>e.textContent)).toEqual(['All properties (3)','Custom selection (1)','Books (2)','Other (1)']);
 });
+
+it.each([false,true])('keeps folder-scoped property choices local when switching profiles (inline=%s)',inline=>{
+ if(inline) enableInlineView();
+ const index=(view as any).sourceIndex(),prefs=(view as any).viewPrefs;
+ index.update('Daily/Daily.md',{'week-note':'yes','year-note':'yes','week-highlight':'yes'});
+ index.update('Atlas/Maps/Map.md',{aliases:['Map'],up:'Atlas',down:'Detail',related:'Other'});
+ const keys=['week-note','year-note','week-highlight','aliases','up','down','related'];
+ prefs.profiles=[{id:'daily-picker',name:'Daily Notes',keys,folders:['Daily']},{id:'maps-picker',name:'Maps',keys,folders:['Atlas/Maps']}];
+ view.render();const prefix=inline?'inline:':'';
+ chooseView(`${prefix}profile:daily-picker`);click('Choose properties to show');
+ expect(document.querySelector('[aria-label="Include week-note"]')).not.toBeNull();
+ chooseView(`${prefix}profile:maps-picker`);
+ for(const key of ['week-note','year-note','week-highlight'])expect(document.querySelector(`[aria-label="Include ${key}"]`)).toBeNull();
+ for(const key of ['aliases','up','down','related'])expect(document.querySelector<HTMLInputElement>(`[aria-label="Include ${key}"]`)?.checked).toBe(true);
+ expect(prefs.profiles[1].keys).toEqual(keys);expect(prefs.scope).toEqual(keys);
+ expect(document.querySelector('.pv-profile-select')!.textContent).not.toContain('modified');
+ setFolders(['Missing']);expect(document.querySelectorAll('.pv-scope-choice')).toHaveLength(0);
+ setFolders([]);expect(document.querySelector<HTMLInputElement>('[aria-label="Include week-note"]')?.checked).toBe(true);
+});

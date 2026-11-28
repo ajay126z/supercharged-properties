@@ -8,11 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [1.6.0] - 2026-11-28
 
+### YAML tags and removal selection
+
+- Support adding YAML tags as a List with Skip, Merge, and Overwrite, and add Select none to clear all removal selections.
+- Allow Remove properties to delete the entire YAML tags property, with preview, conflict checks, and undo; body tags remain unchanged.
+
 ### Changed
 
 - Selecting Manual restores the saved or inherited order without opening reorder controls. Use Reorder properties… explicitly to arrange rows; first use falls back to the inherited order or A–Z.
 
 ### Fixed
+
+- Keep folder-filtered property pickers limited to properties found in the selected folders, without restoring unrelated saved keys as visible choices. Saved selections remain intact.
 
 - Keep view-dropdown property counts independent of the active profile’s filters. All properties counts the full source; each YAML or Inline profile counts its own selected keys and folders. Temporary search and Value filters do not affect dropdown counts.
 

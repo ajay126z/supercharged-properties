@@ -24,7 +24,7 @@ Name suggestions search the full included YAML index, prefer prefix matches, and
 
 Text and List fields suggest existing values, ranked by usage in the selected notes. In a List field, a suggestion replaces only the item at the cursor. Separate items with the configured delimiter, a comma by default. Items are trimmed, deduplicated, and written as text. Number fields accept decimals, negatives, and scientific notation, but reject non-finite numbers and unsafe integers. Dates must be valid calendar dates. Date and time values remain local ISO strings; no timezone conversion is performed.
 
-Empty new values are not supported in this dialog. `tags` and `position` are unavailable. `aliases` and `cssclasses` must use List. Type selects the format of the value being written; the plugin never changes `types.json` or the type assigned in Obsidian.
+Empty new values are not supported in this dialog. `position` is unavailable. Use List to add YAML `tags`; choose **Merge into list** to keep existing tags, **Overwrite** to replace them, or **Skip** to leave existing tags alone. Enter tag names without a leading `#`. Remove can delete the entire YAML `tags` property. Tags in the note body (such as `#project`) remain unchanged; removing individual tag values is not supported in this dialog. `aliases` and `cssclasses` must use List. Type selects the format of the value being written; the plugin never changes `types.json` or the type assigned in Obsidian.
 
 ### If a note already has the property
 
@@ -67,3 +67,5 @@ Undo restores values; YAML formatting such as comments and quoting may differ fr
 Plugin settings provide **Include subfolders by default** (on), **Default when a note already has the property** (Skip), and a one-character **List delimiter** (`,`). Invalid delimiter input reverts to the saved value.
 
 The modal keeps its footer above the mobile keyboard. Native suggestions support keyboard navigation and Escape. **Ctrl/Cmd+Enter** triggers the current primary action. Enter in the last valid value field adds a row when a suggestion is not being selected. Validation focuses the first invalid field.
+
+In Remove, **Select all** selects eligible properties (or **Select shown** while filtering). **Select none** clears every selection, including properties hidden by the filter.

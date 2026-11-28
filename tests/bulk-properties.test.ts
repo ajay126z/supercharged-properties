@@ -29,3 +29,24 @@ it('treats prototype-looking keys as absent own keys and safely snapshots date/r
  for(const key of ['__proto__','constructor','toString']){const plan=previewAdd('A',{},[row(key)],'skip',',');expect(plan.changes[0].before).toBeUndefined();const fm:any={};applyChanges(fm,plan.changes);expect(Object.prototype.hasOwnProperty.call(fm,key)).toBe(true);expect(fm[key]).toBe('done');expect(Object.getPrototypeOf(fm)).toBe(Object.prototype);}
  const date=new Date('2026-11-22T00:00:00Z');const plan=previewRemove('A',{date},['date']);expect(plan.changes[0].before).toEqual(date);expect(plan.changes[0].before).not.toBe(date);
 });
+
+it('removes entire YAML tags keys, preserves collision safety and blocks position',()=>{
+ for(const tags of [['one','two'],'one',[],null]) {
+  const fm={Tags:tags,status:'active'};const result=previewRemove('A',fm,['tags']);
+  expect(result.changes).toHaveLength(1);applyChanges(fm,result.changes);expect(fm).toEqual({status:'active'});
+ }
+ expect(previewRemove('A',{tags:['one'],Tags:['two']},['tags']).skipped[0].reason).toBe('ambiguous-key');
+ expect(previewRemove('A',{},['tags']).changes).toHaveLength(0);
+ expect(()=>previewRemove('A',{position:{}},['position'])).toThrow();
+});
+
+it('adds YAML tags as text lists and supports skip, merge, overwrite and collisions',()=>{
+ const rows=[row('tags','list','project,work,project')];
+ expect(previewAdd('A',{},rows,'skip',',').changes[0].after).toEqual(['project','work']);
+ expect(previewAdd('A',{tags:['old']},rows,'skip',',').changes).toHaveLength(0);
+ expect(previewAdd('A',{tags:['old','work']},rows,'merge',',').changes[0].after).toEqual(['old','work','project']);
+ expect(previewAdd('A',{tags:'old'},rows,'merge',',').changes[0].after).toEqual(['old','project','work']);
+ expect(previewAdd('A',{tags:['old']},rows,'overwrite',',').changes[0].after).toEqual(['project','work']);
+ expect(previewAdd('A',{tags:[1]},rows,'merge',',').skipped[0].reason).toBe('unsupported-existing');
+ expect(previewAdd('A',{tags:[],Tags:[]},rows,'overwrite',',').skipped[0].reason).toBe('ambiguous-key');
+});

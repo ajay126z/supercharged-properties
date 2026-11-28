@@ -9,3 +9,12 @@ it('prefers configured types, samples in-scope metadata, and retains vault-wide 
 it('infers supported types, mixed majorities, ties and empty fallback',()=>{
  for(const [values,type] of [[[[]],'text'],[[['a']],'list'],[[false],'checkbox'],[[1,2,'x'],'number'],[[1,'x'],'text'],[['2026-01-01'],'date'],[['2026-01-01T12:30'],'datetime']] as any[])expect(inferType(values).type).toBe(type);
 });
+
+it('allows YAML tags as List choices',()=>{
+ const index=new PropertyIndex();index.update('A',{tags:['project']});
+ const catalog=(mode:'add'|'remove')=>propertyCatalog(index,['A'],()=>undefined,()=>({tags:['project']}));
+ expect(catalog('remove').find(c=>c.key==='tags')).toMatchObject({inScope:1});
+ expect(catalog('remove').find(c=>c.key==='tags')?.disabledReason).toBeUndefined();
+ expect(catalog('add').find(c=>c.key==='tags')?.disabledReason).toBeUndefined();
+ expect(catalog('add').find(c=>c.key==='tags')?.type).toBe('list');
+});
