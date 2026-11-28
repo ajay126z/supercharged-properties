@@ -64,7 +64,7 @@ The dialog follows the property's configured type. It does not change the type a
 | Date & time | Choose an existing valid local timestamp or use the date/time picker. Values use `YYYY-MM-DDTHH:mm`, optionally with seconds and milliseconds. No timezone conversion is performed. |
 | List | Add or remove multiple text/number items while preserving the other items. See below. |
 | aliases / cssclasses | Add or remove text list items. |
-| tags | Selected-note editing remains unavailable for this special property. |
+| tags | Unavailable in this dialog. Use [Add or Remove properties](ADD-REMOVE-PROPERTIES.md) to add/merge YAML tags or remove the entire tags key. |
 
 For scalar properties, **Set empty** writes `null` and keeps the key. **Remove property** deletes the key and its entire value from only the selected notes. Literal text `empty` is a string, not null. Number and checkbox properties must contain their corresponding scalar type or an empty value; a numeric-looking string is not silently converted into a number. Text and date properties accept stored strings or empty values. Empty strings are also eligible. Missing properties, lists under scalar properties, and objects are skipped.
 

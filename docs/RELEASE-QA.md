@@ -322,6 +322,10 @@ Run this checklist against a build candidate before publishing. Automated checks
 
 ## Add and Remove properties
 
+- Add YAML tags as a List using Skip, Merge into list, and Overwrite. Remove the entire tags key, then undo. Confirm body tags and notes outside the scope remain unchanged.
+- Select all removal entries, filter the list, then Select none. Clear the filter and verify no hidden entries remain selected.
+- Switch between folder-filtered saved views with unrelated saved keys. Check that the property picker only shows keys found in the selected folders, and clearing folders restores the stored selections.
+
 - Right-click a folder and a multi-selection containing overlapping folders/files. Confirm scope counts, excluded/non-Markdown counts, and the subfolder toggle.
 - Launch from a YAML property and value with Folder and Value filters active; verify only derived notes are in the preview. Confirm no new Inline menu entries.
 - On desktop and a physical mobile device, test native suggestions with 50 names and 20 values; scroll, select, dismiss with Escape, and replace a token in the middle of a list.
